@@ -148,7 +148,103 @@ sf org display -o <エイリアス>
 
 ---
 
-## Step 5: 完了報告
+## Step 5: メタデータ取得（組織認証済みの場合のみ）
+
+ユーザーに聞く:
+```
+組織のメタデータを取得しますか？
+package.xml を自動生成して、コードやメタデータを一括取得します。
+（はい / いいえ）
+```
+
+「はい」の場合:
+
+### 5-1. 組織のメタデータ一覧を取得
+```bash
+sf org list metadata-types -o <エイリアス> --json
+```
+
+### 5-2. package.xml を生成
+取得した一覧をもとに、以下の主要メタデータを含む `manifest/package.xml` を生成する:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>*</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>ApexTrigger</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>Flow</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>CustomObject</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>CustomField</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>Layout</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>PermissionSet</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>Profile</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>ValidationRule</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>Workflow</name>
+    </types>
+    <version>62.0</version>
+</Package>
+```
+
+**注意**: API バージョンは `sf org display` の結果から取得した値を使う。
+上記はデフォルト構成。ユーザーに「この内容でよいですか？追加・削除したいメタデータはありますか？」と確認する。
+
+### 5-3. メタデータ取得
+```bash
+sf project retrieve start -x manifest/package.xml -o <エイリアス>
+```
+
+取得結果を報告する。エラーがあれば内容を説明する。
+
+---
+
+## Step 6: VSCodeで開く
+
+```bash
+code "<作成先パス>/<フォルダ名>"
+```
+
+このコマンドでプロジェクトフォルダをVSCodeの新しいウィンドウで開く。
+
+---
+
+## Step 7: 完了報告
 
 ```
 ============================================
@@ -157,18 +253,16 @@ sf org display -o <エイリアス>
 
 プロジェクト: <作成先パス>/<フォルダ名>
 組織: <エイリアス>（認証済み / 未設定）
+メタデータ: 取得済み / 未取得
 
-次のステップ:
-  1. VSCodeでプロジェクトフォルダを開く
-     code "<作成先パス>/<フォルダ名>"
-
-  2. CLAUDE.md を開いてプロジェクト固有情報を記入
+やること:
+  1. CLAUDE.md を開いてプロジェクト固有情報を記入
      - プロジェクト概要
      - 主要オブジェクト
      - 命名規則
      - 注意事項
 
-  3. .mcp.json のトークンを設定（必要な場合）
+  2. .mcp.json のトークンを設定（必要な場合）
      - GitHub: Personal Access Token
      - Slack: Bot Token
      - Notion: Integration Token
