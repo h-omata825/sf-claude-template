@@ -21,7 +21,53 @@ $ARGUMENTS
 |---|---|
 | .md, .txt, .csv, .json | Read ツールで直接読み込み |
 | .pdf | Read ツールで読み込み（1回20ページまで。大きいPDFはページ指定で分割読み込み） |
-| .xlsx, .docx | **直接読み込み不可**。ユーザーに以下を案内する: 「Excel/Wordファイルは直接読み込めません。以下のいずれかで対応してください: (1) PDF に変換して再指定 (2) 内容をテキストとして貼り付け (3) CSV にエクスポートして再指定」 |
+| .xlsx | **Python で自動変換して読み込み**（下記の変換手順を参照） |
+| .docx | **Python で自動変換して読み込み**（下記の変換手順を参照） |
+
+### Excel / Word ファイルの自動変換手順
+
+Claude Code は .xlsx / .docx を直接読めないため、Python で中間ファイルに変換してから読み込む。
+
+#### .xlsx（Excel）の場合
+```bash
+python -c "
+import pandas as pd
+import sys
+
+file_path = sys.argv[1]
+xl = pd.ExcelFile(file_path)
+
+for sheet_name in xl.sheet_names:
+    df = pd.read_excel(xl, sheet_name=sheet_name)
+    print(f'=== シート: {sheet_name} ===')
+    print(df.to_markdown(index=False))
+    print()
+" "<ファイルパス>"
+```
+→ 出力されたテキストを分析に使用する。シートが複数ある場合は全シートを処理する。
+
+#### .docx（Word）の場合
+まず `python-docx` の有無を確認する:
+```bash
+python -c "import docx; print('OK')" 2>/dev/null || pip install python-docx
+```
+```bash
+python -c "
+import docx
+import sys
+
+doc = docx.Document(sys.argv[1])
+for para in doc.paragraphs:
+    print(para.text)
+for table in doc.tables:
+    for row in table.rows:
+        print('| ' + ' | '.join(cell.text for cell in row.cells) + ' |')
+" "<ファイルパス>"
+```
+→ 出力されたテキストを分析に使用する。
+
+#### フォルダ指定時の一括変換
+フォルダ内に .xlsx / .docx がある場合、上記の変換を自動で全ファイルに適用する。
 
 ---
 

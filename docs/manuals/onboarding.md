@@ -155,21 +155,15 @@ Claude Codeのセットアップコマンドを使う:
 
 ### 4-1. MCP連携の設定（任意）
 
-プロジェクトで外部ツール連携を使う場合、`.mcp.json` のトークンを設定する。
+プロジェクトで外部ツール連携（GitHub / Slack / Notion等）を使う場合:
 
-| MCP | 設定箇所 | トークン取得元 |
-|---|---|---|
-| GitHub | `GITHUB_PERSONAL_ACCESS_TOKEN` | GitHub → Settings → Developer settings → Personal access tokens |
-| Slack | `SLACK_BOT_TOKEN` | Slack App管理画面（PM/管理者から案内） |
-| Notion | `OPENAPI_MCP_HEADERS` 内のBearer | Notion → Settings → Connections → Develop or manage integrations |
+```
+/setup-mcp
+```
 
-設定手順:
-1. `.mcp.json` を開く
-2. 使用するサーバーの `"disabled": true` の行を削除
-3. `<YOUR_TOKEN>` を実際のトークンに置換
-4. 保存
+対話形式で使用するMCPを選択し、トークンを入力するだけで `.mcp.json` が生成される。
 
-> **注意**: `.mcp.json` はGit管理されるファイル。トークンを含む場合は `.gitignore` に追加するか、環境変数に切り出すこと。
+> **セキュリティ**: `.mcp.json`（トークン入り）は `.gitignore` 対象のため、GitHubにpushされない。Git管理されるのは `.mcp.json.example`（トークンなしのテンプレート）のみ。
 
 ---
 
@@ -218,7 +212,7 @@ Claude Codeで以下を試す:
 
 ### 推奨
 
-- [ ] エージェント一覧（10体）とスラッシュコマンド（6個）の役割を把握する → [テンプレート説明書](template-guide.md) 参照
+- [ ] エージェント一覧（10体）とスラッシュコマンド（8個）の役割を把握する → [テンプレート説明書](template-guide.md) 参照
 - [ ] 簡単な実装タスクをClaude Codeで1つ試す（例: `/sf-implement テスト用のApexクラスを作成`）
 - [ ] `settings.json` の権限設定（自動許可・自動拒否）を確認する
 
@@ -270,4 +264,5 @@ export HTTPS_PROXY=http://proxy:port
 ## 次のステップ
 
 - [テンプレート説明書](template-guide.md) — エージェント・コマンド・設定ファイルの詳細リファレンス
+- [管理者向けセットアップガイド](project-setup-guide.md) — PM向け。新規案件/保守案件のセットアップ手順
 - [運用手順書](operations.md) — プロジェクト運用フロー・テンプレート管理・アップグレード手順

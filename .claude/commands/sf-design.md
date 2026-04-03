@@ -23,9 +23,52 @@ $ARGUMENTS
 |---|---|
 | .md, .txt, .csv, .json | Read ツールで直接読み込み |
 | .pdf | Read ツールで読み込み（1回20ページまで。大きいPDFはページ指定で分割読み込み） |
-| .xlsx, .docx | **直接読み込み不可**。ユーザーに案内する: 「Excel/Wordファイルは直接読み込めません。PDF に変換するか、内容をテキストとして貼り付けてください」 |
+| .xlsx | **Python で自動変換して読み込み**（下記の変換手順を参照） |
+| .docx | **Python で自動変換して読み込み**（下記の変換手順を参照） |
 
-**バルクインポート時**: フォルダ内に .xlsx/.docx がある場合はスキップし、対象外ファイルとして報告する。
+### Excel / Word ファイルの自動変換手順
+
+Claude Code は .xlsx / .docx を直接読めないため、Python で中間ファイルに変換してから読み込む。
+
+#### .xlsx（Excel）の場合
+```bash
+python -c "
+import pandas as pd
+import sys
+
+file_path = sys.argv[1]
+xl = pd.ExcelFile(file_path)
+
+for sheet_name in xl.sheet_names:
+    df = pd.read_excel(xl, sheet_name=sheet_name)
+    print(f'=== シート: {sheet_name} ===')
+    print(df.to_markdown(index=False))
+    print()
+" "<ファイルパス>"
+```
+→ 出力されたテキストを分析に使用する。シートが複数ある場合は全シートを処理する。
+
+#### .docx（Word）の場合
+まず `python-docx` の有無を確認する:
+```bash
+python -c "import docx; print('OK')" 2>/dev/null || pip install python-docx
+```
+```bash
+python -c "
+import docx
+import sys
+
+doc = docx.Document(sys.argv[1])
+for para in doc.paragraphs:
+    print(para.text)
+for table in doc.tables:
+    for row in table.rows:
+        print('| ' + ' | '.join(cell.text for cell in row.cells) + ' |')
+" "<ファイルパス>"
+```
+
+#### フォルダ指定・バルクインポート時
+フォルダ内の .xlsx / .docx も自動変換して処理対象に含める。
 
 ---
 
@@ -387,7 +430,7 @@ flowchart TD
 
 外部の設計書ファイルが指定された場合:
 
-1. ファイルを読み込む（.md, .txt, .csv, .pdf 対応。.xlsx/.docx は読み込み不可 — PDFに変換を案内）
+1. ファイルを読み込む（.md, .txt, .csv, .pdf は直接読み込み。.xlsx/.docx は Python で自動変換して読み込み）
 2. 内容を分析し、以下を判定する:
    - **実現方式** → 配置先フォルダを決定（apex/ flow/ batch/ etc.）
    - **対応する要件番号** → 要件定義書と突き合わせ（紐づかない場合は MISC-XXX）
@@ -410,7 +453,7 @@ flowchart TD
 ### 実行手順
 
 1. **指定フォルダ内の全ファイルをスキャンする**
-   - 対応形式: .md, .txt, .csv, .pdf（.xlsx/.docx はスキップし、対象外として報告）
+   - 対応形式: .md, .txt, .csv, .pdf, .xlsx, .docx（.xlsx/.docx は Python で自動変換して読み込み）
    - サブフォルダも再帰的にスキャン
 
 2. **各ファイルの内容を分析し、分類する**
