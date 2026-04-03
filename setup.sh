@@ -55,13 +55,11 @@ echo "[2/3] Claude Codeテンプレートを配置中..."
 cp -r "$SCRIPT_DIR/.claude" "$PROJECT_PATH/.claude"
 cp "$SCRIPT_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
 cp -r "$SCRIPT_DIR/docs" "$PROJECT_PATH/docs"
-cp "$SCRIPT_DIR/.mcp.json.example" "$PROJECT_PATH/.mcp.json.example"
 cp "$SCRIPT_DIR/upgrade.sh" "$PROJECT_PATH/upgrade.sh"
 
 echo "  .claude/          → コピー完了"
 echo "  CLAUDE.md         → コピー完了"
 echo "  docs/             → コピー完了"
-echo "  .mcp.json.example → コピー完了"
 echo "  upgrade.sh        → コピー完了"
 
 # --- Step 3: .gitignore 更新 ---

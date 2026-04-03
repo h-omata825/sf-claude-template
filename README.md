@@ -21,12 +21,10 @@ bash setup.sh <プロジェクト名> [出力先]
 ### 方法3: 手動セットアップ
 
 1. SFDXプロジェクトを作成: `sf project generate --name . --manifest`
-2. テンプレートの `.claude/`, `CLAUDE.md`, `docs/`, `.mcp.json.example`, `upgrade.sh` をコピー
+2. テンプレートの `.claude/`, `CLAUDE.md`, `docs/`, `upgrade.sh` をコピー
 3. `CLAUDE.md` をプロジェクト固有の情報に書き換える
 4. `/setup-mcp` でMCP連携を設定（必要な場合）
 5. SF CLIで組織に認証
-
-詳細な手順は [管理者向けセットアップガイド](docs/manuals/project-setup-guide.md) を参照。
 
 ---
 
@@ -39,12 +37,11 @@ project/                    ← sf project generate で生成されたSFDXプロ
   manifest/                 （SFDXが生成）
   CLAUDE.md              ← プロジェクト固有ルール（コピー後に編集する）
   .gitignore             ← テンプレートからコピー
-  .mcp.json.example      ← MCP設定テンプレート（/setup-mcp で .mcp.json を生成）
   upgrade.sh             ← テンプレートアップグレード用スクリプト
   .claude/               ← テンプレートからコピー（中身は触らない）
     CLAUDE.md            ← Salesforce共通ルール
     agents/              ← AIエージェント定義（10体）
-    commands/            ← スラッシュコマンド定義（9個）
+    commands/            ← スラッシュコマンド定義（10個）
     settings.json        ← 権限設定（.gitignore対象）
   docs/                  ← テンプレートからコピー
     requirements/        ← 要件定義書・ユーザーストーリー
@@ -58,7 +55,7 @@ project/                    ← sf project generate で生成されたSFDXプロ
 
 ## エージェント（10体）
 
-タスクの種���に応じて自動的に適切なエージェントが選択される。
+タスクの種類に応じて自動的に適切なエージェントが選択される。
 
 | エージェント | 担当 |
 |---|---|
@@ -68,28 +65,27 @@ project/                    ← sf project generate で生成されたSFDXプロ
 | `qa-engineer` | テスト計画、テストケース作成、UAT支援 |
 | `salesforce-architect` | 要件定義、設計書・オブジェクト定義書作成、影響調査 |
 | `project-manager` | タスク管理、スプリント計画、議事録、進捗報告 |
-| `doc-writer` | 手順書、マニ��アル、リリースノート、資料作成 |
+| `doc-writer` | 手順書、マニュアル、リリースノート、資料作成 |
 | `data-manager` | データ移行、SOQL最適化、Data Loader、クレンジング |
 | `integration-dev` | 外部API連携、REST/SOAP、Platform Events、Named Credentials |
 | `assistant` | 調査、メール下書き、翻訳、その他アドホック作業 |
 
 ---
 
-## スラッシュコマンド（9個）
+## スラッシュコマンド（10個）
 
 | コマンド | 内容 | エージェント |
 |---|---|---|
-| `/sf-implement [内容]` | 機���実装 | salesforce-dev |
+| `/sf-implement [内容]` | 機能実装 | salesforce-dev |
 | `/sf-deploy [対象]` | デプロイ前チェック・デプロイ支援 | salesforce-dev |
 | `/sf-review [対象]` | コード・メタデータのレビュー | reviewer |
 | `/sf-debug [症状]` | バグ調査・障害対応 | maintenance |
 | `/sf-analyze [資料]` | 組織解析→プロフィール・要件定義書を自動生成 | salesforce-architect |
 | `/sf-design [内容]` | 機能別設計書の作成・既存設計書のインポート | salesforce-architect |
+| `/sf-catalog` | オブジェクト・項目定義書の自動生成 | salesforce-architect |
 | `/feedback [内容]` | 決定事項・気づきをCLAUDE.mdに記録 | assistant |
 | `/save-doc` | 添付資料をMarkdownに変換してdocsに保存 | doc-writer |
-| `/setup-mcp` | MCP連携の初期設定（トークン入力→.mcp.json生成） | assistant |
-
-> その他のエージェント（qa-engineer, salesforce-architect, project-manager, data-manager, integration-dev）は自然言語で直接呼び出せる。
+| `/setup-mcp` | MCP連携の設定（新規作成・更新・削除に対応） | assistant |
 
 ---
 
@@ -107,9 +103,11 @@ project/                    ← sf project generate で生成されたSFDXプロ
 
 ## MCP連携
 
-MCP設定テンプレートは `.mcp.json.example` に同梱。  
-実際のトークン入り設定は `/setup-mcp` コマンドで `.mcp.json` を生成する。  
-`.mcp.json` は `.gitignore` 対象のため、トークンがGitHubに公開される心配はない。
+`/setup-mcp` コマンドで `.mcp.json` を生成・管理する。
+
+- **新規**: `/setup-mcp` → 使うMCPを選択 → トークン入力 → `.mcp.json` 生成
+- **更新**: `/setup-mcp` → 追加・変更・削除を選択
+- `.mcp.json` は `.gitignore` 対象（トークンがGitHubに公開されない）
 
 | MCP | 用途 |
 |---|---|
@@ -131,7 +129,7 @@ bash upgrade.sh
 bash upgrade.sh <テンプレートURL> <タグ/ブランチ>
 ```
 
-更新対象: `.claude/` 配下（エージェント・コマンド・共通ルール）  
+更新対象: `.claude/` 配下（エージェント・コマンド・共通ルール）+ `upgrade.sh`  
 更新対象外: `CLAUDE.md`（ルート）・`docs/`・`force-app/`（プロジェクト固有のため触らない）
 
 ---
@@ -150,14 +148,3 @@ bash upgrade.sh <テンプレートURL> <タグ/ブランチ>
 - 主要カスタムオブジェクト
 - 過去の判断・決定事項
 - 注意事項・地雷
-
----
-
-## ドキュメント
-
-| 資料 | 対象 | 内容 |
-|---|---|---|
-| [オンボーディングガイド](docs/manuals/onboarding.md) | 全メンバー | インストール→環境構築→動作確認 |
-| [管理者向けセットアップガイド](docs/manuals/project-setup-guide.md) | PM・管理者 | 新規案件/保守案件のセットアップ手順 |
-| [運用手順書](docs/manuals/operations.md) | PM・管理者 | テンプレート管理・日常運用・アップグレード |
-| [テンプレート説明書](docs/manuals/template-guide.md) | 全メンバー | 全機能のリファレンス |

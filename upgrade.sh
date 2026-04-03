@@ -23,7 +23,6 @@
 #   ✅ .claude/CLAUDE.md        — 共通ルール
 #   ✅ .claude/agents/*.md      — エージェント定義
 #   ✅ .claude/commands/*.md    — スラッシュコマンド定義
-#   ✅ .mcp.json.example        — MCP設定テンプレート
 #   ✅ upgrade.sh               — このスクリプト自身
 #
 # 更新対象外（プロジェクト固有のため触らない）:
@@ -151,14 +150,6 @@ if [ -d "$TMP_DIR/.claude/commands" ]; then
   done
 fi
 
-# .mcp.json.example
-if [ -f "$TMP_DIR/.mcp.json.example" ]; then
-  if [ ! -f ".mcp.json.example" ] || ! diff -q ".mcp.json.example" "$TMP_DIR/.mcp.json.example" > /dev/null 2>&1; then
-    CHANGE_LOG+="  更新: .mcp.json.example（MCP設定テンプレート）\n"
-    CHANGES=$((CHANGES + 1))
-  fi
-fi
-
 # upgrade.sh 自身
 if [ -f "$TMP_DIR/upgrade.sh" ]; then
   if ! diff -q "upgrade.sh" "$TMP_DIR/upgrade.sh" > /dev/null 2>&1; then
@@ -212,11 +203,6 @@ if [ -d "$TMP_DIR/.claude/commands" ]; then
   cp -r "$TMP_DIR/.claude/commands/"*.md ".claude/commands/"
 fi
 
-# .mcp.json.example
-if [ -f "$TMP_DIR/.mcp.json.example" ]; then
-  cp "$TMP_DIR/.mcp.json.example" ".mcp.json.example"
-fi
-
 # upgrade.sh
 if [ -f "$TMP_DIR/upgrade.sh" ]; then
   cp "$TMP_DIR/upgrade.sh" "upgrade.sh"
@@ -238,7 +224,7 @@ echo "変更件数: ${CHANGES}件"
 echo ""
 echo "次のステップ:"
 echo "  1. 変更内容を確認:  git diff .claude/"
-echo "  2. コミット:        git add .claude/ upgrade.sh .mcp.json.example"
+echo "  2. コミット:        git add .claude/ upgrade.sh"
 echo "  3. プッシュ・PR:    git push → PRを作成してチームに共有"
 echo ""
 echo "※ settings.json に新しい設定が追加された場合は手動でマージしてください"

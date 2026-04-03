@@ -100,7 +100,6 @@ git clone <テンプレートURL> "<作成先パス>/<フォルダ名>/.claude-t
 cp -r "<作成先パス>/<フォルダ名>/.claude-template-tmp/.claude" "<作成先パス>/<フォルダ名>/.claude"
 cp "<作成先パス>/<フォルダ名>/.claude-template-tmp/CLAUDE.md" "<作成先パス>/<フォルダ名>/CLAUDE.md"
 cp -r "<作成先パス>/<フォルダ名>/.claude-template-tmp/docs" "<作成先パス>/<フォルダ名>/docs"
-cp "<作成先パス>/<フォルダ名>/.claude-template-tmp/.mcp.json.example" "<作成先パス>/<フォルダ名>/.mcp.json.example"
 cp "<作成先パス>/<フォルダ名>/.claude-template-tmp/upgrade.sh" "<作成先パス>/<フォルダ名>/upgrade.sh"
 ```
 
