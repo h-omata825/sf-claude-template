@@ -52,7 +52,8 @@
 |---|---|---|---|
 | 組織プロフィール | `docs/overview/` | `/sf-analyze` | 会社概要・業種・利用目的 |
 | 要件定義書 | `docs/requirements/` | `/sf-analyze` | AS-IS/TO-BE・要件一覧 |
-| 機能設計書 | `docs/design/` | `/sf-design` | 機能別の詳細設計 |
+| 機能設計書 | `docs/design/{種別}/` | `/sf-design` | apex/flow/batch/lwc/integration/config |
+| 設計書インデックス | `docs/design/_index.md` | `/sf-design` | 全設計書の一覧（自動生成） |
 | オブジェクト・項目定義書 | `docs/catalog/` | `/sf-catalog` | オブジェクト・項目・権限 |
 | データ分析 | `docs/data/` | `/sf-data` | データ品質・傾向分析 |
 | テスト仕様 | `docs/test/` | — | |
