@@ -1,0 +1,29 @@
+# Salesforce CLI
+.sfdx/
+.sf/
+
+# VSCode
+.vscode/
+
+# ログ
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# データ（機密情報を含む可能性があるため）
+data/*.csv
+data/*.json
+
+# 環境設定
+.env
+*.env.*
+
+
+
+# Node modules（LWC開発時）
+node_modules/
+
+# Apex test results
+test-results/
