@@ -1,4 +1,7 @@
 {
+  "_mode": "テスト中 / 実運用前",
+  "_activate_instructions": "実運用開始時: __pending 内の rules 配列のルールを permissions.deny に追加する",
+
   "permissions": {
     "allow": [
       "Bash(*)"
@@ -6,9 +9,33 @@
     "deny": [
       "Bash(sf project deploy start --target-org *prod*)",
       "Bash(sf project deploy start --target-org *production*)",
-      "Bash(git push*)",
-      "Bash(git commit*)",
-      "Bash(git reset --hard*)"
+      "Bash(rm -rf *)",
+      "Bash(rm -r .claude*)",
+      "Edit(.claude/CLAUDE.md)",
+      "Edit(.claude/agents/*)",
+      "Edit(.claude/commands/*)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/CLAUDE.md)",
+      "Write(.claude/agents/*)",
+      "Write(.claude/commands/*)",
+      "Write(.claude/settings.json)"
     ]
+  },
+
+  "__pending": {
+    "_note": "実運用開始時に permissions.deny へ追加して有効化する",
+
+    "git_workflow": {
+      "_description": "Git操作の制限。PR経由運用をチームに強制する場合に有効化。",
+      "_activate_when": "チーム利用開始・PR運用を開始するとき",
+      "rules": [
+        "Bash(git push*)",
+        "Bash(git commit*)",
+        "Bash(git reset --hard*)",
+        "Bash(git branch -D*)",
+        "Bash(git branch -d main*)",
+        "Bash(git branch -d develop*)"
+      ]
+    }
   }
 }

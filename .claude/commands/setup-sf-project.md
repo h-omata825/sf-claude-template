@@ -111,10 +111,11 @@ rm -r "<作成先パス>/<フォルダ名>/.claude-template-tmp"
 ### 3-4. .gitignore 更新
 ```bash
 echo "" >> "<作成先パス>/<フォルダ名>/.gitignore"
-echo "# Claude Code（個人設定）" >> "<作成先パス>/<フォルダ名>/.gitignore"
-echo ".claude/settings.json" >> "<作成先パス>/<フォルダ名>/.gitignore"
+echo "# Claude Code（トークン入り個人設定）" >> "<作成先パス>/<フォルダ名>/.gitignore"
 echo ".mcp.json" >> "<作成先パス>/<フォルダ名>/.gitignore"
 ```
+
+※ `.claude/settings.json` は **Git管理対象**（チーム全員に権限設定を強制するため）。`.gitignore` に追加しない。
 
 各コマンドでエラーが出た場合:
 - sf project generate 失敗 → エラー内容を表示して原因を説明

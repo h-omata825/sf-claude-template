@@ -34,7 +34,7 @@ project/                    ← sf project generate で生成されたSFDXプロ
     CLAUDE.md            ← Salesforce共通ルール
     agents/              ← AIエージェント定義（10体）
     commands/            ← スラッシュコマンド定義（13個）
-    settings.json        ← 権限設定（.gitignore対象）
+    settings.json        ← 権限設定（Git管理対象・チーム共有）
   docs/                  ← テンプレートからコピー
     requirements/        ← 要件定義書・ユーザーストーリー
     design/              ← 設計書・オブジェクト定義書
@@ -86,13 +86,17 @@ project/                    ← sf project generate で生成されたSFDXプロ
 
 ## 権限設定（settings.json）
 
+`settings.json` は **Git管理対象**。チーム全員に同じ権限制限が強制される。
+
 ### 自動許可
 - すべてのBashコマンドを自動許可（`Bash(*)`）
 
-### 自動拒否（確認なしに実行しない）
+### 自動拒否（Claude Codeが実行前にブロック）
 - 本番環境へのデプロイ（`*prod*` / `*production*`）
-- `git push` / `git commit`
-- `git reset --hard`
+- `rm -rf` / `.claude` の削除
+- `.claude/` 配下の編集・書き込み（テンプレート保護）
+
+> Git操作（push/commit/reset等）の制限は運用開始時に `settings.json` の deny に追加する想定。
 
 ---
 
@@ -128,11 +132,54 @@ project/                    ← sf project generate で生成されたSFDXプロ
 
 ---
 
+## できること・できないこと
+
+### Claude Codeが自由にできること
+
+| 操作 | 例 |
+|---|---|
+| Salesforceメタデータの作成・編集 | Apex, LWC, Flow, オブジェクト定義 |
+| Sandbox環境へのデプロイ | `sf project deploy start --target-org dev` |
+| テスト実行 | `sf apex run test` |
+| `docs/` 配下の資材追加・編集 | 設計書、要件定義書、議事録 |
+| `CLAUDE.md`（ルート）の編集 | プロジェクト固有ルールの追記 |
+| Git読み取り操作 | `git pull`, `git fetch`, `git status`, `git diff` |
+| ブランチ作成・切替 | `git checkout -b feature/xxx` |
+| Git commit / push | 確認ダイアログ経由で実行可能 |
+| SOQL/SOSLの実行 | `sf data query` |
+| ローカルファイルの読み取り | 参考資料の確認、ログ解析 |
+
+### Claude Codeができないこと（自動拒否・解除不可）
+
+| 操作 | 理由 |
+|---|---|
+| `.claude/` 配下の編集・書き込み | テンプレート保護（`/upgrade` で更新） |
+| 本番環境へのデプロイ | 人間の確認が必須 |
+| `rm -rf` / `.claude` の削除 | 破壊的操作の防止 |
+| プロジェクトフォルダ外への書き込み | 共有フォルダ・他プロジェクトの保護（ルールで制御） |
+| 機密情報の出力 | トークン・パスワード・個人情報 |
+
+### 品質ゲート（自動品質チェック）
+
+コード実装・設計書作成などの成果物は、完了前に**自動でレビューエージェントの基準で品質チェック**を実行する。
+
+| 作業 | チェック担当 |
+|---|---|
+| Apex / LWC / Flow 実装 | reviewer エージェント |
+| テストクラス作成 | qa-engineer エージェント |
+| 設計書・要件定義書 | reviewer エージェント |
+
+問題があれば修正案を提示。ユーザーが「スキップ」と言えば省略可能。
+
+---
+
 ## CLAUDE.md の構成
 
 ### `.claude/CLAUDE.md`（共通ルール・触らない）
 - エージェント選択基準
 - 出力フォーマット
+- セキュリティ・権限ルール
+- 品質ゲート（自動レビュー定義）
 - 禁止操作（本番デプロイ・git push等）
 - Salesforceコード品質基準（ガバナ制限・バルク処理・FLS等）
 
