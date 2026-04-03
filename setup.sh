@@ -55,12 +55,14 @@ echo "[2/3] Claude Codeテンプレートを配置中..."
 cp -r "$SCRIPT_DIR/.claude" "$PROJECT_PATH/.claude"
 cp "$SCRIPT_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
 cp -r "$SCRIPT_DIR/docs" "$PROJECT_PATH/docs"
-cp "$SCRIPT_DIR/.mcp.json" "$PROJECT_PATH/.mcp.json"
+cp "$SCRIPT_DIR/.mcp.json.example" "$PROJECT_PATH/.mcp.json.example"
+cp "$SCRIPT_DIR/upgrade.sh" "$PROJECT_PATH/upgrade.sh"
 
-echo "  .claude/    → コピー完了"
-echo "  CLAUDE.md   → コピー完了"
-echo "  docs/       → コピー完了"
-echo "  .mcp.json   → コピー完了（各自でトークンを設定）"
+echo "  .claude/          → コピー完了"
+echo "  CLAUDE.md         → コピー完了"
+echo "  docs/             → コピー完了"
+echo "  .mcp.json.example → コピー完了"
+echo "  upgrade.sh        → コピー完了"
 
 # --- Step 3: .gitignore 更新 ---
 echo ""
@@ -70,6 +72,7 @@ if [ -f "$PROJECT_PATH/.gitignore" ]; then
 
 # Claude Code（個人設定）
 .claude/settings.json
+.mcp.json
 GITIGNORE
   echo "  .gitignore に個人設定の除外を追記しました"
 fi
@@ -84,7 +87,8 @@ echo "プロジェクト: $PROJECT_PATH"
 echo ""
 echo "次のステップ:"
 echo "  1. cd $PROJECT_PATH"
-echo "  2. CLAUDE.md を開いてプロジェクト情報を記入"
-echo "  3. sf org login web -a <エイリアス>"
-echo "  4. code ."
+echo "  2. code ."
+echo "  3. CLAUDE.md を開いてプロジェクト情報を記入"
+echo "  4. sf org login web -a <エイリアス>"
+echo "  5. Claude Codeで /setup-mcp を実行（MCP連携を使う場合）"
 echo ""

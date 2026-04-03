@@ -20,6 +20,9 @@ data/*.json
 .env
 *.env.*
 
+# Claude Code（トークン入り個人設定）
+.mcp.json
+
 
 
 # Node modules（LWC開発時）
