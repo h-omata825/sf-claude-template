@@ -60,6 +60,7 @@
 | 議事録 | `docs/minutes/` | — | |
 | 手順書 | `docs/manuals/` | — | |
 | 変更履歴 | `docs/changelog.md` | 自動 | コマンド実行時に自動追記 |
+| package.xml | `manifest/package.xml` | `/sf-package` | Git差分・指定・全量の3モード |
 
 ---
 
