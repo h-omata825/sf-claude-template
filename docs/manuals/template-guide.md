@@ -10,7 +10,7 @@
 2. [フォルダ構成](#2-フォルダ構成)
 3. [CLAUDE.md — ルールファイル](#3-claudemd--ルールファイル)
 4. [エージェント（10体）](#4-エージェント10体)
-5. [スラッシュコマンド（8個）](#5-スラッシュコマンド7個)
+5. [スラッシュコマンド（9個）](#5-スラッシュコマンド7個)
 6. [settings.json — 権限設定](#6-settingsjson--権限設定)
 7. [.mcp.json — 外部ツール連携](#7-mcpjson--外部ツール連携)
 8. [docs/ — プロジェクト資材](#8-docs--プロジェクト資材)
@@ -66,12 +66,13 @@ project/
 │   │   ├── data-manager.md
 │   │   ├── integration-dev.md
 │   │   └── assistant.md
-│   └── commands/                ← スラッシュコマンド定義（8個）
+│   └── commands/                ← スラッシュコマンド定義（9個）
 │       ├── sf-implement.md
 │       ├── sf-deploy.md
 │       ├── sf-review.md
 │       ├── sf-debug.md
 │       ├── sf-analyze.md
+│       ├── sf-design.md
 │       ├── feedback.md
 │       ├── save-doc.md
 │       └── setup-mcp.md
@@ -408,7 +409,7 @@ Salesforce Winter '26の新機能をまとめて
 
 ---
 
-## 5. スラッシュコマンド（8個）
+## 5. スラッシュコマンド（9個）
 
 頻出タスクをワンコマンドで実行するショートカット。`/` + コマンド名 で呼び出す。
 
@@ -421,6 +422,7 @@ Salesforce Winter '26の新機能をまとめて
 | `/sf-review` | レビュー対象 | reviewer | コード・メタデータのレビュー |
 | `/sf-debug` | 症状・エラー内容 | maintenance | バグ調査・障害対応 |
 | `/sf-analyze` | (任意)資料パス | salesforce-architect | 組織解析→プロフィール・要件定義書を自動生成 |
+| `/sf-design` | 設計対象・内容 | salesforce-architect | 機能別設計書の作成・既存設計書のインポート |
 | `/feedback` | 内容 | assistant | 決定事項・気づきをCLAUDE.mdに記録 |
 | `/save-doc` | (資料を貼り付け) | doc-writer | 資料をMarkdownに変換してdocs/に保存 |
 | `/setup-mcp` | — | assistant | MCP連携の初期設定（トークン入力→.mcp.json生成） |

@@ -44,7 +44,7 @@ project/                    ← sf project generate で生成されたSFDXプロ
   .claude/               ← テンプレートからコピー（中身は触らない）
     CLAUDE.md            ← Salesforce共通ルール
     agents/              ← AIエージェント定義（10体）
-    commands/            ← スラッシュコマンド定義（8個）
+    commands/            ← スラッシュコマンド定義（9個）
     settings.json        ← 権限設定（.gitignore対象）
   docs/                  ← テンプレートからコピー
     requirements/        ← 要件定義書・ユーザーストーリー
@@ -75,7 +75,7 @@ project/                    ← sf project generate で生成されたSFDXプロ
 
 ---
 
-## スラッシュコマンド（8個）
+## スラッシュコマンド（9個）
 
 | コマンド | 内容 | エージェント |
 |---|---|---|
@@ -84,6 +84,7 @@ project/                    ← sf project generate で生成されたSFDXプロ
 | `/sf-review [対象]` | コード・メタデータのレビュー | reviewer |
 | `/sf-debug [症状]` | バグ調査・障害対応 | maintenance |
 | `/sf-analyze [資料]` | 組織解析→プロフィール・要件定義書を自動生成 | salesforce-architect |
+| `/sf-design [内容]` | 機能別設計書の作成・既存設計書のインポート | salesforce-architect |
 | `/feedback [内容]` | 決定事項・気づきをCLAUDE.mdに記録 | assistant |
 | `/save-doc` | 添付資料をMarkdownに変換してdocsに保存 | doc-writer |
 | `/setup-mcp` | MCP連携の初期設定（トークン入力→.mcp.json生成） | assistant |
