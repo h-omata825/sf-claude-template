@@ -48,13 +48,17 @@
 
 ## プロジェクト資材
 
-| 資材 | 場所 | 備考 |
-|---|---|---|
-| 要件定義書 | `docs/requirements/` | |
-| 設計書 | `docs/design/` | |
-| テスト仕様 | `docs/test/` | |
-| 議事録 | `docs/minutes/` | |
-| 手順書 | `docs/manuals/` | |
+| 資材 | 場所 | 生成コマンド | 備考 |
+|---|---|---|---|
+| 組織プロフィール | `docs/overview/` | `/sf-analyze` | 会社概要・業種・利用目的 |
+| 要件定義書 | `docs/requirements/` | `/sf-analyze` | AS-IS/TO-BE・要件一覧 |
+| 機能設計書 | `docs/design/` | `/sf-design` | 機能別の詳細設計 |
+| オブジェクト・項目定義書 | `docs/catalog/` | `/sf-catalog` | オブジェクト・項目・権限 |
+| データ分析 | `docs/data/` | `/sf-data` | データ品質・傾向分析 |
+| テスト仕様 | `docs/test/` | — | |
+| 議事録 | `docs/minutes/` | — | |
+| 手順書 | `docs/manuals/` | — | |
+| 変更履歴 | `docs/changelog.md` | 自動 | コマンド実行時に自動追記 |
 
 ---
 
