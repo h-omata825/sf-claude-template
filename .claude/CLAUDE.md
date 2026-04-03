@@ -87,15 +87,84 @@
 
 ---
 
-## プロジェクト資材の参照
+## 開発時の振る舞いルール
 
-作業前に関連資材を確認すること。
+**日本語の指示に対して、docs/ のコンテキストを活用して精度の高い作業を行う。**
 
-| フォルダ | 内容 |
-|---|---|
-| `docs/requirements/` | 要件定義書・ユーザーストーリー・ヒアリングメモ |
-| `docs/design/` | 設計書・オブジェクト定義書・機能設計書・ER図 |
-| `docs/test/` | テスト計画・テストケース・バグ報告 |
-| `docs/minutes/` | 議事録・決定事項・アクションアイテム |
-| `force-app/main/default/` | Salesforceメタデータ（Apex・LWC・Flow・設定）※SFDXが生成 |
-| `manifest/` | package.xml・destructiveChanges.xml ※SFDXが生成 |
+### 作業前に必ず参照するもの
+
+どんな開発タスクでも、着手前に以下を確認する:
+
+| 状況 | 参照先 | 理由 |
+|---|---|---|
+| **常に** | `docs/overview/org-profile.md` | 用語集でオブジェクト名・項目名の正しい対応を確認 |
+| 項目・オブジェクト操作 | `docs/catalog/{対象}.md` | 既存の項目構成・リレーション・入力規則を把握 |
+| 機能実装 | `docs/design/{種別}/` | 該当機能の設計書があれば設計に従う |
+| 要件確認 | `docs/requirements/requirements.md` | 要件番号・ビジネスルール・受入基準を確認 |
+| マスタ参照 | `docs/data/master-data.md` | ピックリスト値・商品名等の正確な値を使う |
+| メール関連 | `docs/data/email-templates.md` | 既存テンプレートのトーン・差し込み項目を把握 |
+
+### 指示パターン別の動き方
+
+#### 「項目を作って」「項目追加して」
+1. `docs/catalog/` で対象オブジェクトの既存構成を確認
+2. `docs/overview/org-profile.md` の用語集で命名を統一
+3. プロジェクトルート `CLAUDE.md` の命名規則に従う
+4. メタデータファイルを作成（force-app 配下）
+5. `docs/catalog/` の該当定義書を更新（項目追加を反映）
+
+#### 「Apex 作って」「トリガー書いて」
+1. `docs/design/apex/` に該当設計書があるか確認 → あれば設計に従う
+2. `docs/catalog/` で対象オブジェクトの項目・リレーションを確認
+3. `docs/requirements/requirements.md` で関連するビジネスルール（BR-XXX）を確認
+4. Quality Standards に従って実装（バルク対応・テストクラス付き）
+5. 設計書がない場合は「設計書がありませんが実装しますか？先に `/sf-design` で設計書を作成することも可能です」と提案
+
+#### 「フロー作って」
+1. `docs/design/flow/` に該当設計書があるか確認
+2. `docs/catalog/` で対象オブジェクトの入力規則・既存自動化を確認（競合リスク）
+3. 実装してメタデータファイルを作成
+
+#### 「バグ直して」「エラー出る」
+1. エラー内容を確認
+2. `docs/catalog/` で関連オブジェクト・項目を把握
+3. `docs/design/` で該当機能の設計意図を確認
+4. `docs/requirements/requirements.md` で関連ビジネスルールを確認（仕様なのかバグなのか判断）
+5. 修正実施
+
+#### 「デプロイして」
+1. `docs/changelog.md` で最近の変更を確認
+2. 対象のメタデータを確認
+3. デプロイコマンドを提示（**本番へのデプロイは必ずユーザー確認**）
+
+### docs が存在しない場合
+
+セットアップ直後や docs が空の場合でも開発は可能。ただし:
+- 「用語集がないため、命名は一般的なSalesforce慣例に従います」と伝える
+- 「設計書が見つかりません。要件を教えてください」と聞く
+- 作業後に「`/sf-catalog` で定義書を更新することを推奨します」と提案
+
+### docs の自動更新
+
+開発作業によって組織の構成が変わった場合:
+- **項目追加/変更** → 「`/sf-catalog <オブジェクト名>` で定義書を更新してください」と提案
+- **新機能実装** → 「`/sf-design` で設計書を作成してください」と提案
+- 自動では更新しない（チーム間の差異を防ぐため、更新は明示的に実行する）
+
+---
+
+## プロジェクト資材
+
+| フォルダ | 内容 | 生成コマンド |
+|---|---|---|
+| `docs/overview/` | 組織概要・用語集・ステークホルダー | `/sf-analyze` |
+| `docs/requirements/` | 要件定義書・ビジネスルール | `/sf-analyze` |
+| `docs/design/{種別}/` | 機能別設計書（apex/flow/batch/lwc/integration/config） | `/sf-design` |
+| `docs/catalog/{standard\|custom}/` | オブジェクト・項目定義書 | `/sf-catalog` |
+| `docs/data/` | マスタデータ・テンプレート・統計・品質 | `/sf-data` |
+| `docs/test/` | テスト計画・テストケース | 手動 |
+| `docs/minutes/` | 議事録・決定事項 | 手動 |
+| `docs/manuals/` | 手順書・マニュアル | 手動 |
+| `docs/changelog.md` | 変更履歴 | 自動 |
+| `force-app/main/default/` | Salesforceメタデータ | SFDX |
+| `manifest/` | package.xml | SFDX |
