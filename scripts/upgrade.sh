@@ -241,6 +241,47 @@ fi
 # --- クリーンアップ ---
 rm -rf "$TMP_DIR"
 
+# --- Git 自動コミット・プッシュ ---
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    COMMIT_MSG="chore: upgrade template to ${TEMPLATE_VERSION}"
+
+    # 変更をステージング
+    git add .claude/ scripts/ README.md 2>/dev/null || true
+
+    # コミット（変更がある場合のみ）
+    if ! git diff --cached --quiet; then
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+        # develop ブランチ以外の場合は develop に切り替え
+        if [ "$CURRENT_BRANCH" != "develop" ]; then
+            warn "現在のブランチ: ${CURRENT_BRANCH}。develop に切り替えてコミットします"
+            git stash 2>/dev/null || true
+            git checkout develop
+            git add .claude/ scripts/ README.md 2>/dev/null || true
+        fi
+
+        git commit -m "$COMMIT_MSG"
+        ok "コミット: $COMMIT_MSG"
+
+        # develop へ push
+        git push origin develop
+        ok "push: origin/develop"
+
+        # main へマージ・push
+        git checkout main
+        git merge develop --no-edit
+        git push origin main
+        ok "push: origin/main"
+
+        # develop に戻る
+        git checkout develop
+    else
+        info "Git: コミット対象の変更なし（スキップ）"
+    fi
+else
+    info "Git リポジトリ未設定。Git 操作はスキップしました"
+fi
+
 # --- 完了報告 ---
 echo ""
 echo "=========================================="
@@ -250,8 +291,4 @@ echo ""
 echo "  バージョン: $CURRENT_VERSION → $TEMPLATE_VERSION"
 echo "  ソース: $URL @ $BRANCH"
 echo "  変更件数: ${TOTAL}件"
-echo ""
-echo "  次のステップ:"
-echo "    1. 変更内容を確認:  git diff .claude/"
-echo "    2. 問題なければコミットしてPRを作成してください"
 echo ""
