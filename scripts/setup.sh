@@ -5,11 +5,11 @@
 # 使い方（テンプレートを事前にダウンロードしなくても実行可能）:
 #
 #   # 新規プロジェクト（テンプレートから作成）
-#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s my-project
-#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s my-project /c/workspace
+#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project
+#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project /c/workspace
 #
 #   # 既存プロジェクトに参加（プロジェクトリポジトリをソースに指定）
-#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s my-project . https://github.com/your-org/project-a.git
+#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project . https://github.com/your-org/project-a.git
 #
 # または clone 後:
 #   bash scripts/setup.sh my-project /c/workspace
@@ -24,7 +24,7 @@ set -euo pipefail
 
 # --- 設定 ---
 DEFAULT_TEMPLATE_URL="https://github.com/h-omata825/sf-claude-template.git"
-TEMPLATE_BRANCH="develop"
+TEMPLATE_BRANCH="main"
 
 # --- 色付き出力 ---
 info()  { echo -e "\033[1;34m[INFO]\033[0m  $*"; }
