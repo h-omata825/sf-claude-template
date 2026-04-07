@@ -21,7 +21,7 @@ curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/s
 1. VSCode が自動で開く
 2. Claude Code を起動
 3. `/setup-sf-project` を実行 → 組織認証（クリック選択式）
-4. `/sf-package` を実行 → メタデータ取得
+4. `/sf-retrieve` を実行 → メタデータ取得
 5. `CLAUDE.md` を編集してプロジェクト固有情報を記入
 6. `/setup-mcp` を実行 → Backlog・GitHub等のMCP連携を設定
 
@@ -60,7 +60,7 @@ project/
     setup-sf-project.sh  ← SF組織認証
     setup-mcp.sh         ← MCP連携（.mcp.json）の設定
     upgrade.sh           ← テンプレート更新（差分検出→適用）
-    sf-package.sh        ← package.xml 生成・メタデータ取得
+    sf-package.sh        ← package.xml 生成・メタデータ取得（/sf-retrieve から呼ばれる）
   docs/                  ← ドキュメント置き場
     requirements/        ← 要件定義書・ユーザーストーリー
     design/              ← 設計書・オブジェクト定義書
@@ -94,7 +94,7 @@ project/
 |---|---|
 | `/setup-sf-project` | Salesforce組織の認証（クリック選択式） |
 | `/setup-mcp` | MCP連携の設定（Backlog・GitHub・Slack等） |
-| `/sf-package` | package.xml 生成・メタデータ取得 |
+| `/sf-retrieve` | package.xml 生成・メタデータ取得 |
 | `/upgrade` | テンプレート最新版を取得して更新 |
 | `/git-pr` | ブランチ作成・コミット・プッシュ・PR作成 |
 | `/sf-implement [内容]` | 機能実装 |
@@ -135,6 +135,21 @@ bash scripts/upgrade.sh
 更新対象外: `CLAUDE.md`（ルート）・`docs/`・`force-app/`・`.mcp.json`（プロジェクト固有のため触らない）
 
 スクリプトが差分を検出して一覧表示し、確認後に適用する。
+
+---
+
+## ドキュメント
+
+オンボーディング・運用手順・テンプレート説明書は以下で管理している（このリポジトリには含まない）。
+
+| 資料 | 内容 |
+|---|---|
+| `onboarding.md` | 環境構築から動作確認まで |
+| `operations.md` | 日常の開発フロー（保守/新規） |
+| `template-guide.md` | エージェント・コマンドの詳細 |
+| `project-setup-guide.md` | プロジェクト立ち上げ・Git運用 |
+
+管理場所: `C:\ClaudeCode\docs\sf-template\`
 
 ---
 

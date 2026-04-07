@@ -110,14 +110,39 @@ docs/catalog/
 sf sobject list -s custom
 ```
 
-2. 主要標準オブジェクト（Account, Contact, Opportunity, Case, Lead）+ 全カスタムオブジェクトを対象にする
+2. 使用中の標準オブジェクトを検出する（レコード件数で判定）:
 
-3. 既存の定義書がある場合は差分更新モードで処理（手動追記を保持）
+   以下の標準オブジェクト候補についてレコード件数を確認する:
+   ```bash
+   # 代表的な標準オブジェクトをまとめてカウント
+   sf data query -q "SELECT COUNT() FROM Account" --json
+   sf data query -q "SELECT COUNT() FROM Contact" --json
+   sf data query -q "SELECT COUNT() FROM Lead" --json
+   sf data query -q "SELECT COUNT() FROM Opportunity" --json
+   sf data query -q "SELECT COUNT() FROM Case" --json
+   sf data query -q "SELECT COUNT() FROM Campaign" --json
+   sf data query -q "SELECT COUNT() FROM Contract" --json
+   sf data query -q "SELECT COUNT() FROM Order" --json
+   sf data query -q "SELECT COUNT() FROM Product2" --json
+   sf data query -q "SELECT COUNT() FROM Quote" --json
+   sf data query -q "SELECT COUNT() FROM Task" --json
+   sf data query -q "SELECT COUNT() FROM Event" --json
+   sf data query -q "SELECT COUNT() FROM Asset" --json
+   sf data query -q "SELECT COUNT() FROM ServiceContract" --json
+   sf data query -q "SELECT COUNT() FROM WorkOrder" --json
+   ```
+   - レコード件数 > 0 のオブジェクトを「使用中」として対象に含める
+   - レコード件数 = 0 でもカスタム項目が存在する場合は対象に含める（項目だけ整備されている状態）
+   - エラーになるオブジェクトはライセンスなし or 未使用として対象外
 
-4. 処理開始前に対象一覧を表示する（確認は不要、そのまま実行）:
+3. 全カスタムオブジェクトを対象に含める（件数に関わらず全て）
+
+4. 既存の定義書がある場合は差分更新モードで処理（手動追記を保持）
+
+5. 処理開始前に対象一覧を表示する（確認は不要、そのまま実行）:
 ```
 ## 処理対象
-- 標準オブジェクト: Account, Contact, Opportunity, Case, Lead
+- 標準オブジェクト（使用中）: Account（X件）, Contact（X件）, ...（計X件）
 - カスタムオブジェクト: XXX__c, YYY__c, ZZZ__c（X件）
 - 合計: X件
 

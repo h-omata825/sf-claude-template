@@ -1,8 +1,6 @@
-# 管理者向け運用ガイド（暫定版）
+# 管理者向け運用ガイド
 
 テンプレートの管理・プロジェクトのセットアップ・チームへの展開を行う管理者向けの手順書。
-
-> **暫定版**: Git運用ルール・ブランチ戦略等、未決定事項は決定後に更新する。
 
 ---
 
@@ -13,7 +11,7 @@
 3. [チームへの展開](#3-チームへの展開)
 4. [テンプレートの管理・更新](#4-テンプレートの管理更新)
 5. [権限設定の管理](#5-権限設定の管理)
-6. [Git運用の設計（未決定）](#6-git運用の設計未決定)
+6. [Git運用の設計](#6-git運用の設計)
 7. [運用チェックリスト](#7-運用チェックリスト)
 
 ---
@@ -218,34 +216,67 @@ bash scripts/upgrade.sh v1.1.0
 
 ---
 
-## 6. Git運用の設計（未決定）
+## 6. Git運用の設計
 
-> このセクションはチームのGit運用ルールが決まり次第、更新する。
+### ブランチ戦略
 
-### 検討事項
-
-| 項目 | 選択肢 | 現状 |
-|---|---|---|
-| ブランチ戦略 | main直接 / main+feature / main+develop+feature | 未決定 |
-| PR必須化 | あり / なし | 未決定（settings.jsonでの強制は準備済み） |
-| コミットルール | Conventional Commits等 | 未決定 |
-| マージ方法 | Merge / Squash / Rebase | 未決定 |
-
-### 段階的導入の案
+保守案件をメインとした構成。
 
 ```
-Phase 1（試行期間）:
-  main直接コミット。Git制限なし。
-  管理者がテンプレート更新時にPRを作る練習。
+main
+  └── 本番と同期するブランチ。直接コミット禁止。
+      マージ元: develop（定期リリース）/ hotfix/*（緊急修正のみ）
 
-Phase 2（チーム開発開始）:
-  feature/* ブランチ + PR必須。
-  settings.jsonのgit_workflowを有効化。
+develop
+  └── 開発・検証のベースブランチ。
+      マージ元: feature/*（機能開発・保守開発）
 
-Phase 3（安定運用）:
-  main + develop + feature/* の3層。
-  CIでテスト自動実行。
+feature/NNN-説明
+  └── 機能追加・保守改修用。developから分岐しdevelopにPR。
+      例: feature/001-account-trigger, feature/002-contact-fix
+
+hotfix/NNN-説明
+  └── 本番緊急修正用。mainから分岐しmainにPR。
+      main→PR→マージ後、developにもcherry-pickで反映。
+      例: hotfix/001-login-error
 ```
+
+### ルール
+
+| 項目 | ルール |
+|---|---|
+| コミットメッセージ | Conventional Commits形式（`feat:` `fix:` `docs:` 等）|
+| PRのマージ方法 | **Squash merge**（feature/hotfixは1コミットにまとめる） |
+| develop → main のマージ | **Merge commit**（リリース履歴を残す） |
+| PR必須 | main / develop への直接pushは禁止。必ずPRを経由する |
+| レビュー | develop→main のPRは管理者のレビュー必須 |
+
+### 実運用開始時のGit制限有効化
+
+チーム利用が本格化したタイミングで、settings.jsonの `__pending.git_workflow.rules` を `permissions.deny` に追加する。
+
+```json
+// settings.json の permissions.deny に以下を追加
+"Bash(git push*)",
+"Bash(git commit*)",
+"Bash(git reset --hard*)",
+"Bash(git branch -D*)",
+"Bash(git branch -d main*)",
+"Bash(git branch -d develop*)"
+```
+
+有効化後はClaude Codeから直接 `git push` / `git commit` ができなくなり、`/git-pr` コマンドまたはターミナルから手動で行う。
+
+**有効化のタイミング**: 2名以上が同じリポジトリで作業を開始したとき。
+
+### GitHub Branch Protection の設定
+
+| ブランチ | 設定 |
+|---|---|
+| `main` | PR必須・レビュー1名以上・直接push禁止 |
+| `develop` | PR必須・直接push禁止 |
+
+GitHubリポジトリの **Settings → Branches → Branch protection rules** から設定する。
 
 ---
 
