@@ -248,33 +248,13 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # 変更をステージング
     git add .claude/ scripts/ README.md 2>/dev/null || true
 
-    # コミット（変更がある場合のみ）
+    # コミット・push（変更がある場合のみ）
     if ! git diff --cached --quiet; then
-        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-        # develop ブランチ以外の場合は develop に切り替え
-        if [ "$CURRENT_BRANCH" != "develop" ]; then
-            warn "現在のブランチ: ${CURRENT_BRANCH}。develop に切り替えてコミットします"
-            git stash 2>/dev/null || true
-            git checkout develop
-            git add .claude/ scripts/ README.md 2>/dev/null || true
-        fi
-
         git commit -m "$COMMIT_MSG"
         ok "コミット: $COMMIT_MSG"
 
-        # develop へ push
-        git push origin develop
-        ok "push: origin/develop"
-
-        # main へマージ・push
-        git checkout main
-        git merge develop --no-edit
-        git push origin main
-        ok "push: origin/main"
-
-        # develop に戻る
-        git checkout develop
+        git push origin HEAD
+        ok "push: $(git rev-parse --abbrev-ref HEAD)"
     else
         info "Git: コミット対象の変更なし（スキップ）"
     fi
