@@ -65,11 +65,17 @@ claude
 
 ```bash
 # 新規プロジェクト（テンプレートから作成）
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス>
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <フォルダ名> <作成先パス>
 
 # 既存プロジェクトに参加（プロジェクトリポジトリをソースに指定）
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス> <プロジェクトリポジトリURL>
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <フォルダ名> <作成先パス> <プロジェクトリポジトリURL>
 ```
+
+| 引数 | 必須 | 説明 |
+|---|---|---|
+| `<フォルダ名>` | ✓ | 作成されるフォルダの名前。`<作成先パス>/<フォルダ名>/` が生成される |
+| `<作成先パス>` | ✓ | フォルダを作る場所。パスにスペースや日本語が含まれる場合はダブルクォートで囲む |
+| `<プロジェクトリポジトリURL>` | — | 既存プロジェクトに参加する場合のみ指定 |
 
 どちらも挙動は同じ。ソースになるリポジトリが「テンプレート」か「既存プロジェクト」かの違いだけ。
 
