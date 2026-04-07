@@ -14,8 +14,8 @@
 | Apex / LWC / Flow / メタデータ実装 / 新規開発 / 機能改修 / デプロイ | `salesforce-dev` |
 | 本番障害対応 / デバッグログ解析 / パフォーマンス問題 / 保守運用 / 定期メンテ | `maintenance` |
 | テスト計画 / テストケース作成 / バグ調査 / UAT支援 / 品質確認 | `qa-engineer` |
-| コードレビュー / 設計レビュー / セキュリティ監査 / PRレビュー支援 | `reviewer` |
-| 要件定義 / 設計書作成 / オブジェクト定義書 / 影響調査 / ユーザーストーリー | `salesforce-architect` |
+| コードレビュー / セキュリティ監査 / PRレビュー支援 | `reviewer` |
+| 要件定義 / 設計書作成 / 設計レビュー / オブジェクト定義書 / 影響調査 / ユーザーストーリー | `salesforce-architect` |
 | タスク管理 / スプリント計画 / 会議メモ / 進捗報告 / リリース管理 / デプロイ計画 | `project-manager` |
 | 資料作成 / 手順書 / マニュアル / Excel→MD変換 / リリースノート / 報告書 | `doc-writer` |
 | データ移行 / CSVマッピング / Data Loader / SOQL最適化 / バルク処理 / データクレンジング | `data-manager` |
@@ -159,7 +159,7 @@ Git操作・ファイル破壊・本番デプロイは上記 Security & Permissi
 | Apex / LWC / トリガー実装 | salesforce-dev | **reviewer** | コード品質・ガバナ制限・FLS・テストカバレッジ |
 | Flow 作成・変更 | salesforce-dev | **reviewer** | ループ内DML・フォールトパス・命名規則 |
 | テストクラス作成 | salesforce-dev | **qa-engineer** | 正常系/異常系/バルクの網羅性・アサーション品質 |
-| 設計書・要件定義書 | salesforce-architect | **reviewer** | 整合性・スコープ・受入基準の明確性 |
+| 設計書・要件定義書 | salesforce-architect | **salesforce-architect** | 整合性・スコープ・受入基準の明確性（セルフレビュー） |
 | データ移行・SOQL | data-manager | **reviewer** | パフォーマンス・データ整合性・ガバナ制限 |
 | 外部API連携 | integration-dev | **reviewer** | エラーハンドリング・リトライ・セキュリティ |
 
