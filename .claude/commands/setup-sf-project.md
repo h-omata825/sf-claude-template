@@ -12,14 +12,12 @@ sf --version && test -f sfdx-project.json && echo "OK"
 
 ## Step 1: 組織種別の選択
 
-以下の選択肢を番号で提示する:
+AskUserQuestion ツールを使い、以下のオプションをクリック選択式で提示する:
 
-```
-1. prod  — 本番 / Developer Edition
-2. dev   — Sandbox
-3. カスタムエイリアス（名前を入力）
-4. skip  — 後で設定する
-```
+- `prod` — 本番 / Developer Edition
+- `dev` — Sandbox
+- `custom` — カスタムエイリアス（選択後に名前を入力してもらう）
+- `skip` — 後で設定する
 
 ## Step 2: 認証
 
