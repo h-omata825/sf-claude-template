@@ -36,7 +36,7 @@ bash scripts/setup-sf-project.sh <alias> sandbox    # Sandboxの場合
 ```
 
 スクリプト内でブラウザが開く。ログイン後に自動で認証確認まで完了する。
-スクリプトの「メタデータを取得しますか？」には **N** を入力する（次のステップで /sf-package が担当するため）。
+スクリプトの「メタデータを取得しますか？」には **N** を入力する（次のステップで /sf-retrieve が担当するため）。
 
 ## Step 3: 完了案内
 
@@ -44,5 +44,5 @@ bash scripts/setup-sf-project.sh <alias> sandbox    # Sandboxの場合
 
 ```
 認証完了。次のコマンドを実行してください:
-  /sf-package  — メタデータを取得して資料を作成します
+  /sf-retrieve  — メタデータを取得して資料を作成します
 ```

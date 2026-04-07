@@ -24,54 +24,121 @@
 
 ## 1. 日常の開発フロー
 
-### 基本: VSCodeでClaude Codeに話しかけるだけ
+### 保守案件（メイン）
+
+現行の本番環境を壊さないことを最優先に動く。
+
+#### 1-1. バグ・エラー対応（緊急度: 高）
+
+本番エラーは最優先で対応する。
 
 ```
-「Account更新時に関連Contactのメールアドレスをコピーするトリガーを作って」
-  → salesforce-dev エージェントが自動選択
-  → docs/catalog/ で既存の項目構成を確認
-  → 実装 → テストクラス作成 → 品質チェック（自動）
+【対応フロー】
+1. エラー内容・デバッグログを Claude Code に貼り付ける
+   →「本番でエラーが出てる。デバッグログはこれ」
+   → maintenance エージェントが自動選択
 
-「本番でエラーが出てる。デバッグログはこれ」
-  → maintenance エージェントが自動選択
-  → ログ解析 → 原因特定 → 修正案提示
+2. ログ解析・原因特定
+   → Claude Codeが原因箇所・影響範囲を特定
 
-「この機能の設計書を作りたい」
-  → /sf-design で設計書テンプレートが生成される
+3. 修正方針をClaude Codeに確認してから実装
+   → 「この原因で、こう修正する。問題ないか？」
+
+4. Sandboxで検証
+   → sf project deploy start --target-org dev
+
+5. 問題なければ本番対応へ（管理者の確認を経る）
 ```
 
-エージェントは自動で選ばれるので、指定する必要はない。
+**デバッグログの取得方法:**
 
-### よく使うコマンド
+```bash
+# Apexクラスのデバッグログを有効化
+sf apex log tail --target-org dev
 
-| やりたいこと | コマンド | 出力先 |
-|---|---|---|
-| 組織情報を最新化したい | `/sf-analyze` | `docs/overview/` `docs/requirements/` |
-| オブジェクト定義書を作りたい | `/sf-catalog Account` | `docs/catalog/` |
-| 機能の設計書を作りたい | `/sf-design 受注管理機能` | `docs/design/` |
-| メタデータを取得したい | `/sf-package` | `manifest/` `force-app/` |
-| データ移行計画を作りたい | `/sf-data` | `docs/data/` |
-| テンプレートを最新化したい | `/upgrade` | `.claude/` |
-
-### 作業のコツ
-
-**docs/ を先に充実させるとClaude Codeの精度が上がる**
-
-```
-1. /sf-analyze で組織プロフィールを生成
-2. /sf-catalog で主要オブジェクトの定義書を生成
-3. その状態で実装を依頼すると、既存のオブジェクト構成を踏まえたコードが出る
+# 特定のユーザーに絞る場合
+sf apex log tail --target-org dev -u user@example.com
 ```
 
-**決定事項は CLAUDE.md に残す**
+**よくある本番エラーのパターン:**
+
+| エラー | Claude Codeへの伝え方 |
+|---|---|
+| System.LimitException（ガバナ制限） | ログ全文を貼り付け「ガバナ制限でエラーが出ている。原因と修正案を教えて」 |
+| SOQL_VALIDATION_EXCEPTION | クエリ文とエラー文を貼り付け |
+| フロー実行エラー | フロー名とエラーメッセージを貼り付け |
+| トリガーの意図しない動作 | 「Accountを更新したら〇〇が起きた。原因を調べて」 |
+
+#### 1-2. 保守開発（機能追加・改修）
+
+既存機能への追加・変更。既存コードへの影響調査を必ず行う。
 
 ```
-「受注はOpportunityを流用する。新規オブジェクトは作らない」
-  → CLAUDE.md の「過去の判断・決定事項」に記入
-  → 以降Claude Codeがこの方針を前提に作業する
+1. 依頼内容をClaude Codeに伝える
+   →「〇〇に△△の機能を追加したい」
+   → salesforce-dev or salesforce-architect が自動選択
+
+2. 影響調査（重要）
+   →「この変更で影響を受けるクラス・フローを調べて」
+   → reviewer エージェントが依存関係を確認
+
+3. 設計確認後に実装
+   → docs/design/ に設計メモを残すと後で役立つ
+
+4. テストクラスの更新
+   → 既存テストが落ちないことを確認
+
+5. ブランチ作成 → /git-pr でPR作成 → developにマージ
 ```
 
-手動で記入するか、チャットで「/feedback 〜という決定をした」と伝えると自動追記される。
+**保守開発でよく使うコマンド:**
+
+| やりたいこと | コマンド |
+|---|---|
+| 影響のあるクラス・フロー・項目を把握したい | `/sf-analyze` で組織情報を最新化 |
+| 既存オブジェクトの項目構成を確認したい | `/sf-catalog Account` |
+| メタデータを取得して手元に持ってきたい | `/sf-retrieve` |
+| 変更をブランチにコミット・PRを作成したい | `/git-pr` |
+
+#### 1-3. 緊急本番修正（ホットフィックス）
+
+本番のみに影響する緊急バグ。通常の feature/* フローを経ずに `main` から直接修正する。
+
+```
+【hotfix フロー】
+1. main から hotfix/* ブランチを作成
+   git checkout main
+   git checkout -b hotfix/001-login-error
+
+2. Claude Code で修正（maintenance エージェント）
+
+3. Sandbox で動作確認
+
+4. main へ PR → マージ（管理者承認必須）
+
+5. develop にも同じ修正をマージ（cherry-pick or 手動）
+   git checkout develop
+   git cherry-pick <コミットハッシュ>
+```
+
+> **ホットフィックス原則**: 最小限の修正にとどめる。本番への影響を最小化するため、関係のないリファクタリング・整理は一切行わない。
+
+---
+
+### 新規案件（簡易版）
+
+新規プロジェクトは設計 → 実装 → レビューの順で進める。
+
+```
+1. 要件をClaude Codeに伝える（salesforce-architect が設計書を作成）
+2. /sf-design で設計書を生成
+3. 実装（salesforce-dev）
+4. コードレビュー（reviewer）
+5. テスト（qa-engineer）
+6. /git-pr でPR作成 → develop → main の順にマージ
+```
+
+詳細は `project-setup-guide.md` を参照。
 
 ---
 
@@ -198,8 +265,39 @@ bash scripts/upgrade.sh
 
 ## 7. Git運用
 
-> 具体的なブランチ戦略・PRルールは管理者が決定し、別途案内される。
-> ここではGitに関する基本事項のみ記載する。
+### ブランチ戦略
+
+```
+main
+  └── 本番と同期。直接コミット禁止。hotfix/* or develop からのPRのみ受け付ける
+
+develop
+  └── 開発・検証のベース。feature/* からのPRでマージ
+
+feature/NNN-説明
+  └── 機能追加・保守開発。developから分岐。/git-pr で作成
+
+hotfix/NNN-説明
+  └── 緊急本番修正。mainから分岐。mainへPR後、developにもcherry-pick
+```
+
+### 基本的な作業フロー
+
+```bash
+# 1. 最新の develop を取得
+git checkout develop
+git pull origin develop
+
+# 2. feature ブランチを作成（または /git-pr コマンドで自動化）
+git checkout -b feature/001-account-trigger
+
+# 3. 作業・コミット（/git-pr で対話的に実行）
+/git-pr
+
+# 4. PR: feature/* → develop（GitHub上でマージ）
+
+# 5. リリース時: develop → main（管理者が実施）
+```
 
 ### Git管理対象
 
@@ -217,7 +315,7 @@ bash scripts/upgrade.sh
 
 制限が有効化された場合:
 - Claude Codeからの `git push` / `git commit` / `git reset --hard` がブロックされる
-- ターミナルから手動で実行する
+- `/git-pr` コマンドまたはターミナルから手動で実行する
 
 ---
 
