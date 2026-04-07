@@ -60,13 +60,13 @@
 | 議事録 | `docs/minutes/` | — | |
 | 手順書 | `docs/manuals/` | — | |
 | 変更履歴 | `docs/changelog.md` | 自動 | コマンド実行時に自動追記 |
-| package.xml | `manifest/package.xml` | `/sf-package` | Git差分・指定・全量の3モード |
+| package.xml | `manifest/package.xml` | `/sf-retrieve` | standard / all / 個別指定の3モード |
 
 ---
 
 ## 過去の判断・決定事項
 
-<!-- /feedback コマンドで追記するか、手動で記載する -->
+<!-- 判明した設計判断・確定事項を手動で記載する -->
 <!-- 例: 2026-04-01: 受注オブジェクトはOpportunityを流用することに決定 -->
 
 ---
