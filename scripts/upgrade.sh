@@ -62,6 +62,13 @@ CHANGES=()
 ADDITIONS=()
 DELETIONS=()
 
+# README.md
+if [ -f "$TMP_DIR/README.md" ]; then
+    if ! diff -q "README.md" "$TMP_DIR/README.md" >/dev/null 2>&1; then
+        CHANGES+=("README.md（テンプレート説明）")
+    fi
+fi
+
 # .claude/CLAUDE.md
 if [ -f "$TMP_DIR/.claude/CLAUDE.md" ]; then
     if ! diff -q ".claude/CLAUDE.md" "$TMP_DIR/.claude/CLAUDE.md" >/dev/null 2>&1; then
@@ -178,6 +185,9 @@ fi
 
 # --- 適用 ---
 info "適用中..."
+
+# README.md
+[ -f "$TMP_DIR/README.md" ] && cp "$TMP_DIR/README.md" README.md
 
 # 共通ルール
 [ -f "$TMP_DIR/.claude/CLAUDE.md" ] && cp "$TMP_DIR/.claude/CLAUDE.md" .claude/CLAUDE.md
