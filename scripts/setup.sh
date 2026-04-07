@@ -96,9 +96,14 @@ echo "  プロジェクト: $PROJECT_PATH"
 echo "  テンプレート: $TEMPLATE_BRANCH ($VERSION)"
 echo ""
 echo "  次のステップ:"
-echo "    1. cd $PROJECT_PATH"
-echo "    2. Claude Code を起動"
-echo "    3. /setup-sf-project を実行（組織認証・メタデータ取得）"
-echo "    4. CLAUDE.md を編集してプロジェクト固有情報を記入"
-echo "    5. /setup-mcp を実行してGitHub連携を設定"
+echo "    1. /setup-sf-project を実行（組織認証・メタデータ取得）"
+echo "    2. CLAUDE.md を編集してプロジェクト固有情報を記入"
+echo "    3. /setup-mcp を実行してGitHub連携を設定"
 echo ""
+
+# --- VSCode で開く ---
+if command -v code >/dev/null 2>&1; then
+    code "$PROJECT_PATH"
+else
+    info "VSCode CLI が見つかりません。手動で開いてください: $PROJECT_PATH"
+fi
