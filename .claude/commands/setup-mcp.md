@@ -1,45 +1,37 @@
 ---
-description: "MCP（外部ツール連携）のセットアップ。GitHub・Slack・Notion等の連携を設定する。"
+description: "MCP（外部ツール連携）のセットアップ。Backlog・GitHub・Slack等の連携を設定する。"
 ---
 
-assistantエージェントとして、MCP（外部ツール連携）の設定を行ってください。
+## Step 1: 設定するMCPを選択
 
-## 概要
+AskUserQuestion ツールを使い、以下をクリック選択式で提示する:
 
-`scripts/setup-mcp.sh` を使って `.mcp.json` を生成・更新する。
+- `backlog` — Backlogチケット管理
+- `github` — GitHub PR・Issue連携
+- `slack` — Slackメッセージ送受信
+- `notion` — Notionページ読み書き
+- `playwright` — ブラウザ操作・UI自動テスト
+- `show` — 現在の設定を確認
 
-## ユーザー入力
+## Step 2: 実行
 
-$ARGUMENTS
-
-## 実行
-
-### 引数がある場合（直接指定）
-
-```bash
-bash scripts/setup-mcp.sh $ARGUMENTS
-```
-
-### 引数がない場合（対話モード）
+選択に応じてスクリプトを実行する:
 
 ```bash
-bash scripts/setup-mcp.sh
+bash scripts/setup-mcp.sh <選択したMCP>
 ```
 
-スクリプトが対話的にMCPの選択とトークン入力を行う。
+例:
+- `backlog` 選択: `bash scripts/setup-mcp.sh backlog`
+- `show` 選択: `bash scripts/setup-mcp.sh show`
 
-### 現在の設定を確認したい場合
+スクリプトがドメイン・トークン等を対話形式で入力させる。
 
-```bash
-bash scripts/setup-mcp.sh show
-```
+## 完了後
 
-## 実行後
+「Claude Code を再起動すると設定が反映されます」と案内する。
 
-1. 結果をユーザーに伝える
-2. 「Claude Code を再起動すると設定が反映されます」と案内する
+## 注意
 
-## 注意事項
-
-- トークンをチャット上に表示・出力しない
-- トークンの値を docs/ に記録しない
+- トークン・APIキーをチャット上に表示・出力しない
+- `.mcp.json` の内容をdocs/に記録しない
