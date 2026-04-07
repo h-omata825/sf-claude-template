@@ -40,16 +40,16 @@
 
 ```bash
 # 新規プロジェクト（テンプレートから作成）
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス>
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス>
 
 # 既存プロジェクトを別環境で再セットアップ
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス> <プロジェクトリポジトリURL>
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス> <プロジェクトリポジトリURL>
 ```
 
 #### 実行例
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s project-a /c/workspace
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s project-a /c/workspace
 ```
 
 ### 2-2. SF組織に接続
