@@ -1,68 +1,44 @@
 ---
-description: "Salesforce組織の認証・package.xml生成・メタデータ取得を実行する。setup.sh でプロジェクト作成後に実行する。"
+description: "Salesforce組織の認証を行う。setup.sh でプロジェクト作成後に実行する。"
 ---
-
-`setup.sh` でプロジェクトフォルダの作成が完了している前提で、Salesforce組織への接続とメタデータ取得を行う。
 
 ## 事前チェック
 
-以下を確認する:
+```bash
+sf --version && test -f sfdx-project.json && echo "OK"
+```
+
+失敗した場合: sfが無ければCLIインストールを案内、sfdx-project.jsonが無ければ「プロジェクトルートで実行してください」と伝えて終了。
+
+## Step 1: 組織種別の選択
+
+以下の選択肢を番号で提示する:
+
+```
+1. prod  — 本番 / Developer Edition
+2. dev   — Sandbox
+3. カスタムエイリアス（名前を入力）
+4. skip  — 後で設定する
+```
+
+## Step 2: 認証
+
+選択に応じて実行:
 
 ```bash
-sf --version
-test -f sfdx-project.json && echo "OK" || echo "NOT FOUND"
+bash scripts/setup-sf-project.sh prod        # 1の場合
+bash scripts/setup-sf-project.sh dev         # 2の場合
+bash scripts/setup-sf-project.sh <alias>     # 3の場合（sandboxなら第2引数にsandbox）
 ```
 
-- `sf` が見つからない場合 → Salesforce CLI のインストールを案内して中断
-- `sfdx-project.json` が見つからない場合 → 「SFDXプロジェクトのルートで実行してください」と案内して中断
+スクリプト内でブラウザが開く。ログイン後に自動で認証確認まで完了する。
+スクリプトの「メタデータを取得しますか？」には **N** を入力する（次のステップで /sf-package が担当するため）。
 
----
+## Step 3: 完了案内
 
-## Step 1: 組織の種別を確認
-
-ユーザーに以下を質問する:
+認証完了後、以下を伝える:
 
 ```
-接続するSalesforce組織の種別を入力してください
-  prod   — 本番 / Developer Edition（login.salesforce.com）
-  dev    — Sandbox（test.salesforce.com）
-  skip   — 後で設定する
-  その他 — カスタムエイリアス（本番 or Sandboxかも聞く）
-```
-
----
-
-## Step 2: 組織認証
-
-`scripts/setup-sf-project.sh` を実行する:
-
-```bash
-bash scripts/setup-sf-project.sh <エイリアス> [sandbox]
-```
-
-引数:
-- `prod` の場合: `bash scripts/setup-sf-project.sh prod`
-- `dev` の場合: `bash scripts/setup-sf-project.sh dev`
-- カスタムエイリアス + Sandbox: `bash scripts/setup-sf-project.sh <alias> sandbox`
-- カスタムエイリアス + 本番: `bash scripts/setup-sf-project.sh <alias>`
-- `skip` の場合: このステップをスキップ
-
-スクリプト内でブラウザが開くのでログインを促す。認証完了後、package.xml生成とメタデータ取得まで自動で行われる。
-
----
-
-## Step 3: 完了報告
-
-```
-============================================
-  組織セットアップ完了
-============================================
-
-  組織: <エイリアス>（認証済み）
-  メタデータ: force-app/ に保存済み
-
-  次のステップ:
-    1. CLAUDE.md を開いてプロジェクト固有情報を記入
-    2. /setup-mcp でMCP連携を設定（Backlog・GitHub等）
-    3. /sf-analyze で組織を解析して資料を自動生成
+認証完了。次のコマンドを実行してください:
+  /sf-package  — メタデータを取得して資料を作成します
 ```
