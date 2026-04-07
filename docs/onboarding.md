@@ -62,10 +62,10 @@ claude
 
 ```bash
 # 新規プロジェクト（テンプレートから作成）
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス>
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス>
 
 # 既存プロジェクトに参加（プロジェクトリポジトリをソースに指定）
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス> <プロジェクトリポジトリURL>
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s <プロジェクト名> <作成先パス> <プロジェクトリポジトリURL>
 ```
 
 どちらも挙動は同じ。ソースになるリポジトリが「テンプレート」か「既存プロジェクト」かの違いだけ。
@@ -74,10 +74,10 @@ curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develo
 
 ```bash
 # 新規プロジェクト
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s my-sf-project /c/workspace
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-sf-project /c/workspace
 
 # 既存プロジェクト参加
-curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/develop/scripts/setup.sh | bash -s project-a /c/workspace https://github.com/your-org/project-a.git
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s project-a /c/workspace https://github.com/your-org/project-a.git
 ```
 
 ```
