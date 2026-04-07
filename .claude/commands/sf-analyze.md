@@ -219,10 +219,12 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Acti
 - `docs/requirements/` — 要件定義書・企画書・ヒアリングメモ
 - `docs/design/` — 設計書
 - `docs/catalog/` — オブジェクト・項目定義書（sf-catalogで生成）
+- `docs/data/` — データ統計・マスタデータ・メールテンプレート・品質情報（sf-dataで生成）
 - `docs/` 直下 — その他ドキュメント
 
 ファイルがあれば全て読み込み、内容を分析に統合する。
-`docs/catalog/` の定義書が揃っている場合、用語集・データモデルの精度が大幅に向上する。
+各コマンドで生成した資料が揃うほど、用語集・ビジネスルール・データモデルの精度が向上する。
+**2回目以降の実行は、全資料が出揃った後に行うと最も効果が高い。**
 
 **初回生成モード**でファイルがない場合は、ユーザーに聞く:
 ```
