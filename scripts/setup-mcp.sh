@@ -157,6 +157,33 @@ setup_playwright() {
     add_server "playwright" "$config"
 }
 
+# --- Backlog 設定 ---
+setup_backlog() {
+    echo ""
+    read -p "Backlog ドメイン（例: yourcompany.backlog.com）: " domain
+    [ -z "$domain" ] && error "ドメインが入力されていません"
+
+    echo ""
+    echo "APIキーの取得方法:"
+    echo "  1. Backlog にログイン"
+    echo "  2. 右上のアイコン > 個人設定"
+    echo "  3. API タブ > APIキーを発行"
+    echo ""
+    read -sp "APIキー: " api_key
+    echo ""
+    [ -z "$api_key" ] && error "APIキーが入力されていません"
+
+    local config="\"backlog\": {
+      \"command\": \"npx\",
+      \"args\": [\"-y\", \"backlog-mcp-server\"],
+      \"env\": {
+        \"BACKLOG_DOMAIN\": \"${domain}\",
+        \"BACKLOG_API_KEY\": \"${api_key}\"
+      }
+    }"
+    add_server "backlog" "$config"
+}
+
 # --- メイン ---
 ACTION="${1:-}"
 TOKEN="${2:-}"
@@ -178,6 +205,9 @@ case "$ACTION" in
     playwright)
         setup_playwright
         ;;
+    backlog)
+        setup_backlog
+        ;;
     *)
         # 対話モード
         show_current 2>/dev/null || true
@@ -187,7 +217,8 @@ case "$ACTION" in
         echo "  2. slack      — Slackメッセージ送受信"
         echo "  3. notion     — Notionページ読み書き"
         echo "  4. playwright — ブラウザ操作"
-        echo "  5. 完了"
+        echo "  5. backlog    — Backlogチケット管理"
+        echo "  6. 完了"
         echo ""
 
         while true; do
@@ -197,7 +228,8 @@ case "$ACTION" in
                 2|slack)      setup_slack ;;
                 3|notion)     setup_notion ;;
                 4|playwright) setup_playwright ;;
-                5|done|完了)  break ;;
+                5|backlog)    setup_backlog ;;
+                6|done|完了)  break ;;
                 *)            warn "無効な選択です" ;;
             esac
             echo ""
