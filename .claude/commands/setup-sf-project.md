@@ -12,21 +12,27 @@ sf --version && test -f sfdx-project.json && echo "OK"
 
 ## Step 1: 組織種別の選択
 
-AskUserQuestion ツールを使い、以下のオプションをクリック選択式で提示する:
+AskUserQuestion ツールを使い、以下をクリック選択式で提示する:
 
-- `prod` — 本番 / Developer Edition
-- `dev` — Sandbox
-- `custom` — カスタムエイリアス（選択後に名前を入力してもらう）
+- `本番` — login.salesforce.com
+- `Sandbox` — test.salesforce.com
 - `skip` — 後で設定する
 
-## Step 2: 認証
+## Step 2: エイリアス名の入力
 
-選択に応じて実行:
+`skip` 以外の場合、エイリアス名を質問する:
+
+```
+組織のエイリアス名を入力してください
+デフォルト候補: prod（本番の場合）/ dev（Sandboxの場合）
+自由入力も可
+```
+
+## Step 3: 認証
 
 ```bash
-bash scripts/setup-sf-project.sh prod        # 1の場合
-bash scripts/setup-sf-project.sh dev         # 2の場合
-bash scripts/setup-sf-project.sh <alias>     # 3の場合（sandboxなら第2引数にsandbox）
+bash scripts/setup-sf-project.sh <alias>            # 本番の場合
+bash scripts/setup-sf-project.sh <alias> sandbox    # Sandboxの場合
 ```
 
 スクリプト内でブラウザが開く。ログイン後に自動で認証確認まで完了する。
