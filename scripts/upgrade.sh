@@ -11,7 +11,7 @@ set -euo pipefail
 
 # --- 設定 ---
 DEFAULT_URL="https://github.com/h-omata825/sf-claude-template.git"
-DEFAULT_BRANCH="develop"
+DEFAULT_BRANCH="main"
 VERSION_FILE=".claude/VERSION"
 TMP_DIR=".claude-upgrade-tmp"
 
