@@ -100,22 +100,23 @@ curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/s
 ==========================================
 
   次のステップ:
-    1. cd /c/workspace/project-a
+    1. VSCodeが自動で開く（またはフォルダを手動で開く）
     2. Claude Code を起動
     3. /setup-sf-project を実行（組織認証・メタデータ取得）
     4. CLAUDE.md を編集してプロジェクト固有情報を記入
-    5. /setup-mcp を実行してGitHub連携を設定
+    5. /setup-mcp を実行してMCP連携を設定
 ```
 
 ### 次のステップ: SF組織に接続する
 
-プロジェクトフォルダをVSCodeで開いてClaude Codeパネルから:
+VSCodeで開いたプロジェクトフォルダのClaude Codeパネルから:
 
 ```
 /setup-sf-project
 ```
 
-対話形式でSalesforce組織への認証とメタデータ取得が行われる。
+- `setup.sh` でのフォルダ作成は完了済みのため、ここでは組織認証・package.xml生成・メタデータ取得のみ行われる
+- ブラウザが開くのでSalesforceにログインする
 
 ```
 接続するSalesforce組織の種別を入力してください:
