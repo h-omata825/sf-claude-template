@@ -7,17 +7,17 @@
 ## 全体像
 
 ```
-プロジェクトリポジトリ（GitHub）
+プロジェクトフォルダ
   └── project-A/
-        ├── .claude/           ← 触らない（テンプレートから配布）
-        ├── CLAUDE.md          ← プロジェクト固有ルール（チームで編集）
+        ├── .claude/           ← 触らない（/upgrade で配布）
+        ├── CLAUDE.md          ← プロジェクト固有ルール（管理者が編集・/sync で共有）
         ├── docs/              ← プロジェクト資材（充実させるほどClaude Codeが賢くなる）
         └── force-app/         ← Salesforceメタデータ
 ```
 
 **基本方針**:
 - `.claude/` は触らない。更新は `/upgrade` コマンドで行う
-- `CLAUDE.md`（ルート）にプロジェクト固有の情報・決定事項を書き込む
+- `CLAUDE.md`（ルート）はプロジェクト固有情報。管理者が編集し `/sync` で共有
 - `docs/` を充実させる → Claude Codeの出力精度が向上する
 
 ---
@@ -157,8 +157,8 @@ sf apex log tail --target-org dev -u user@example.com
 
 | ファイル | 誰が | 頻度 |
 |---|---|---|
-| `CLAUDE.md`（ルート） | チームメンバー全員 | 決定事項が出たらその都度 |
-| `.claude/CLAUDE.md` | 管理者（テンプレート経由） | 触らない |
+| `CLAUDE.md`（ルート） | 管理者 | プロジェクト固有情報の変更時。`/sync` で共有 |
+| `.claude/CLAUDE.md` | 管理者（テンプレート経由） | `/upgrade` で配布 |
 
 ---
 
@@ -299,23 +299,25 @@ git checkout -b feature/001-account-trigger
 # 5. リリース時: develop → main（管理者が実施）
 ```
 
-### Git管理対象
+### Git管理対象（テンプレートリポジトリ）
 
 | ファイル | Git管理 | 理由 |
 |---|---|---|
 | `.claude/` 配下 | **対象** | テンプレート設定をチーム全員に配布 |
 | `.claude/settings.json` | **対象** | 権限設定をチーム全員に強制 |
-| `CLAUDE.md` / `docs/` / `force-app/` | **対象** | プロジェクト資材 |
+| `CLAUDE.md` | **対象** | プロジェクト固有ルールのテンプレート |
+| `docs/` | **対象外** | 作業の中で蓄積されていく |
+| `force-app/` | **対象外** | Salesforce組織のメタデータ |
 | `.mcp.json` | **対象外** | 個人のトークン情報を含む |
+
+### テンプレートの更新
+
+テンプレートの更新（`.claude/`, `CLAUDE.md`）は管理者が行い、`/upgrade` で配布する。
+`docs/` は `/upgrade` の影響を受けない。
 
 ### Git操作の制限
 
-現在は `git push` / `git commit` 等にブロックはかかっていない（確認ダイアログが出る）。
 チーム運用が本格化した段階で、管理者がsettings.jsonにGit操作の制限を追加する場合がある。
-
-制限が有効化された場合:
-- Claude Codeからの `git push` / `git commit` / `git reset --hard` がブロックされる
-- `/git-pr` コマンドまたはターミナルから手動で実行する
 
 ---
 

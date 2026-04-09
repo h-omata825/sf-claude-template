@@ -133,4 +133,9 @@ global class ExternalApiMock implements HttpCalloutMock {
 2. Named Credentialsの設定手順を実装コードとセットで提示する
 3. テスト用MockクラスをApex実装とセットで提供する
 4. トリガー/同期Apexからのコールアウトか確認し、非同期化の必要性を判断する
-5. 本番とSandboxで異なるエンドポイントが必要な場合はカスタムメタデータで管理する
+5. **既存連携・自動化との影響確認**:
+   - Named Credentials・接続アプリケーションの既存設定を確認
+   - 同一オブジェクトへのDML操作がある場合、トリガー・フローとの競合を確認（`force-app/main/default/triggers/`, `force-app/main/default/flows/` を検索）
+   - コールアウト制限（100回/トランザクション）の累積を確認
+   - 既存のPlatform Events / Change Data Captureとの干渉を確認
+6. 本番とSandboxで異なるエンドポイントが必要な場合はカスタムメタデータで管理する
