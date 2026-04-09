@@ -121,7 +121,12 @@ sf data export tree --target-org project-dev --query "SELECT Id, Name FROM Accou
 ## 作業アプローチ
 
 1. 移行対象オブジェクトとデータ量を先に確認する
-2. 親オブジェクト（Account等）→子オブジェクト（Contact・Opportunity等）の順で移行する
+2. **データ操作時の自動化発火の確認**:
+   - Data Loader / Bulk API でのインポート・更新時にトリガー・フローが発火する
+   - 大量レコード操作前に、対象オブジェクトの自動化一覧を確認（`force-app/main/default/triggers/`, `force-app/main/default/flows/` を検索）
+   - 必要に応じてフロー・トリガーの一時無効化を提案（ユーザ確認必須）
+   - バッチサイズとガバナ制限の関係を計算して提示
+3. 親オブジェクト（Account等）→子オブジェクト（Contact・Opportunity等）の順で移行する
 3. **必ず本番実行前にSandboxで検証**し、件数照合を行う
 4. External IDを使ってUpsertし、冪等性を確保する（再実行可能な設計）
 5. 大量データは夜間バッチを提案する（業務時間帯の実行を避ける）

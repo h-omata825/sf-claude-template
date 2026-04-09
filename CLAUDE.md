@@ -60,6 +60,7 @@
 | 議事録 | `docs/minutes/` | — | |
 | 手順書 | `docs/manuals/` | — | |
 | 変更履歴 | `docs/changelog.md` | 自動 | コマンド実行時に自動追記 |
+| 対応履歴・判断記録 | `docs/decisions.md` | — | 保守・開発の判断根拠。`/backlog` 完了時に自動追記 |
 | package.xml | `manifest/package.xml` | `/sf-retrieve` | standard / all / 個別指定の3モード |
 
 ---
