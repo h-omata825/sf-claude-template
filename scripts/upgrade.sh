@@ -210,12 +210,14 @@ for f in "$TMP_DIR"/.claude/commands/*.md; do
     cp "$f" .claude/commands/
 done
 
-# スクリプト
+# スクリプト（upgrade.sh 自身は実行中のため最後に上書き）
 if [ -d "$TMP_DIR/scripts" ]; then
     mkdir -p scripts
     for f in "$TMP_DIR"/scripts/*; do
         [ -f "$f" ] || continue
-        cp "$f" scripts/
+        name=$(basename "$f")
+        [ "$name" = "upgrade.sh" ] && continue  # 自身はスキップ
+        cp "$f" "scripts/$name"
     done
 fi
 
@@ -236,6 +238,11 @@ if [ ${#DELETIONS[@]} -gt 0 ]; then
             fi
         done
     fi
+fi
+
+# upgrade.sh 自身を最後に上書き（実行完了後に安全に置き換え）
+if [ -f "$TMP_DIR/scripts/upgrade.sh" ]; then
+    cp "$TMP_DIR/scripts/upgrade.sh" scripts/upgrade.sh
 fi
 
 # --- クリーンアップ ---
