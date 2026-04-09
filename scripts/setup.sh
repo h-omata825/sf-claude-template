@@ -67,7 +67,6 @@ fi
 info "テンプレートを配置中..."
 cp -r "$TMP_DIR/.claude" "$PROJECT_PATH/.claude"
 cp "$TMP_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
-cp "$TMP_DIR/README.md" "$PROJECT_PATH/README.md"
 cp -r "$TMP_DIR/docs" "$PROJECT_PATH/docs"
 [ -d "$TMP_DIR/scripts" ] && cp -r "$TMP_DIR/scripts" "$PROJECT_PATH/scripts"
 
