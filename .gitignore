@@ -1,32 +1,63 @@
-# Salesforce CLI
-.sfdx/
+# ===== Salesforce CLI =====
 .sf/
+.sfdx/
+.localdevserver/
+deploy-options.json
 
-# VSCode
+# ===== Salesforce プロジェクトファイル =====
+# sf project generate で自動生成されるもの（プロジェクト固有のため除外）
+force-app/
+manifest/
+config/
+sfdx-project.json
+package.json
+jest.config.js
+eslint.config.js
+.forceignore
+.prettierrc
+.prettierignore
+.husky/
 .vscode/
 
-# ログ
-*.log
+# ===== LWC =====
+**/lwc/jsconfig.json
+coverage/
 
-# OS
+# ===== ログ =====
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===== Node =====
+node_modules/
+.eslintcache
+.pmdCache
+
+# ===== OS =====
 .DS_Store
 Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
 
-# データ（機密情報を含む可能性があるため）
-data/*.csv
-data/*.json
-
-# 環境設定
+# ===== 環境設定 =====
 .env
 *.env.*
 
-# Claude Code（トークン入り個人設定）
+# ===== Python =====
+**/__pycache__/
+**/.venv/
+**/venv/
+
+# ===== Claude Code =====
+# トークン入り個人設定（個人ごとに異なるため除外）
 .mcp.json
 
+# ===== データ（機密情報を含む可能性） =====
+data/*.csv
+data/*.json
 
-
-# Node modules（LWC開発時）
-node_modules/
-
-# Apex test results
+# ===== テスト結果 =====
 test-results/

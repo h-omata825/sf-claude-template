@@ -62,10 +62,10 @@ CHANGES=()
 ADDITIONS=()
 DELETIONS=()
 
-# README.md
-if [ -f "$TMP_DIR/README.md" ]; then
-    if ! diff -q "README.md" "$TMP_DIR/README.md" >/dev/null 2>&1; then
-        CHANGES+=("README.md（テンプレート説明）")
+# .gitignore
+if [ -f "$TMP_DIR/.gitignore" ]; then
+    if ! diff -q ".gitignore" "$TMP_DIR/.gitignore" >/dev/null 2>&1; then
+        CHANGES+=(".gitignore（除外設定）")
     fi
 fi
 
@@ -169,9 +169,9 @@ echo ""
 echo "  合計: ${TOTAL}件の変更"
 echo ""
 echo "  ※ 以下は変更されません:"
-echo "    - CLAUDE.md（プロジェクト固有ルール）"
+echo "    - CLAUDE.md（プロジェクト固有ルール → /sync で管理）"
+echo "    - docs/（プロジェクト資材 → /sync で管理）"
 echo "    - .mcp.json（個人設定）"
-echo "    - docs/（プロジェクト資材）"
 echo "    - force-app/（Salesforceメタデータ）"
 echo ""
 
@@ -186,8 +186,8 @@ fi
 # --- 適用 ---
 info "適用中..."
 
-# README.md
-[ -f "$TMP_DIR/README.md" ] && cp "$TMP_DIR/README.md" README.md
+# .gitignore
+[ -f "$TMP_DIR/.gitignore" ] && cp "$TMP_DIR/.gitignore" .gitignore
 
 # 共通ルール
 [ -f "$TMP_DIR/.claude/CLAUDE.md" ] && cp "$TMP_DIR/.claude/CLAUDE.md" .claude/CLAUDE.md
@@ -246,7 +246,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     COMMIT_MSG="chore: upgrade template to ${TEMPLATE_VERSION}"
 
     # 変更をステージング
-    git add .claude/ scripts/ README.md 2>/dev/null || true
+    git add .claude/ scripts/ .gitignore 2>/dev/null || true
 
     # コミット・push（変更がある場合のみ）
     if ! git diff --cached --quiet; then
