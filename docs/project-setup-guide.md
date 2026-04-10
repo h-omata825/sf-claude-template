@@ -86,6 +86,9 @@ VSCodeのClaude Codeパネルから:
 
 ### 2-5. GitHubにpush
 
+Gitで管理するのは `.claude/`・`docs/`・`scripts/`・`CLAUDE.md` のみ。
+`force-app/`・`.mcp.json`・`.sf/`・`sfdx-project.json` 等はプロジェクト固有のため `.gitignore` で除外済み。`git add .` しても上がらない。
+
 ```bash
 git init
 git add .
