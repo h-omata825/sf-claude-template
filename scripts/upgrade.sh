@@ -126,17 +126,16 @@ for f in .claude/commands/*.md; do
     fi
 done
 
-# スクリプト
+# スクリプト（サブディレクトリ含む再帰チェック）
 if [ -d "$TMP_DIR/scripts" ]; then
-    for f in "$TMP_DIR"/scripts/*; do
-        [ -f "$f" ] || continue
-        name=$(basename "$f")
-        if [ ! -f "scripts/$name" ]; then
-            ADDITIONS+=("scripts/$name（新規スクリプト）")
-        elif ! diff -q "scripts/$name" "$f" >/dev/null 2>&1; then
-            CHANGES+=("scripts/$name")
+    while IFS= read -r f; do
+        rel="${f#$TMP_DIR/}"  # scripts/python/sf-doc-mcp/generate.py 等
+        if [ ! -f "$rel" ]; then
+            ADDITIONS+=("$rel（新規）")
+        elif ! diff -q "$rel" "$f" >/dev/null 2>&1; then
+            CHANGES+=("$rel")
         fi
-    done
+    done < <(find "$TMP_DIR/scripts" -type f)
 fi
 
 # --- 結果判定 ---
@@ -210,15 +209,15 @@ for f in "$TMP_DIR"/.claude/commands/*.md; do
     cp "$f" .claude/commands/
 done
 
-# スクリプト（upgrade.sh 自身は実行中のため最後に上書き）
+# スクリプト（サブディレクトリ含む再帰コピー、upgrade.sh 自身は最後に上書き）
 if [ -d "$TMP_DIR/scripts" ]; then
-    mkdir -p scripts
-    for f in "$TMP_DIR"/scripts/*; do
-        [ -f "$f" ] || continue
+    while IFS= read -r f; do
+        rel="${f#$TMP_DIR/}"
         name=$(basename "$f")
         [ "$name" = "upgrade.sh" ] && continue  # 自身はスキップ
-        cp "$f" "scripts/$name"
-    done
+        mkdir -p "$(dirname "$rel")"
+        cp "$f" "$rel"
+    done < <(find "$TMP_DIR/scripts" -type f)
 fi
 
 # --- 削除対象の処理 ---
