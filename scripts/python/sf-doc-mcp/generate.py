@@ -61,12 +61,24 @@ def resolve_objects(sf, raw_inputs: list[str]) -> list[str]:
             print(f"  ラベル解決: '{token}' → {api}")
             resolved.append(api)
         else:
-            # 部分一致
-            matches = [o["name"] for o in sobjects
-                       if key in o["name"].lower() or key in o["label"].lower()]
-            if len(matches) == 1:
-                print(f"  部分一致: '{token}' → {matches[0]}")
-                resolved.append(matches[0])
+            # 部分一致（ラベル優先、次にAPI名）
+            label_hits = [o for o in sobjects if key in o["label"].lower()]
+            name_hits  = [o for o in sobjects if key in o["name"].lower()]
+            hits = label_hits or name_hits
+
+            if len(hits) == 1:
+                print(f"  部分一致: '{token}' → {hits[0]['name']}")
+                resolved.append(hits[0]["name"])
+            elif len(hits) > 1:
+                # 入力がラベル全体に占める割合が最大のものを推定（最も近い候補）
+                best = max(hits, key=lambda o: len(key) / len(o["label"].lower()))
+                ratio = len(key) / len(best["label"].lower())
+                candidates = [o["name"] for o in hits]
+                if ratio >= 0.6:
+                    print(f"  推定一致: '{token}' → {best['name']}（候補: {candidates}）")
+                else:
+                    print(f"  推定一致（低確度）: '{token}' → {best['name']}（候補: {candidates}）", file=sys.stderr)
+                resolved.append(best["name"])
             else:
                 unresolved.append(token)
 
