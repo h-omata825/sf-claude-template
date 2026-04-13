@@ -43,6 +43,27 @@
 
 ---
 
+## xlsx 逐次更新ルール
+
+対応記録.xlsx は**各 Step の完了時に必ず更新する**。以下のタイミングで何を記録するかを厳守する。
+
+| Step | 更新対象シート | 記録内容 |
+|---|---|---|
+| Step 1 | サマリー・経緯 | 課題サマリー欄 + タイムラインに「課題取得」行を追加 |
+| Step 3 | 調査・影響範囲 | 仮説検証テーブルに調査結果を記録 |
+| Step 4 | （エビデンス.xlsx） | テスト仕様シート + 実装前エビデンスシート |
+| Step 5 | 対応方針 | 方針比較テーブル + 採用方針を記録。サマリーのタイムラインに追記 |
+| Step 7 | 対応内容 | Git hash・変更ファイル一覧・Before/After・影響確認チェックリスト |
+| Step 8 | テスト・検証記録 | テスト結果を全行記録 |
+| Step 9 | （エビデンス.xlsx） | 実装後エビデンスシート |
+| Step 10 | リリース・ロールバック | リリース対象一覧・ロールバック手順 |
+| Step 12 | サマリー・経緯 | 完了時刻・実績工数・最終対応サマリー |
+
+**ユーザとのやりとり・方針変更・追加修正が発生するたびに、サマリー・経緯の「対応経緯タイムライン」に行を追加する。**
+タイムラインの記録は Step 全体を通じて継続的に行う（特定の Step に限定しない）。
+
+---
+
 ## Step 0. 開始時刻を記録する
 
 現在時刻を取得して変数として保持する:
@@ -92,7 +113,6 @@ Backlog MCP で課題を取得する:
 ```python
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 import os
 
 FOLDER = r"{作業フォルダパス}"
@@ -101,6 +121,7 @@ ISSUE_TITLE = "{件名}"
 ISSUE_TYPE = "{バグ / 追加要望 / その他}"
 PRIORITY = "{優先度}"
 DEADLINE = "{期限}"
+BG_DESC = "{背景・要件の要約}"
 
 os.makedirs(FOLDER, exist_ok=True)
 wb = openpyxl.Workbook()
@@ -111,80 +132,185 @@ SEC = PatternFill("solid", fgColor="2E74B5")   # 青（セクション）
 SUB = PatternFill("solid", fgColor="D6E4F0")   # 薄青（サブヘッダー）
 WHT = Font(color="FFFFFF", bold=True)
 BLD = Font(bold=True)
-def hdr(ws, row, col, val, fill=HDR, font=WHT):
+WRAP = Alignment(wrap_text=True, vertical="top")
+
+def sec_header(ws, row, col, val):
+    """■ セクション見出し（青背景白文字）"""
     c = ws.cell(row=row, column=col, value=val)
-    c.fill = fill; c.font = font
-    c.alignment = Alignment(wrap_text=True, vertical="center")
+    c.fill = SEC; c.font = WHT; c.alignment = WRAP
     return c
 
-# === Sheet1: サマリー・経緯 ===
+def col_header(ws, row, col, val):
+    """列ヘッダー（紺背景白文字）"""
+    c = ws.cell(row=row, column=col, value=val)
+    c.fill = HDR; c.font = WHT; c.alignment = WRAP
+    return c
+
+def bold_cell(ws, row, col, val):
+    c = ws.cell(row=row, column=col, value=val)
+    c.font = BLD; c.alignment = WRAP
+    return c
+
+# ==========================================================
+# Sheet1: サマリー・経緯
+# ==========================================================
 ws1 = wb.active; ws1.title = "サマリー・経緯"
 ws1.column_dimensions["A"].width = 22
-ws1.column_dimensions["B"].width = 50
+ws1.column_dimensions["B"].width = 60
+ws1.column_dimensions["C"].width = 12
+ws1.column_dimensions["D"].width = 18
+ws1.column_dimensions["E"].width = 60
+ws1.column_dimensions["F"].width = 40
 
+sec_header(ws1, 1, 1, "サマリー・経緯")
+
+# ■ 課題サマリー
+sec_header(ws1, 2, 1, "■ 課題サマリー")
 info = [
-    ("課題ID", ISSUE_ID), ("件名", ISSUE_TITLE),
-    ("優先度・期限", f"{PRIORITY} / {DEADLINE}"),
-    ("課題種別", ISSUE_TYPE), ("ステータス", "対応中"),
-    ("対応開始日", ""), ("対応完了日", ""),
-    ("担当者", ""), ("見積工数（CC使用）", ""),
-    ("見積工数（CC未使用）", ""), ("実績工数（CC使用）", ""),
-    ("削減効果", ""), ("", ""),
-    ("■ 課題概要", ""), ("", ""),
-    ("■ 経緯・背景", ""), ("", ""),
-    ("■ ゴール（期待する動作）", ""),
+    ("課題ID", ISSUE_ID),
+    ("件名", ISSUE_TITLE),
+    ("優先度・期限", f"優先度: {PRIORITY} / 期限: {DEADLINE}"),
+    ("課題種別", ISSUE_TYPE),
+    ("ステータス", "対応中"),
+    ("背景・要件", BG_DESC),
+    ("最終対応サマリー", "（完了時に記入）"),
 ]
-for i, (k, v) in enumerate(info, 1):
-    ws1.cell(row=i, column=1, value=k).font = BLD
-    ws1.cell(row=i, column=2, value=v)
+r = 3
+for k, v in info:
+    bold_cell(ws1, r, 1, k)
+    ws1.cell(row=r, column=2, value=v).alignment = WRAP
+    r += 1
 
-# === Sheet2: 対応方針 ===
+# ■ 工数（サマリー内に工数セクション）
+r += 1
+sec_header(ws1, r, 1, "■ 工数")
+r += 1
+for k in ["対応開始日時", "対応完了日時", "見積工数（CC使用）", "見積工数（CC未使用）", "実績工数（CC使用）", "削減効果"]:
+    bold_cell(ws1, r, 1, k)
+    r += 1
+
+# ■ 対応経緯タイムライン
+r += 1
+sec_header(ws1, r, 1, "■ 対応経緯タイムライン")
+r += 1
+for i, h in enumerate(["No", "日時", "発生元", "フェーズ", "内容・決定事項", "変更・判断の理由"], 1):
+    col_header(ws1, r, i, h)
+TIMELINE_HEADER_ROW = r  # この行番号を覚えておく（後続Step で追記する起点）
+
+# ==========================================================
+# Sheet2: 対応方針
+# ==========================================================
 ws2 = wb.create_sheet("対応方針")
-ws2.column_dimensions["A"].width = 8
-for col, w in zip("BCDEFG", [20, 40, 30, 30, 20, 12]):
+ws2.column_dimensions["A"].width = 10
+for col, w in zip("BCDEFG", [22, 45, 32, 32, 22, 14]):
     ws2.column_dimensions[col].width = w
-headers = ["案No", "方針名", "概要", "メリット", "デメリット", "リスク", "工数（CC使用）"]
-for i, h in enumerate(headers, 1):
-    hdr(ws2, 1, i, h)
-ws2.cell(row=3, column=1, value="A★").font = BLD
-ws2.cell(row=5, column=1, value="B").font = BLD
-for r in [2, 4, 6]:
-    ws2.cell(row=r, column=1, value="（根拠）")
 
-# === Sheet3: 調査・影響範囲 ===
+sec_header(ws2, 1, 1, "対応方針")
+
+# ■ 方針比較テーブル
+sec_header(ws2, 2, 1, "■ 方針比較テーブル")
+for i, h in enumerate(["案No", "方針名", "概要", "メリット", "デメリット", "リスク", "工数"], 1):
+    col_header(ws2, 3, i, h)
+# 案A（推奨）
+bold_cell(ws2, 4, 1, "A★")
+ws2.cell(row=5, column=1, value="（根拠）").alignment = WRAP
+# 案B
+bold_cell(ws2, 6, 1, "B")
+ws2.cell(row=7, column=1, value="（根拠）").alignment = WRAP
+
+# ■ 採用方針（方針確定後に記入）
+sec_header(ws2, 9, 1, "■ 採用方針")
+ws2.cell(row=10, column=1, value="（方針確定後にここに採用理由を記録する）").alignment = WRAP
+
+# ■ 構成比較・差分記録（必要に応じて使用）
+sec_header(ws2, 12, 1, "■ 構成比較・差分記録（必要に応じて）")
+for i, h in enumerate(["要素", "既存（比較元）", "今回（実装対象）", "差分"], 1):
+    col_header(ws2, 13, i, h)
+
+# ==========================================================
+# Sheet3: 調査・影響範囲
+# ==========================================================
 ws3 = wb.create_sheet("調査・影響範囲")
-for col, w in zip("ABCDE", [6, 30, 30, 40, 10]):
+for col, w in zip("ABCDE", [6, 35, 35, 45, 10]):
     ws3.column_dimensions[col].width = w
-headers3 = ["No", "種別 / 仮説内容", "検証方法", "検証結果・根拠", "判定"]
-for i, h in enumerate(headers3, 1):
-    hdr(ws3, 1, i, h)
 
-# === Sheet4: 対応内容 ===
+sec_header(ws3, 1, 1, "調査・影響範囲")
+sec_header(ws3, 2, 1, "■ 仮説検証テーブル")
+for i, h in enumerate(["No", "仮説内容 / 種別", "検証方法", "検証結果・根拠", "判定"], 1):
+    col_header(ws3, 3, i, h)
+
+# ==========================================================
+# Sheet4: 対応内容
+# ==========================================================
 ws4 = wb.create_sheet("対応内容")
-ws4.column_dimensions["A"].width = 25
-ws4.column_dimensions["B"].width = 60
-items4 = [
-    "Git hash（修正前）", "stash名（バックアップ）",
-    "巻き戻し方法", "", "■ 実装手順", "", "", "", "", ""
-]
-for i, v in enumerate(items4, 1):
-    ws4.cell(row=i, column=1, value=v).font = BLD if v.startswith("■") else Font()
+ws4.column_dimensions["A"].width = 28
+ws4.column_dimensions["B"].width = 55
+ws4.column_dimensions["C"].width = 15
+ws4.column_dimensions["D"].width = 50
+ws4.column_dimensions["E"].width = 50
 
-# === Sheet5: テスト・検証記録 ===
+sec_header(ws4, 1, 1, "対応内容")
+
+# ■ バックアップ情報
+sec_header(ws4, 2, 1, "■ バックアップ情報（修正前に記録）")
+bold_cell(ws4, 3, 1, "Git hash（修正前）")
+ws4.cell(row=3, column=2, value="（実装前に記録: git rev-parse HEAD）")
+bold_cell(ws4, 4, 1, "stash名")
+ws4.cell(row=4, column=2, value="（stash使用時に記録）")
+bold_cell(ws4, 5, 1, "巻き戻し方法")
+ws4.cell(row=5, column=2, value="git reset --hard [hash] または git stash pop")
+
+# ■ 変更ファイル一覧
+sec_header(ws4, 7, 1, "■ 変更ファイル一覧")
+for i, h in enumerate(["No", "ファイルパス", "変更種別", "変更概要"], 1):
+    col_header(ws4, 8, i, h)
+
+# ■ Before / After
+sec_header(ws4, 15, 1, "■ Before / After（実装後に記入）")
+ws4.cell(row=16, column=1, value="実装完了後、各ファイルの変更前後を記載する").alignment = WRAP
+
+# ■ 影響確認チェックリスト
+sec_header(ws4, 20, 1, "■ 影響確認チェックリスト")
+for i, h in enumerate(["□", "確認内容", "結果", "備考"], 1):
+    col_header(ws4, 21, i, h)
+
+# ■ 追加修正（修正が複数回発生した場合に使用）
+sec_header(ws4, 30, 1, "■ 追加修正（必要に応じて追記）")
+for i, h in enumerate(["No", "ファイルパス", "変更種別", "変更概要", "詳細・根拠"], 1):
+    col_header(ws4, 31, i, h)
+
+# ==========================================================
+# Sheet5: テスト・検証記録
+# ==========================================================
 ws5 = wb.create_sheet("テスト・検証記録")
-for col, w in zip("ABCDEFGH", [6, 15, 30, 30, 30, 30, 10, 30]):
+for col, w in zip("ABCDEFGH", [6, 16, 32, 32, 32, 32, 10, 35]):
     ws5.column_dimensions[col].width = w
-headers5 = ["No", "区分", "テスト項目", "確認方法", "期待結果", "実際の結果", "判定", "根拠"]
-for i, h in enumerate(headers5, 1):
-    hdr(ws5, 1, i, h)
 
-# === Sheet6: リリース・ロールバック ===
+sec_header(ws5, 1, 1, "テスト・検証記録")
+sec_header(ws5, 2, 1, "■ テスト方針")
+ws5.cell(row=3, column=1, value="（テスト方針・観点をここに記載する）").alignment = WRAP
+sec_header(ws5, 5, 1, "■ テスト結果")
+for i, h in enumerate(["No", "区分", "テスト項目", "確認方法", "期待結果", "実際の結果", "判定", "根拠"], 1):
+    col_header(ws5, 6, i, h)
+
+# ==========================================================
+# Sheet6: リリース・ロールバック
+# ==========================================================
 ws6 = wb.create_sheet("リリース・ロールバック")
-for col, w in zip("ABCDEF", [6, 20, 30, 20, 30, 30]):
+for col, w in zip("ABCDEF", [6, 22, 35, 20, 32, 32]):
     ws6.column_dimensions[col].width = w
-headers6 = ["No", "種別", "API名 / 対象", "変更種別", "デプロイ方法", "備考"]
-for i, h in enumerate(headers6, 1):
-    hdr(ws6, 1, i, h)
+
+sec_header(ws6, 1, 1, "リリース・ロールバック")
+sec_header(ws6, 2, 1, "■ リリース対象一覧")
+for i, h in enumerate(["No", "種別", "API名 / 対象", "変更種別", "デプロイ方法", "備考"], 1):
+    col_header(ws6, 3, i, h)
+
+sec_header(ws6, 12, 1, "■ ロールバック手順")
+ws6.cell(row=13, column=1, value="（ロールバックが必要な場合の手順を記載する）").alignment = WRAP
+
+sec_header(ws6, 16, 1, "■ 本番デプロイ記録")
+for k in ["デプロイ日時", "実施者", "検証結果"]:
+    bold_cell(ws6, ws6.max_row + 1, 1, k)
 
 path = os.path.join(FOLDER, f"{ISSUE_ID}_対応記録.xlsx")
 wb.save(path)
@@ -204,35 +330,34 @@ ISSUE_ID = "{課題ID}"
 wb = openpyxl.Workbook()
 
 HDR = PatternFill("solid", fgColor="1F3461")
+SEC = PatternFill("solid", fgColor="2E74B5")
 WHT = Font(color="FFFFFF", bold=True)
-BLD = Font(bold=True)
+WRAP = Alignment(wrap_text=True, vertical="top")
+
+def col_header(ws, row, col, val):
+    c = ws.cell(row=row, column=col, value=val)
+    c.fill = HDR; c.font = WHT; c.alignment = WRAP
 
 # === Sheet1: テスト仕様 ===
 ws1 = wb.active; ws1.title = "テスト仕様"
-for col, w in zip("ABCDEFG", [6, 30, 15, 40, 40, 30, 15]):
+for col, w in zip("ABCDEFG", [6, 32, 15, 42, 42, 32, 18]):
     ws1.column_dimensions[col].width = w
-headers = ["No", "確認観点", "タイミング", "確認手順", "期待結果", "エビデンスの取り方", "貼付先シート"]
-for i, h in enumerate(headers, 1):
-    c = ws1.cell(row=1, column=i, value=h)
-    c.fill = HDR; c.font = WHT
+for i, h in enumerate(["No", "確認観点", "タイミング", "確認手順", "期待結果", "エビデンスの取り方", "貼付先シート"], 1):
+    col_header(ws1, 1, i, h)
 
 # === Sheet2: 実装前エビデンス ===
 ws2 = wb.create_sheet("実装前エビデンス")
-for col, w in zip("ABCD", [5, 40, 20, 40]):
+for col, w in zip("ABCD", [5, 42, 20, 50]):
     ws2.column_dimensions[col].width = w
 for i, h in enumerate(["□", "確認観点", "結果", "メモ（スクリーンショット貼付欄）"], 1):
-    c = ws2.cell(row=1, column=i, value=h)
-    c.fill = HDR; c.font = WHT
-ws2.row_dimensions[1].height = 20
+    col_header(ws2, 1, i, h)
 
 # === Sheet3: 実装後エビデンス ===
 ws3 = wb.create_sheet("実装後エビデンス")
-for col, w in zip("ABCD", [5, 40, 20, 40]):
+for col, w in zip("ABCD", [5, 42, 20, 50]):
     ws3.column_dimensions[col].width = w
 for i, h in enumerate(["□", "確認観点", "結果", "メモ（スクリーンショット貼付欄）"], 1):
-    c = ws3.cell(row=1, column=i, value=h)
-    c.fill = HDR; c.font = WHT
-ws3.row_dimensions[1].height = 20
+    col_header(ws3, 1, i, h)
 
 path = os.path.join(FOLDER, f"{ISSUE_ID}_エビデンス.xlsx")
 wb.save(path)
@@ -241,7 +366,7 @@ print(f"生成完了: {path}")
 
 生成完了後、ユーザに報告する:
 ```
-✅ xlsx 生成完了
+xlsx 生成完了
 - {課題ID}_対応記録.xlsx（6シート）
 - {課題ID}_エビデンス.xlsx（3シート）
 保存先: {作業フォルダパス}
@@ -259,23 +384,23 @@ print(f"生成完了: {path}")
 - バグの場合: 原因を多重検証で特定する
 - 追加要望の場合: 関連実装を全て読む
 
-**調査結果を `{課題ID}_対応記録.xlsx` の「調査・影響範囲」シートに記録する（Python で更新）。**
+**xlsx 更新:**
+- `{課題ID}_対応記録.xlsx` の「調査・影響範囲」シートに仮説検証テーブルを記録する
+- 「サマリー・経緯」の対応経緯タイムラインに調査の経過を追記する
 
 ---
 
-## Step 4. 実装前エビデンスの取得（Playwright）
+## Step 4. 実装前エビデンスの取得（可能であれば）
 
-> **実装前の状態を記録する。このStepを飛ばして実装に進むことは禁止。**
+> **実装前の状態を記録する。Playwright でスクリーンショットが取得できる場合のみ実施。**
+> **精度の低いエビデンスは取得しない。取得できない場合はテスト仕様シートの作成のみ行い Step 5 に進む。**
 
-1. テスト仕様を検討し、`エビデンス.xlsx` の「テスト仕様」シートに記録する
-2. Playwright で対象画面を開く
-3. 確認すべき画面・操作ごとにスクリーンショットを撮影する:
+1. テスト仕様を検討し、`エビデンス.xlsx` の「テスト仕様」シートに記録する（これは必須）
+2. 可能であれば Playwright で対象画面を開き、スクリーンショットを撮影する:
    ```
    保存先: {作業フォルダパス}\before_{連番}_{説明}.png
    ```
-4. 撮影したスクリーンショットのパスと確認観点を「実装前エビデンス」シートに記録する（openpyxl で画像を挿入する）
-
-> **次に進む条件: 実装前SSの撮影完了・xlsx更新完了後**
+3. 撮影した場合は「実装前エビデンス」シートに記録する
 
 ---
 
@@ -304,14 +429,24 @@ print(f"生成完了: {path}")
 ### 実施前の確認事項
 ```
 
-**`{課題ID}_対応記録.xlsx` の「対応方針」シートに記録する。**
+**xlsx 更新:**
+- 「対応方針」シートの方針比較テーブルに記録する
+- ユーザが承認したら「採用方針」セクションに採用理由を記録する
+- 構成比較が必要な場合（既存実装との比較等）は「構成比較・差分記録」に記録する
+- 「サマリー・経緯」のタイムラインに方針提案・承認を追記する
 
 工数見積もりを提示する（`/backlog` Phase 3.7 と同形式）:
 - CC使用 見込みXh / CC未使用 見込みXh / 効率化効果 約X倍
+- 「サマリー・経緯」の工数セクションに見込みを記録する
 
 **`docs/effort-log.md` に見込みを追記する。**
 
 > **次に進む条件: ユーザが対応方針を承認した後。承認なしに実装に進むことは絶対禁止。**
+
+**方針変更が発生した場合:**
+- 対応方針シートの採用方針を更新する（旧方針は取り消し線 or 「変更前」として残す）
+- タイムラインに変更の経緯・理由を追記する
+- 方針変更のたびに xlsx を更新する
 
 ---
 
@@ -334,7 +469,16 @@ print(f"生成完了: {path}")
 - 修正は最小限にとどめる
 - 変更内容を Before / After 形式でユーザに提示する
 
-**実装完了後、`{課題ID}_対応記録.xlsx` の「対応内容」シートを更新する（Git hash・変更ファイル・手順を記録）。**
+**xlsx 更新（「対応内容」シート）:**
+- Git hash（修正前）を記録する
+- 変更ファイル一覧を記録する（No / ファイルパス / 変更種別 / 変更概要）
+- Before / After セクションに変更前後を記録する
+- 影響確認チェックリストに確認すべき項目を列挙する
+- タイムラインに実装完了を追記する
+
+**追加修正が発生した場合:**
+- 「追加修正」セクションに追加修正の内容を記録する（追加修正ごとに日付・根拠を明記）
+- タイムラインにも追加修正の経緯を追記する
 
 ---
 
@@ -361,31 +505,31 @@ sf apex run test --target-org <alias> --class-names <テストクラス名> --re
 
 ### 8-4. テスト結果を xlsx に記録する
 
-テスト結果を `{課題ID}_対応記録.xlsx` の「テスト・検証記録」シートに記録する。
+**xlsx 更新（「テスト・検証記録」シート）:**
+- テスト方針を記録する
+- テスト結果を全行記録する（No / 区分 / テスト項目 / 確認方法 / 期待結果 / 実際の結果 / 判定 / 根拠）
+- タイムラインにテスト結果（全OK or NG項目あり）を追記する
 
-> **次に進む条件: 全テスト項目 ✅ OK になった後。NG があれば Step 7 に戻る。**
+**NG 発生時:**
+- タイムラインに NG 内容・ユーザ報告・Claude の追加調査を時系列で記録する
+- Step 7 に戻って修正し、「追加修正」セクションと「変更ファイル一覧」を更新する
+- 修正後は再度 Step 8 を最初からやり直す
+
+> **次に進む条件: 全テスト項目 OK になった後。NG があれば Step 7 に戻る。**
 
 ---
 
-## Step 9. 実装後エビデンスの取得（Playwright）
+## Step 9. 実装後エビデンスの取得（可能であれば）
 
-> **このStepを飛ばしてデプロイに進むことは禁止。**
+> **Playwright でスクリーンショットが取得できる場合のみ実施。**
+> **精度の低いエビデンスは取得しない。取得できない場合はエビデンス.xlsx のテスト仕様シートが記録済みであれば Step 10 に進む。**
 
 1. Step 4 で定義したテスト仕様に従い、実装後の画面を撮影する
 2. スクリーンショットを保存する:
    ```
    保存先: {作業フォルダパス}\after_{連番}_{説明}.png
    ```
-3. `エビデンス.xlsx` の「実装後エビデンス」シートに画像を挿入する（openpyxl）
-
-ユーザにエビデンス確認を促す:
-```
-✅ 実装後エビデンスを取得しました。
-エビデンスファイルをご確認ください: {作業フォルダパス}\{課題ID}_エビデンス.xlsx
-追加で取得が必要なスクリーンショットがあれば指示してください。
-```
-
-> **次に進む条件: ユーザがエビデンスを確認した後**
+3. `エビデンス.xlsx` の「実装後エビデンス」シートに記録する
 
 ---
 
@@ -400,7 +544,9 @@ sf apex run test --target-org <alias> --class-names <テストクラス名> --re
 4. デプロイを実行する
 5. デプロイ後の動作確認を行う
 
-**`{課題ID}_対応記録.xlsx` の「リリース・ロールバック」シートを更新する。**
+**xlsx 更新（「リリース・ロールバック」シート）:**
+- リリース対象一覧を記録する（No / 種別 / API名 / 変更種別 / デプロイ方法 / 備考）
+- ロールバック手順を記録する
 
 本番デプロイはユーザの明示的な指示が必要。
 
@@ -426,7 +572,7 @@ date "+%Y-%m-%d %H:%M:%S"
 ```
 作業完了しました。
 
-⏱ 経過時間
+経過時間
   開始: {Step 0 の時刻}
   終了: {現在時刻}
   経過: {X時間Y分}
@@ -438,9 +584,14 @@ date "+%Y-%m-%d %H:%M:%S"
 
 実績工数を計算する（経過時間 - ブレーク時間）。
 
-### effort-log.md を更新する
+### xlsx・effort-log の最終更新
 
-`docs/effort-log.md` の該当行に実績工数と削減効果を記録する。
+**xlsx 更新（「サマリー・経緯」シート）:**
+- 完了日時・実績工数・削減効果を記録する
+- ステータスを「完了」に更新する
+- 最終対応サマリーを記述する（GF-327 の例: 「handleSaveDraft()を全面実装：BT + Quote の両方保存。getInitData SOQL に5フィールド追加…」）
+
+**`docs/effort-log.md`** の該当行に実績工数と削減効果を記録する。
 
 ### サマリーを報告する
 
@@ -457,7 +608,7 @@ date "+%Y-%m-%d %H:%M:%S"
 
 ### 成果物
 - {課題ID}_対応記録.xlsx（6シート記録済み）
-- {課題ID}_エビデンス.xlsx（実装前後SS挿入済み）
+- {課題ID}_エビデンス.xlsx（テスト仕様 + エビデンス）
 
 ### 次のアクション
 - [ ] 本番デプロイ（要ユーザ指示）
@@ -476,7 +627,8 @@ date "+%Y-%m-%d %H:%M:%S"
 ## 注意
 
 - 各 Step は必ず順番通りに実行する
-- Step 2（xlsx作成）と Step 4（実装前SS）は実装（Step 7）より前に必ず完了させる
+- Step 2（xlsx作成）は実装（Step 7）より前に必ず完了させる
 - Step 5 のユーザ承認なしに実装に進むことは禁止
-- Step 9（実装後SS）はデプロイ（Step 10）より前に必ず完了させる
 - 本番デプロイは必ずユーザの明示的な指示が必要
+- ユーザとのやりとり・方針変更・追加修正が発生するたびにタイムラインに追記する
+- 対応方針が変更されたら対応方針シートも合わせて更新する
