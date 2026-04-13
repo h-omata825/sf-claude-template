@@ -50,17 +50,13 @@
 
 | 資材 | 場所 | 生成コマンド | 備考 |
 |---|---|---|---|
-| 組織プロフィール | `docs/overview/` | `/sf-analyze` | 会社概要・業種・利用目的 |
-| 要件定義書 | `docs/requirements/` | `/sf-analyze` | AS-IS/TO-BE・要件一覧 |
-| 機能設計書 | `docs/design/{種別}/` | `/sf-design` | apex/flow/batch/lwc/integration/config |
-| 設計書インデックス | `docs/design/_index.md` | `/sf-design` | 全設計書の一覧（自動生成） |
-| オブジェクト・項目定義書 | `docs/catalog/` | `/sf-catalog` | オブジェクト・項目・権限 |
-| データ分析 | `docs/data/` | `/sf-data` | データ品質・傾向分析 |
-| テスト仕様 | `docs/test/` | — | |
-| 議事録 | `docs/minutes/` | — | |
-| 手順書 | `docs/manuals/` | — | |
+| 組織プロフィール・要件定義 | `docs/overview/` `docs/requirements/` | `/sf-memory` | 組織概要・用語集・AS-IS/TO-BE・要件一覧 |
+| オブジェクト・項目定義書（Markdown） | `docs/catalog/` | `/sf-memory` | オブジェクト・項目構成・権限。Claude記憶形成用 |
+| オブジェクト・項目定義書（Excel/PowerPoint） | `docs/` 任意 | `/project-doc` | 正式な成果物として提出・共有するための定義書 |
+| 機能設計書 | `docs/design/{種別}/` | `/sf-memory` | apex/flow/batch/lwc/integration/config |
+| データ統計・マスタ | `docs/data/` | `/sf-memory` | マスタデータ・テンプレート・統計・品質 |
 | 変更履歴 | `docs/changelog.md` | 自動 | コマンド実行時に自動追記 |
-| 対応履歴・判断記録 | `docs/decisions.md` | — | 保守・開発の判断根拠。`/backlog` 完了時に自動追記 |
+| 対応履歴・判断記録 | `docs/decisions.md` | 自動 | 保守・開発の判断根拠。`/backlog` 完了時に自動追記 |
 | package.xml | `manifest/package.xml` | `/sf-retrieve` | standard / all / 個別指定の3モード |
 
 ---

@@ -53,7 +53,5 @@ sf project retrieve start --manifest manifest/package.xml
 メタデータ取得完了。force-app/ に保存されました。
 
 次にできること:
-  /sf-analyze  — 組織を解析して資料を自動生成
-  /sf-catalog  — オブジェクト定義書を作成
-  /sf-design   — 設計書を作成
+  /sf-memory   — 組織を解析して資料を自動生成・更新
 ```
