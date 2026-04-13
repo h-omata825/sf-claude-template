@@ -660,14 +660,20 @@ sf data query -q "SELECT Name, SobjectType FROM AssignmentRule WHERE Active = tr
 
 ```
 docs/design/
-├── apex/           # Apexクラス・トリガーの設計書
-├── flow/           # フロー
-├── batch/          # バッチ Apex・スケジュールジョブ
-├── lwc/            # Lightning Web Components
-├── integration/    # 外部連携
+├── apex/           # Apexクラス・トリガーの設計書（1クラス1ファイル）
+├── flow/           # フロー（1フロー1ファイル）
+├── batch/          # バッチ Apex・スケジュールジョブ（1ジョブ1ファイル）
+├── lwc/            # Lightning Web Components（1コンポーネント1ファイル）
+├── integration/    # 外部連携（1連携先または1エンドポイント1ファイル）
 ├── config/         # 宣言的設定（入力規則・数式・ページレイアウト等）
 └── _index.md       # 全設計書のインデックス
 ```
+
+**重要: 1コンポーネント1ファイルの原則**
+- Flow: アクティブな各フローごとに個別ファイルを生成する（flow-overview.md のような統合ファイルは作らない）
+- LWC: 各コンポーネントごとに個別ファイルを生成する
+- Integration: 各連携先・エンドポイントごとに個別ファイルを生成する
+- Apex: 各クラス・トリガーごとに個別ファイルを生成する
 
 ### Phase 0: 実行モード判定
 
@@ -688,68 +694,167 @@ docs/design/
 重要ルール:
 - 手動追記・設計判断の根拠は絶対に消さない
 - セッションで確定した仕様は「要確認」→「確定」に昇格
-- 既存設計との矛盾が生じた場合は変更点を明記してユーザーに確認する
+- 既存設計との矛盾が生じた場合は変更点を明記する
 
 ### Phase 1: 処理モードの実行
 
-#### 全機能対象の場合（モード A）
+#### 全機能対象の場合（モード A）— FR基点で全種別を生成
 
-要件定義書の機能要件一覧を読み、設計書の作成計画を提示する:
-```
-## 設計書 作成計画
+`docs/requirements/requirements.md` の機能要件一覧（FR-XXX）を読み込み、**ユーザー確認なしで直ちに**以下を実行する:
 
-| # | 要件 | フォルダ | 設計書 | 状態 |
-|---|---|---|---|---|
-| FR-001 | 商談管理機能 | apex/ | FR-001_opportunity-management.md | 未作成 |
-| FR-002 | ケース自動振り分け | flow/ | FR-002_case-routing.md | 作成済み（v1.0） |
+1. **各FRの実装種別を判定する**（1つのFRが複数種別にまたがる場合は各種別で個別ファイルを生成する）
 
-全て作成します...
-```
+| FRの実装種別 | 出力フォルダ |
+|---|---|
+| Apexクラス・トリガー | `apex/` |
+| フロー（Screen/Record/Schedule/Auto-launched） | `flow/` |
+| バッチ・スケジュールジョブ | `batch/` |
+| Lightning Web Component | `lwc/` |
+| 外部API・Named Credential連携 | `integration/` |
+| 入力規則・数式・ページレイアウト等 | `config/` |
+
+2. **各FRごとに設計書を生成する**（以下の手順で種別ごとに処理する）
+
+**Apex設計書の生成手順**:
+- `force-app/main/default/classes/` のクラスファイルを読む
+- FRに対応するクラスのコードを読み設計書を生成する
+- トリガーは `triggers/` を読み、トリガーハンドラクラスとセットで apex/ に生成する
+
+**Flow設計書の生成手順**:
+- `force-app/main/default/flows/` のフローファイル一覧を取得する
+- FRに対応するフロー（APIName で突合）のXMLを読み、個別設計書を生成する
+- XMLがない場合は `sf data query -q "SELECT ApiName, ProcessType, Description FROM FlowDefinitionView WHERE ActiveVersionId != null" --json` で情報を取得する
+- **1フロー1ファイル**: `flow/{FR番号}_{フロー名-kebab-case}.md`
+
+**LWC設計書の生成手順**:
+- `force-app/main/default/lwc/` のコンポーネントフォルダ一覧を取得する
+- FRに対応するコンポーネントの `.js`・`.html`・`.js-meta.xml` を読む
+- **1コンポーネント1ファイル**: `lwc/{FR番号}_{コンポーネント名-kebab-case}.md`
+
+**Integration設計書の生成手順**:
+- Named Credential・外部サービス設定を確認する: `force-app/main/default/namedCredentials/`
+- FRに対応する連携先・エンドポイントを特定する
+- Apexコード内のHTTP呼び出し箇所を読み仕様を逆引きする
+- **1連携先1ファイル**: `integration/{FR番号}_{連携先名-kebab-case}.md`
+
+**Batch設計書の生成手順**:
+- `Database.Batchable`・`Schedulable` インターフェース実装クラスを読む
+- **1バッチ1ファイル**: `batch/{FR番号}_{バッチ名-kebab-case}.md`
 
 #### 特定機能指定の場合（モード B）
 
-指定された機能の設計書のみ生成する。
+指定された機能・FRに対応する種別の設計書のみをモードAの手順で生成する。
 
-#### 逆引き生成（モード C）
+#### 逆引き生成（モード C）— コード基点で全コンポーネントを網羅
 
-`force-app/` 内の既存Apex・フロー・トリガーを読んで設計書を逆引き生成する。
+要件定義書がない場合、またはモードAの補完として `force-app/` の実装から設計書を逆引き生成する。**確認なしで直ちに**以下を実行する。
 
-1. 対象一覧の取得:
+1. **対象の一覧を取得する**:
 ```bash
-sf data query -q "SELECT Name FROM ApexClass WHERE NamespacePrefix = null ORDER BY Name" --json
+sf data query -q "SELECT Name, IsTest FROM ApexClass WHERE NamespacePrefix = null ORDER BY Name" --json
 sf data query -q "SELECT Name, TableEnumOrId FROM ApexTrigger WHERE NamespacePrefix = null" --json
-sf data query -q "SELECT ApiName, ProcessType FROM FlowDefinitionView WHERE ActiveVersionId != null" --json
+sf data query -q "SELECT ApiName, ProcessType, Label FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json
 ```
-2. 対象をユーザーに提示し確認する
-3. 各コンポーネントのコードを読む（`force-app/main/default/classes/`, `triggers/`, `flows/`）
-4. 設計書を逆引き生成する（推定部分は「逆引き（推定）」と明記）
+ローカルファイルも確認: `force-app/main/default/lwc/`（LWCコンポーネント一覧）、`force-app/main/default/namedCredentials/`（外部連携）
+
+2. **テストクラス（`IsTest=true` または名前が `Test` で終わる）を除外する**
+
+3. **各コンポーネントを種別ごとに個別ファイルで生成する**:
+
+**Apexクラス**: `force-app/main/default/classes/{ClassName}.cls` を読む → `apex/MISC-{連番}_{クラス名-kebab-case}.md`（バッチ実装は batch/ へ）
+
+**Flowフロー**: **1フロー1ファイル**（flow-overview.md のような統合ファイルは作らない）
+- `force-app/main/default/flows/{FlowName}.flow-meta.xml` を読む（ない場合はSOQLの情報で生成）
+- → `flow/MISC-{連番}_{フロー名-kebab-case}.md`
+- フロー数が多い（20件超）場合: 5件ずつバッチ処理して順次生成する
+
+**LWCコンポーネント**: **1コンポーネント1ファイル**
+- `force-app/main/default/lwc/{componentName}/` の `.js`・`.html` を読む
+- → `lwc/MISC-{連番}_{コンポーネント名-kebab-case}.md`
+
+**外部連携（Integration）**: **1連携先1ファイル**
+- Named Credential設定 + Apex内HTTP呼び出しを読む
+- → `integration/MISC-{連番}_{連携先名-kebab-case}.md`
+
+4. 推定・不明な部分は `**[逆引き推定]**` と明記する
 
 #### 既存資料の取り込み（モード D）
 
 指定されたファイル/フォルダを読み込み、標準フォーマットに変換・統合する。
-大量ファイルの場合は分割して処理し、インポート計画をユーザーに提示してから実行する。
+大量ファイルの場合は分割して処理し、進捗を随時出力しながら実行する（確認待ちはしない）。
+
+#### 「全て」選択時のモード決定ルール
+
+| 状況 | 実行モード |
+|---|---|
+| 要件定義書あり（requirements.md） | モードA（FR基点）→ 完了後にモードCで要件に紐づかないコンポーネントを補完 |
+| 要件定義書なし | モードC（逆引き）のみ |
+| 特定機能の指定あり | モードB |
+| 既存資料の指定あり | モードD |
 
 ### Phase 2: 設計書の生成
 
 #### ファイル命名規則
 ```
-docs/design/{種別フォルダ}/{要件番号}_{機能名-kebab-case}.md
+docs/design/{種別フォルダ}/{要件番号またはMISC-XXX}_{機能名-kebab-case}.md
 ```
-要件番号がない場合: `MISC-XXX_{機能名}.md`
+- FRベース: `FR-001_opportunity-management.md`
+- 逆引き: `MISC-001_account-trigger-handler.md`
 
-（テンプレート: 概要・スコープ・ユーザーストーリー・関連要件・実現方式・データ設計・業務フロー・画面設計・ロジック設計・バリデーション・権限設計・外部連携・テスト観点・ガバナ制限・影響範囲・未解決事項・受入基準）
+#### 設計書テンプレート（各ファイルに含める項目）
+
+```markdown
+# {機能名}
+
+## 概要
+| 項目 | 内容 |
+|---|---|
+| 要件番号 | FR-XXX / MISC-XXX |
+| 実装種別 | Apex / Flow / LWC / Integration / Batch / Config |
+| 担当オブジェクト | |
+| バージョン | v1.0 |
+| 生成方法 | FR基点 / 逆引き（推定） |
+
+## スコープ・ユーザーストーリー
+## 実現方式（処理フロー・アーキテクチャ）
+## データ設計（入出力・項目マッピング）
+## ロジック設計（分岐・条件・計算式）
+## バリデーション・エラー処理
+## 権限設計（プロファイル・権限セット）
+## 外部連携（該当する場合）
+## テスト観点
+## ガバナ制限・パフォーマンス考慮
+## 影響範囲・依存関係
+## 未解決事項・要確認
+## 受入基準
+```
 
 ### Phase 3: インデックス生成
 
-`docs/design/_index.md` を生成/更新する。
+全設計書の生成完了後、`docs/design/_index.md` を生成/更新する。
+
+```markdown
+# 設計書インデックス
+
+## apex/ ({N}件)
+| ファイル | 要件 | 概要 |
+## flow/ ({N}件)
+## batch/ ({N}件)
+## lwc/ ({N}件)
+## integration/ ({N}件)
+## config/ ({N}件)
+```
 
 ### Phase 4: 差分更新 / Phase 5: 変更履歴の記録
 
 既存設計書がある場合は差分のみ更新し changelog に追記する。
 
-### 完了後: CLAUDE.md の自動更新
+### 完了後の報告
 
-設計で確定した命名規則・制約・新規オブジェクトをユーザーに確認してから更新する。
+設計書の生成完了後、以下を報告する（CLAUDE.md の自動更新は行わない）:
+- 生成したファイル一覧（種別ごと件数）
+- 「逆引き推定」マークがついた項目
+- 要確認事項（上位3件）
 
 ---
 
