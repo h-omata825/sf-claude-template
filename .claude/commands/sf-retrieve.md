@@ -27,13 +27,13 @@ $ARGUMENTS
 ### 「standard」の場合
 
 ```bash
-bash scripts/sf-package.sh standard
+bash scripts/sf-retrieve.sh standard
 ```
 
 ### 「all」の場合
 
 ```bash
-bash scripts/sf-package.sh all
+bash scripts/sf-retrieve.sh all
 ```
 
 ### 「select」の場合
