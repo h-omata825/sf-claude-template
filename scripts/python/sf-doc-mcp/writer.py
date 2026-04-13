@@ -393,7 +393,9 @@ class DefinitionWriter:
 
         row = 3
         obj_diff   = self._diffs.get(obj, {})
-        field_diffs = obj_diff.get("fields")   # {"added": [...], "modified": [...], "removed": [...]}
+        is_new_obj = obj_diff.get("new_object", False)
+        # 新規追加オブジェクトはタブ色のみ赤。セル内容は差分なしとして黒字で描画する
+        field_diffs = None if is_new_obj else obj_diff.get("fields")
 
         if "object_info" in meta:
             row = self._write_object_info(ws, meta["object_info"], row)
