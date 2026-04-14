@@ -111,7 +111,7 @@ fi
 echo ""
 echo "  次のステップ:"
 if [ -z "$PROJECT_REPO_URL" ]; then
-    echo "    0. （推奨）GitHubでリポジトリを作成して連携する:"
+    echo "    0. GitHubでリポジトリを作成して連携する:"
     echo "         cd $PROJECT_PATH"
     echo "         git init && git remote add origin <URL>"
     echo "         git add . && git commit -m 'chore: initial setup'"
