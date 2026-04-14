@@ -323,101 +323,27 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
 
 「特定の機能を選択する」の場合はテキストで入力してもらい、対象を絞り込む。
 
-### D-3: 各機能のソースを読んで設計内容を生成
+### D-3: sf-design-writer エージェントへ委譲
 
-対象機能ごとに以下を実施する（全機能が多い場合は並列で処理）:
+以下の情報を self-contained なプロンプトとして `sf-design-writer` エージェントに渡す:
 
-1. **ソースファイルを読む**
-   - `force-app/` の該当クラス/フロー/コンポーネントを Read
-   - `docs/design/` に対応するMDがあれば Read
-   - 情報が足りない場合は Salesforce CLI で組織から補完:
-     ```bash
-     sf apex get class --class-name {ClassName} --target-org {SF_ALIAS}
-     ```
+渡す情報:
+- `project_dir`: カレントディレクトリのフルパス
+- `output_dir`: 出力先フォルダパス
+- `tmp_dir`: `{output_dir}/.tmp`
+- `author`: 作成者名
+- `project_name`: プロジェクト名
+- `sf_alias`: Step C で使用した SF エイリアス（Step C をスキップした場合は `.sf/config.json` から取得）
+- `feature_list`: D-2 で取得したコンポーネント一覧（JSON 全文）
+- `target_ids`: 対象の機能ID・API名リスト（全機能の場合は全件）
+- sf-design-writer エージェント定義の全文
 
-2. **設計内容をJSON形式で整理する**（下記フォーマット）
+エージェントは以下を実行して完了報告を返す:
+- 各コンポーネントのソースを徹底的に読んで設計 JSON を生成
+- 機能設計書 Excel を生成（機能数分）
+- 機能一覧 Excel を生成（1ファイル）
+- 一時ファイルを削除
 
-```json
-{
-  "id": "F-001",
-  "type": "Apex",
-  "name": "機能名（日本語）",
-  "api_name": "ClassName",
-  "project_name": "{プロジェクト名}",
-  "system_name": "",
-  "author": "{作成者名}",
-  "version": "1.0",
-  "date": "YYYY-MM-DD",
-  "purpose": "本書の目的",
-  "overview": "処理概要",
-  "prerequisites": "前提条件（なければ「特になし」）",
-  "trigger": "処理契機",
-  "steps": [
-    { "no": "1", "title": "ステップタイトル", "detail": "詳細",
-      "sub_steps": [{ "no": "1.1", "title": "サブタイトル", "detail": "詳細" }] }
-  ],
-  "input_params":  [{ "key": "param1", "type": "String",  "required": true,  "description": "説明" }],
-  "output_params": [{ "key": "result", "type": "Boolean", "description": "説明" }]
-}
-```
+### D-4: 完了報告の表示
 
-3. **JSONを一時ファイルに保存**
-   - 保存先: `{出力フォルダ}/.tmp/{api_name}_design.json`
-
-4. **LWC / 画面フローの場合: スクリーンショット取得（可能であれば）**
-   - Playwright が使用可能な場合、対象コンポーネントが表示されているページを撮影
-   - 保存先: `{出力フォルダ}/.tmp/{api_name}_screen.png`
-   - 取得できない場合はスキップ（設計書の「画面イメージ」セクションを省略）
-
-### D-4: 機能設計書.xlsx を生成
-
-各機能について Python スクリプトを実行:
-
-```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_design.py \
-  --input "{出力フォルダ}/.tmp/{api_name}_design.json" \
-  --output-dir "{出力フォルダ}" \
-  [--screenshot "{出力フォルダ}/.tmp/{api_name}_screen.png"]
-```
-
-出力ファイル名: `機能設計書_{機能ID}_{api_name}.xlsx`
-
-### D-5: 機能一覧.xlsx を生成
-
-全機能の JSON から機能一覧用の要約 JSON を作成し実行:
-
-```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_list.py \
-  --input "{出力フォルダ}/.tmp/feature_list.json" \
-  --output-dir "{出力フォルダ}" \
-  --author "{作成者名}" \
-  --project-name "{プロジェクト名}"
-```
-
-`feature_list.json` の形式:
-```json
-[
-  {
-    "id": "F-001",
-    "type": "Apex",
-    "name": "機能名",
-    "api_name": "ClassName",
-    "overview": "処理概要（1〜2文）",
-    "design_file": "機能設計書_F-001_ClassName.xlsx"
-  }
-]
-```
-
-### D-6: 後処理・完了報告
-
-```bash
-# 一時ファイルを削除
-rm -rf "{出力フォルダ}/.tmp"
-```
-
-完了報告:
-```
-✅ 機能一覧.xlsx — 1ファイル（{機能数}件）
-✅ 機能設計書.xlsx — {機能数}ファイル
-出力先: {出力フォルダ}
-```
+エージェントからの完了報告をそのまま表示する。
