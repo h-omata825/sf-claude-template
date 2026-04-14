@@ -59,9 +59,6 @@ mkdir -p "{tmp_dir}"
 {project_dir}\scripts\python\sf-doc-mcp\設計書テンプレート.xlsx
 ```
 
-> **テンプレートの管理場所**: 大本は `sf-claude-template` リポジトリの `scripts/python/sf-doc-mcp/設計書テンプレート.xlsx`。
-> `/upgrade` を実行すると各プロジェクトの同パスに配布される。テンプレートの書式変更はリポジトリ側で行い、`/upgrade` で反映する。
-
 存在しない場合はエラーにする（`/upgrade` でテンプレートを取得してもらう）:
 ```bash
 python -c "
