@@ -147,9 +147,6 @@ sf data query -q "SELECT Name, ApiVersion, Status, CreatedDate, LastModifiedDate
 sf data query -q "SELECT Name, TableEnumOrId, ApiVersion, Status FROM ApexTrigger WHERE NamespacePrefix = null" --json
 # Flow一覧
 sf data query -q "SELECT ApiName, ActiveVersionId, Description, ProcessType FROM FlowDefinitionView" --json
-# 有効ユーザー数
-sf data query -q "SELECT COUNT() FROM User WHERE IsActive = true" --json
-sf data query -q "SELECT Profile.Name, COUNT(Id) cnt FROM User WHERE IsActive = true GROUP BY Profile.Name ORDER BY COUNT(Id) DESC" --json
 # プロファイル・権限セット
 sf data query -q "SELECT Name FROM Profile WHERE UserType = 'Standard'" --json
 sf data query -q "SELECT Name, Label, Description FROM PermissionSet WHERE IsCustom = true AND NamespacePrefix = null" --json
@@ -185,7 +182,7 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Acti
 
 `docs/overview/org-profile.md` を生成（または更新）する。
 
-含める内容: 会社・事業概要（業種推定・根拠）/ 利用規模（ユーザー数・プロファイル分布）/ データ構成（オブジェクト一覧・ER図・Mermaid）/ カスタマイズ構成（Apex・Flow・外部連携）/ セキュリティ構成 / 技術的所見 / ステークホルダーマップ / **用語集（Glossary）**
+含める内容: 会社・事業概要（業種推定・根拠）/ データ構成（オブジェクト一覧・ER図・Mermaid）/ カスタマイズ構成（Apex・Flow・外部連携）/ セキュリティ構成（プロファイル・権限セット） / 技術的所見 / ステークホルダーマップ / **用語集（Glossary）**
 
 ### Phase 4: 要件定義書の生成/更新
 
