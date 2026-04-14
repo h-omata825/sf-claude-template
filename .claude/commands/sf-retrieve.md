@@ -49,9 +49,22 @@ sf project retrieve start --manifest manifest/package.xml
 
 ## Step 3: 完了報告
 
+取得完了後、`docs/overview/org-profile.md` が存在するかチェックする。
+
+**存在しない場合（初回）**:
+
+AskUserQuestion で以下を表示する:
+
+**質問**: 「メタデータの取得が完了しました。続けて組織情報の収集（/sf-memory）を行いますか？初回は実行することを推奨します。」
+
+**選択肢**:
+- `実行する` — そのまま /sf-memory を実行する
+- `あとで` — ここで終了する
+
+**存在する場合（2回目以降）**:
+
+以下のみ伝えて終了する:
+
 ```
 メタデータ取得完了。force-app/ に保存されました。
-
-次にできること:
-  /sf-memory   — 組織を解析して資料を自動生成・更新
 ```
