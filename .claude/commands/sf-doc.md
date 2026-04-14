@@ -227,21 +227,17 @@ sf org login web --alias _doc-tmp
 python -c "
 import re, pathlib
 text = pathlib.Path('docs/catalog/_index.md').read_text(encoding='utf-8')
-# カスタムオブジェクトのAPI名（__c で終わる列）を抽出
-custom = re.findall(r'\|\s*([^\|]+__c)\s*\|', text)
-# 標準オブジェクトのAPI名（__c を含まない、英字のみ）を抽出
-standard = re.findall(r'\|\s*([A-Z][A-Za-z]+)\s*\|', text)
-# 重複除去
-custom = list(dict.fromkeys(c.strip() for c in custom))
-standard = list(dict.fromkeys(s.strip() for s in standard if s.strip() not in ['API名', 'キープレフィックス', 'オブジェクト', 'バージョン']))
-print('CUSTOM:' + ' '.join(custom))
-print('STANDARD:' + ' '.join(standard))
+# テーブル行からAPI名列（2列目）を抽出
+rows = re.findall(r'\|\s*[^\|]+\|\s*([A-Za-z][A-Za-z0-9_]*)\s*\|', text)
+# ヘッダー行・説明文等を除外
+skip = {'API名', 'キープレフィックス', 'オブジェクト', 'バージョン', '定義書'}
+objects = list(dict.fromkeys(r.strip() for r in rows if r.strip() not in skip))
+print(' '.join(objects))
 "
 ```
 
-取得した一覧をもとに AskUserQuestion で **3択** 提示:
-- label: "カスタムオブジェクト（{n}件）"、description: "{カスタムオブジェクトAPI名の一覧（先頭5件…）}"
-- label: "カスタムオブジェクト＋標準オブジェクト（計{n}件）"、description: "カスタム＋使用中の標準オブジェクト"
+取得した一覧をもとに AskUserQuestion で **2択** 提示:
+- label: "_index.md の全オブジェクト（{n}件）"、description: "組織で使用中のカスタム＋標準オブジェクト"
 - label: "Other"（自由入力）: 対象オブジェクトを手動で入力
 
 「Other」が選ばれた場合はテキストで入力してもらう:
@@ -262,14 +258,15 @@ if m:
 "
 ```
 
-取得した一覧（例: `Account Opportunity Contact Knowledge__kav`）を表示したうえで、AskUserQuestion で選択:
+取得した一覧（例: `Account Opportunity Contact Knowledge__kav`）を表示したうえで、AskUserQuestion で **2択** 提示:
 - label: "既存と同じ（{オブジェクト一覧}）" description: "前回と同じオブジェクトで再生成"
-- label: "既存＋追加" description: "既存オブジェクトに追加して生成"
-- label: "全て指定し直す" description: "1から対象を指定する"
+- label: "既存＋追加" description: "テキストで追加するオブジェクトを入力"
 
 **「既存と同じ」選択時:** 前回のオブジェクトリストをそのまま使う。
 **「既存＋追加」選択時:** テキストで追加オブジェクトを入力してもらい、既存リストに結合する。
-**「全て指定し直す」選択時:** テキストで全オブジェクトを入力してもらう。
+
+> 誤ってオブジェクトを消してしまわないよう「全て指定し直す」は提供しない。
+> オブジェクト自体を削除したい場合は Other（自由入力）では対応しない。削除は C-8 完了後に手動で行い、改版履歴に記録する（後述）。
 
 区切り文字は何でもOK（スペース・カンマ・全角スペース等）。
 入力内容を `--objects` に渡す（generate.py 内で名前解決する）。
@@ -318,6 +315,17 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate.py \
 ### C-8: 完了案内
 
 出力パスを表示する。
+
+### オブジェクト・項目の削除について
+
+オブジェクトや項目が組織から削除された場合、generate.py は対応する行・シートを **そのまま削除して出力** する。  
+横線（取り消し線）は付けない。代わりに改版履歴シートに以下の形式で自動記録する:
+
+| 改版日 | 変更種別 | 対象 | 備考 |
+|---|---|---|---|
+| YYYY-MM-DD | 削除 | オブジェクト名 / 項目名 | — |
+
+> generate.py 側でこの記録が未実装の場合は、完了後に手動で改版履歴シートに追記すること。
 
 ブラウザログインを使った場合（SF_ALIAS=_doc-tmp）は後処理として実行:
 ```bash
