@@ -49,3 +49,12 @@ bash scripts/setup-sf-project.sh <alias> sandbox    # Sandboxの場合
 - `あとで` — ここで終了する（あとで /sf-retrieve を実行する）
 
 `取得する` を選択した場合は、続けて /sf-retrieve コマンドを実行する。
+
+`あとで` を選択した場合は、以下を案内して終了する:
+
+```
+セットアップの次のステップ:
+1. /sf-retrieve   — メタデータの取得
+2. /setup-mcp     — 外部ツール連携（任意: Backlog・Notion・Slack 等）
+3. /sf-memory     — 組織情報の記録（初回は本番環境で実施推奨）
+```
