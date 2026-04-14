@@ -8,46 +8,66 @@ Salesforceプロジェクト資料を会話形式で作成します。
 
 ## Step 0: 資料種別の選択
 
-AskUserQuestion で作成する資料を選択:
-- label: "概要書"、description: "プロジェクト概要書 & 業務フロー図 → PPTX"
-- label: "オブジェクト定義書"、description: "オブジェクト・項目定義書 → Excel"
-- label: "機能別設計書"、description: "機能一覧 & 機能別設計書 → Excel（force-app/ + docs/ から自動生成）"
+AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）:
 
-選択結果によって以下のステップへ分岐する:
-- **概要書**           → Step A0（概要書サブメニュー）へ
-- **オブジェクト定義書** → Step 1（既存フロー）へ
-- **機能別設計書**     → Step C（下記）へ
+| # | 資料 | 出力 | 分岐 | 位置付け |
+|---|---|---|---|---|
+| 1 | プロジェクト資料       | PPTX（概要・システム構成図・業務フロー図 UC別） | Step A | ⚠ おまけ（業務知識依存） |
+| 2 | データモデル定義書      | PPTX（ER図・オブジェクト一覧）                  | Step B | ⚠ おまけ（俯瞰用） |
+| 3 | オブジェクト定義書      | Excel（オブジェクト項目定義書）                  | Step C | ◎ 主力 |
+| 4 | 機能別設計書           | Excel（機能一覧＋機能別設計書）                  | Step D | ◎ 主力 |
 
----
-
-## Step A0: 概要書 — サブメニュー
-
-AskUserQuestion でどちらを作成するか選択:
-- label: "プロジェクト概要書"、description: "org-profile.md + requirements.md → PPTX"
-- label: "業務フロー図"、description: "swimlanes.json または requirements.md → PPTX"
-
-- **プロジェクト概要書** → Step A（下記）へ
-- **業務フロー図**        → Step B（下記）へ
+選択肢:
+- label: "プロジェクト資料"、description: "⚠おまけ: 概要+システム構成図+業務フロー図(UC別) → PPTX"
+- label: "データモデル定義書"、description: "⚠おまけ: docs/catalog/ → ER図・オブジェクト一覧 PPTX"
+- label: "オブジェクト定義書"、description: "◎主力: オブジェクト・項目定義書 → Excel"
+- label: "機能別設計書"、description: "◎主力: 機能一覧 & 機能別設計書 → Excel（force-app/ + docs/ から自動生成）"
 
 ---
 
-## Step A: プロジェクト概要書の生成
+## Step A: プロジェクト資料（概要 + システム構成図 + 業務フロー図UC別）
+
+> ⚠ **おまけ機能 — 品質に注意**
+> - 本書の中身は **docs/ 配下の精度に完全依存** する。docs が薄いと骨組みだけのスライドになる。
+> - 既存のプロジェクト資料（要件定義書・業務フロー図・システム構成図など）がある場合は、**先に /sf-memory で読み込ませてから**本コマンドを実行すること。
+> - 図（システム構成図・業務フロー図）は自動配置のため、位置・重なりに限界がある。手直しを想定すること。
+> - 実運用では Step C（オブジェクト定義書）・Step D（機能別設計書）のほうが自動化価値が高い。本Stepは「たたき台」として割り切る。
+
+### 生成されるスライド構成
+
+| # | スライド | 必須/条件 | ソース |
+|---|---|---|---|
+| 1 | 表紙・目次 | 必須 | 自動 |
+| 2 | プロジェクト概要 | 必須 | `docs/overview/org-profile.md` + `docs/requirements/requirements.md` |
+| 3 | システム構成図 | 必須 | `docs/architecture/system.json` |
+| 4 | 業務フロー図（全体） | 必須 | `docs/flow/swimlanes.json`（flow_type: "overall"） |
+| 5 | 業務フロー図（UC別） | 必須 | `docs/flow/swimlanes.json`（flow_type: "usecase"、UCごと1枚） |
+| 6 | 業務フロー図（例外・承認） | 任意 | `docs/flow/swimlanes.json`（flow_type: "exception"） |
+| 7 | データの流れ図 | 任意 | `docs/flow/swimlanes.json`（flow_type: "dataflow"） |
 
 ### A-1: docs/ フォルダの確認
 
-カレントディレクトリに `docs/` フォルダが存在するか確認:
+カレントディレクトリで以下の存在を確認:
+
 ```bash
 python -c "
 import pathlib
 docs = pathlib.Path('docs')
-profile = docs / 'overview' / 'org-profile.md'
-req     = docs / 'requirements' / 'requirements.md'
-print('profile:', profile.exists())
-print('req:', req.exists())
+paths = {
+    'profile':   docs / 'overview'     / 'org-profile.md',
+    'req':       docs / 'requirements' / 'requirements.md',
+    'system':    docs / 'architecture' / 'system.json',
+    'swimlanes': docs / 'flow'         / 'swimlanes.json',
+    'usecases':  docs / 'flow'         / 'usecases.md',
+}
+for k, p in paths.items():
+    print(f'{k}: {p.exists()}')
 "
 ```
 
-両ファイルが存在しない場合:「`docs/overview/org-profile.md` が見つかりません。先に `/sf-memory` を実行してください。」と伝えて終了。
+- `profile` / `req` が両方ない場合:「先に `/sf-memory` を実行してください。」と伝えて終了。
+- `system.json` がない場合: 「システム構成図がスキップされます。/sf-memory でシステム構成情報を追加してください。」と表示して続行。
+- `swimlanes.json` がない場合: 「業務フロー図がスキップされます。/sf-memory で業務フロー情報を追加してください。」と表示して続行。
 
 ### A-2: 作成者名
 
@@ -66,62 +86,74 @@ print('req:', req.exists())
 ### A-4: 生成
 
 AskUserQuestion で確認後、Bash で実行:
+
 ```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_project_overview.py \
+python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_project_doc.py \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{出力フォルダ}" \
   --author "{作成者名}"
 ```
 
-完了後、出力パスを表示して終了。
+完了後、出力パスを表示:
+- `{出力フォルダ}/プロジェクト資料.pptx`
 
 ---
 
-## Step B: 業務フロー図の生成
+## Step B: データモデル定義書
 
-### B-1: ソース確認
+> ⚠ **おまけ機能 — 品質に注意**
+> - オブジェクト・項目・リレーション等の**事実情報はメタデータから正確に取得できる**。一方で「なぜこの項目が必要か」「オブジェクトの業務的意味」「論理ER図」は**メタデータから復元不可**。
+> - 既存のデータモデル設計資料がない場合、**物理ER図と項目一覧のドラフトまで**が現実的な到達点。
+> - 図は自動配置のため、オブジェクト数が多いと重なり・レイアウト崩れが出やすい。最終調整は手作業を想定。
+> - Step C（オブジェクト定義書）のほうが高精度。本Stepは「俯瞰用の1枚もの」として位置付ける。
 
-カレントディレクトリで以下を確認:
+### B-1: docs/catalog/ フォルダの確認
+
 ```bash
 python -c "
 import pathlib
-docs = pathlib.Path('docs')
-sw   = docs / 'flow' / 'swimlanes.json'
-req  = docs / 'requirements' / 'requirements.md'
-print('swimlanes:', sw.exists())
-print('req:', req.exists())
+catalog = pathlib.Path('docs/catalog')
+index = catalog / '_index.md'
+model = catalog / '_data-model.md'
+print('index:', index.exists())
+print('model:', model.exists())
 "
 ```
 
-- `swimlanes.json` が存在 → 「スイムレーン定義ファイルを使用します（高品質モード）」と表示
-- 存在しない・`requirements.md` のみ → 「requirements.md の Mermaid 図から生成します（標準モード）」と表示
+両ファイルが存在しない場合: 「`docs/catalog/` が見つかりません。先に `/sf-memory` を実行してください。」と伝えて終了。
 
-### B-2: 作成者名・出力フォルダ
+### B-2: 作成者名
 
-Step A-2 / A-3 と同様に取得する。
+テキストで聞く:
+```
+作成者名を入力してください（表紙に表示されます）:
+```
 
-### B-3: 生成
+### B-3: 出力フォルダ
+
+テキストで聞く:
+```
+出力先フォルダパスを入力してください:
+```
+
+### B-4: 生成
 
 AskUserQuestion で確認後、Bash で実行:
 ```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_flow.py \
+python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_data_model.py \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{出力フォルダ}" \
   --author "{作成者名}"
 ```
 
-完了後、出力パスを表示して終了。
-
-> **新規プロジェクトで swimlanes.json を作成する場合:**
-> `docs/flow/swimlanes.json` に以下の形式でフロー定義を保存すると次回から高品質モードで生成できる:
-> ```json
-> { "flows": [{ "title": "フロー名", "elements": { "lanes": [...], "steps": [...], "arrows": [...] } }] }
-> ```
-> lanes/steps/arrows の定義はプロジェクトの業務フローに合わせて記述する。
+完了後、出力パスを表示:
+- `{出力フォルダ}/データモデル定義書.pptx`
 
 ---
 
-## Step 1: 接続先の選択
+## Step C: オブジェクト定義書
+
+### C-1: 接続先の選択
 
 まずカレントディレクトリの `.sf/config.json` から target-org を取得する:
 ```bash
@@ -147,27 +179,21 @@ sf org login web --alias _doc-tmp
 ブラウザが開くのでログインしてもらう。完了後 `SF_ALIAS=_doc-tmp` として控える。
 （生成完了後に `sf org logout --target-org _doc-tmp --no-prompt` で一時エイリアスを削除する）
 
----
-
-## Step 2: 作成者名
+### C-2: 作成者名
 
 テキストで聞く:
 ```
 作成者名を入力してください（改版履歴・表紙に表示されます）:
 ```
 
----
-
-## Step 3: 出力フォルダ
+### C-3: 出力フォルダ
 
 テキストで聞く:
 ```
 定義書の出力先フォルダパスを入力してください:
 ```
 
----
-
-## Step 4: 新規 or 更新の自動判定
+### C-4: 新規 or 更新の自動判定
 
 Glob でフォルダ内の `オブジェクト項目定義書_v*.xlsx` を確認する。
 
@@ -177,11 +203,9 @@ Glob でフォルダ内の `オブジェクト項目定義書_v*.xlsx` を確認
 - label: "メジャー更新（vX.Y → vX+1.0）"、description: "赤字をリセットして黒字化"
 
 **既存ファイルがない場合:**
-「新規作成モード（v1.0）で進めます」と表示してStep 5へ。
+「新規作成モード（v1.0）で進めます」と表示して C-5 へ。
 
----
-
-## Step 5: システム名称
+### C-5: システム名称
 
 **新規作成の場合のみ** AskUserQuestion で聞く:
 - label: "スキップ" description: "システム名称なしで作成"
@@ -190,9 +214,7 @@ Glob でフォルダ内の `オブジェクト項目定義書_v*.xlsx` を確認
 「入力する」または Other が選ばれた場合はテキストで入力してもらう。
 更新の場合はこのステップをスキップ（前回の値を自動引き継ぎ）。
 
----
-
-## Step 6: 対象オブジェクトの選択
+### C-6: 対象オブジェクトの選択
 
 **新規作成の場合:**
 テキストで入力してもらう:
@@ -228,9 +250,7 @@ if m:
 
 **スペルチェック:** オブジェクト名に明らかなタイポ（例: Oppotunity → Opportunity）があれば、生成前に確認を取る。
 
----
-
-## Step 7: 確認して生成
+### C-7: 確認して生成
 
 設定内容を表示し、AskUserQuestion で確認:
 - label: "生成する"、description: "定義書の生成を開始する"
@@ -265,9 +285,7 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate.py \
   --version-increment {minor または major}
 ```
 
----
-
-## Step 8: 完了案内
+### C-8: 完了案内
 
 出力パスを表示する。
 
@@ -280,9 +298,9 @@ sf org logout --target-org _doc-tmp --no-prompt
 
 ---
 
-## Step C: 機能別設計書
+## Step D: 機能別設計書（機能一覧 ＋ 機能設計書）
 
-### C-1: 共通情報の取得
+### D-1: 共通情報の取得
 
 テキストで聞く:
 ```
@@ -291,7 +309,7 @@ sf org logout --target-org _doc-tmp --no-prompt
 プロジェクト名を入力してください（Excelの表紙に表示されます）:
 ```
 
-### C-2: force-app/ をスキャンして機能一覧を取得
+### D-2: force-app/ をスキャンして機能一覧を取得
 
 ```bash
 python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
@@ -304,7 +322,7 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
 
 「特定の機能を選択する」の場合はテキストで入力してもらい、対象を絞り込む。
 
-### C-3: 各機能のソースを読んで設計内容を生成
+### D-3: 各機能のソースを読んで設計内容を生成
 
 対象機能ごとに以下を実施する（全機能が多い場合は並列で処理）:
 
@@ -350,7 +368,7 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
    - 保存先: `{出力フォルダ}/.tmp/{api_name}_screen.png`
    - 取得できない場合はスキップ（設計書の「画面イメージ」セクションを省略）
 
-### C-4: 機能設計書.xlsx を生成
+### D-4: 機能設計書.xlsx を生成
 
 各機能について Python スクリプトを実行:
 
@@ -363,7 +381,7 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_design.py \
 
 出力ファイル名: `機能設計書_{機能ID}_{api_name}.xlsx`
 
-### C-5: 機能一覧.xlsx を生成
+### D-5: 機能一覧.xlsx を生成
 
 全機能の JSON から機能一覧用の要約 JSON を作成し実行:
 
@@ -389,7 +407,7 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_list.py \
 ]
 ```
 
-### C-6: 後処理・完了報告
+### D-6: 後処理・完了報告
 
 ```bash
 # 一時ファイルを削除
