@@ -13,19 +13,53 @@ AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）
 | # | 資料 | 出力 | 分岐 |
 |---|---|---|---|
 | 0 | 全て                       | 全資料を順番に生成（A→B→C→D）                                  | Step A〜D |
-| 1 | 業務フロー・データモデル    | PPTX（システム構成図・業務フロー図・ER図・オブジェクト一覧）   | Step A→B |
+| 1 | 業務フロー図               | PPTX（システム構成図・業務フロー図・ER図・オブジェクト一覧）   | Step A→B |
 | 2 | オブジェクト定義書          | Excel（オブジェクト項目定義書）                                 | Step C |
 | 3 | 機能別設計書                | Excel（機能一覧＋機能別設計書）                                 | Step D |
 
 AskUserQuestion のツールを使い、以下の **4つ** を choices に含めて提示する:
 
 - 全て — 全資料を順番に生成（A→B→C→D）
-- 業務フロー・データモデル — システム構成図・業務フロー図・ER図 → PPTX
+- 業務フロー図 — システム構成図・業務フロー図・ER図 → PPTX
 - オブジェクト定義書 — オブジェクト・項目定義書 → Excel
 - 機能別設計書 — 機能一覧 & 機能別設計書 → Excel
 
 「全て」→ A-1 からそのまま D まで順番に実行する。
-「業務フロー・データモデル」→ Step A 完了後そのまま Step B を実行する。
+「業務フロー図」→ Step A 完了後そのまま Step B を実行する。
+
+### Step 0-2: 共通情報の取得（資料種別選択後に一度だけ聞く）
+
+**管理フォルダ**をテキストで聞く:
+```
+資料の管理フォルダパスを入力してください（例: C:/output/my-project）:
+```
+
+入力後、サブフォルダ誤指定チェックを実行:
+```bash
+python -c "
+import pathlib, sys
+p = pathlib.Path(r'{入力値}')
+known = ['業務フロー図', 'オブジェクト定義書', '機能別設計書']
+if p.name in known:
+    print('PARENT:' + str(p.parent))
+else:
+    print('OK:' + str(p))
+"
+```
+出力が `PARENT:` で始まる場合: 「サブフォルダが指定されました。親フォルダ {parent} を管理フォルダとして使用します。」と伝え、親パスを `ROOT` として使用する。
+出力が `OK:` の場合: そのまま `ROOT` として使用する。
+
+**作成者名**をテキストで聞く:
+```
+作成者名を入力してください:
+```
+
+**プロジェクト名**（機能別設計書 / 全て を選択した場合のみ）:
+```
+プロジェクト名を入力してください（Excelの表紙に表示されます）:
+```
+
+> 以降の各Stepでは管理フォルダ・作成者名・プロジェクト名を再度聞かない。
 
 ---
 
@@ -71,33 +105,19 @@ for k, p in paths.items():
 - `system.json` がない場合: 「システム構成図がスキップされます。/sf-memory でシステム構成情報を追加してください。」と表示して続行。
 - `swimlanes.json` がない場合: 「業務フロー図がスキップされます。/sf-memory で業務フロー情報を追加してください。」と表示して続行。
 
-### A-2: 作成者名
+### A-2: 生成
 
-テキストで聞く:
-```
-作成者名を入力してください（表紙に表示されます）:
-```
-
-### A-3: 出力フォルダ
-
-テキストで聞く:
-```
-出力先フォルダパスを入力してください:
-```
-
-### A-4: 生成
-
-AskUserQuestion で確認後、Bash で実行:
-
+出力先サブフォルダを作成してから実行:
 ```bash
+mkdir -p "{ROOT}/業務フロー図"
 python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_project_doc.py \
   --docs-dir "{カレントディレクトリ}/docs" \
-  --output-dir "{出力フォルダ}" \
+  --output-dir "{ROOT}/業務フロー図" \
   --author "{作成者名}"
 ```
 
 完了後、出力パスを表示:
-- `{出力フォルダ}/プロジェクト資料.pptx`
+- `{ROOT}/業務フロー図/業務フロー図.pptx`
 
 ---
 
@@ -123,32 +143,18 @@ print('model:', model.exists())
 
 両ファイルが存在しない場合: 「`docs/catalog/` が見つかりません。先に `/sf-memory` を実行してください。」と伝えて終了。
 
-### B-2: 作成者名
+### B-2: 生成
 
-テキストで聞く:
-```
-作成者名を入力してください（表紙に表示されます）:
-```
-
-### B-3: 出力フォルダ
-
-テキストで聞く:
-```
-出力先フォルダパスを入力してください:
-```
-
-### B-4: 生成
-
-AskUserQuestion で確認後、Bash で実行:
+業務フロー図と同じフォルダ（`{ROOT}/業務フロー図/`）に出力する:
 ```bash
 python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_data_model.py \
   --docs-dir "{カレントディレクトリ}/docs" \
-  --output-dir "{出力フォルダ}" \
+  --output-dir "{ROOT}/業務フロー図" \
   --author "{作成者名}"
 ```
 
 完了後、出力パスを表示:
-- `{出力フォルダ}/データモデル定義書.pptx`
+- `{ROOT}/業務フロー図/データモデル定義書.pptx`
 
 ---
 
@@ -180,23 +186,9 @@ sf org login web --alias _doc-tmp
 ブラウザが開くのでログインしてもらう。完了後 `SF_ALIAS=_doc-tmp` として控える。
 （生成完了後に `sf org logout --target-org _doc-tmp --no-prompt` で一時エイリアスを削除する）
 
-### C-2: 作成者名
+### C-2: 新規 or 更新の自動判定
 
-テキストで聞く:
-```
-作成者名を入力してください（改版履歴・表紙に表示されます）:
-```
-
-### C-3: 出力フォルダ
-
-テキストで聞く:
-```
-定義書の出力先フォルダパスを入力してください:
-```
-
-### C-4: 新規 or 更新の自動判定
-
-Glob でフォルダ内の `オブジェクト項目定義書_v*.xlsx` を確認する。
+`{ROOT}/オブジェクト定義書/` 内の `オブジェクト項目定義書_v*.xlsx` を確認する:
 
 **既存ファイルがある場合:**
 ファイル名を表示したあと、AskUserQuestion でバージョン種別を選択:
@@ -257,17 +249,21 @@ if m:
 - label: "生成する"、description: "定義書の生成を開始する"
 - label: "キャンセル"、description: "中止する"
 
-「生成する」が選ばれたら Bash で実行:
+「生成する」が選ばれたら出力先サブフォルダを作成してから実行:
+
+```bash
+mkdir -p "{ROOT}/オブジェクト定義書"
+```
 
 **SF CLI エイリアスで接続する場合（target-org あり）:**
 ```bash
 python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate.py \
   --sf-alias {SF_ALIAS} \
   --objects {オブジェクトリスト} \
-  --output-dir "{出力フォルダ}" \
+  --output-dir "{ROOT}/オブジェクト定義書" \
   --author "{作成者名}" \
   --system-name "{システム名称}" \
-  --source-file "{既存ファイルのフルパス（新規は省略）}" \
+  --source-file "{ROOT}/オブジェクト定義書/{既存ファイル名（新規は省略）}" \
   --version-increment {minor または major}
 ```
 
@@ -279,10 +275,10 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate.py \
   --security-token {SF_TOKEN} \
   --domain {login または test} \
   --objects {オブジェクトリスト} \
-  --output-dir "{出力フォルダ}" \
+  --output-dir "{ROOT}/オブジェクト定義書" \
   --author "{作成者名}" \
   --system-name "{システム名称}" \
-  --source-file "{既存ファイルのフルパス（新規は省略）}" \
+  --source-file "{ROOT}/オブジェクト定義書/{既存ファイル名（新規は省略）}" \
   --version-increment {minor または major}
 ```
 
@@ -301,14 +297,13 @@ sf org logout --target-org _doc-tmp --no-prompt
 
 ## Step D: 機能別設計書（機能一覧 ＋ 機能設計書）
 
-### D-1: 共通情報の取得
+### D-1: 出力フォルダの準備
 
-テキストで聞く:
+```bash
+mkdir -p "{ROOT}/機能別設計書"
 ```
-出力先フォルダパスを入力してください:
-作成者名を入力してください:
-プロジェクト名を入力してください（Excelの表紙に表示されます）:
-```
+
+`output_dir` = `{ROOT}/機能別設計書`、`tmp_dir` = `{ROOT}/機能別設計書/.tmp` として以降の処理に使用する。
 
 ### D-2: force-app/ をスキャンして機能一覧を取得
 
@@ -329,8 +324,8 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
 
 渡す情報:
 - `project_dir`: カレントディレクトリのフルパス
-- `output_dir`: 出力先フォルダパス
-- `tmp_dir`: `{output_dir}/.tmp`
+- `output_dir`: `{ROOT}/機能別設計書`（apex/ flow/ lwc/ batch/ はこの中に生成される）
+- `tmp_dir`: `{ROOT}/機能別設計書/.tmp`
 - `author`: 作成者名
 - `project_name`: プロジェクト名
 - `sf_alias`: Step C で使用した SF エイリアス（Step C をスキップした場合は `.sf/config.json` から取得）
