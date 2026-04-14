@@ -12,9 +12,21 @@ tools:
 ---
 
 > **注意**: このエージェントはClaude Codeの組み込みmemory機能・CLAUDE.mdへの書き込みは一切行わない。
-> 全ての出力は `docs/` 配下のMarkdownファイルへの保存のみで行う。
+> 全ての出力は `docs/` 配下のMarkdownファイル/JSONファイルへの保存のみで行う。
 
 Salesforce組織・プロジェクトの情報を収集し、`docs/` 配下に情報ファイルを保存・更新してください。
+
+---
+
+## 品質原則（最重要・全カテゴリ共通）
+
+このエージェントの出力は、後続の **プロジェクト資料・データモデル定義書・設計書** の情報源となる。ここの質がそのまま下流成果物の質を決める。
+
+1. **網羅的に読む**: 指定された既存資料（フォルダ/ファイル）は配下を再帰的に**全て**読み込む。サンプリングや抜粋で済ませない。大きいファイルは分割読みで**最後まで**目を通す。
+2. **具体的に書く**: 「顧客」ではなく「新規申込者（未契約のエンドユーザー）」。「承認」ではなく「課長承認（金額≥100万円時）／部長承認（金額≥500万円時）」。抽象語での要約を避ける。
+3. **登場人物・タイミング・経路を落とさない**: 業務フロー系の情報では、誰が・いつ・何をきっかけに・どのシステム/画面で・何を作成/更新するかを必ず揃える。承認経路・例外経路・差戻しルートも抽出する。
+4. **事実と推定を分ける**: メタデータ・既存資料に明記されている事項は事実。そこから補間した箇所は `**[推定]**` を付ける。空欄を勝手に埋めない。
+5. **冗長な確認質問を避ける**: 既存資料が提示されている場合は、その資料を優先的にソースとする。ヒアリングは資料で埋まらない空白のみに限定する。
 
 ---
 
@@ -81,6 +93,9 @@ for table in doc.tables:
 |---|---|---|
 | 組織プロフィール | `docs/overview/org-profile.md` | 会社概要・業種・SF利用目的・構成サマリ |
 | 要件定義書 | `docs/requirements/requirements.md` | AS-IS/TO-BE・機能要件・非機能要件・課題 |
+| システム構成図データ | `docs/architecture/system.json` | システム・利用者・外部連携・データストアの関係 |
+| 業務ユースケース一覧 | `docs/flow/usecases.md` | 新規申込・解約申込・見積依頼等の業務UC一覧 |
+| 業務フロー図データ | `docs/flow/swimlanes.json` | 全体／UC別／例外／データフローのスイムレーン |
 | 変更履歴 | `docs/changelog.md` | 実行履歴・変更点の記録 |
 
 ### Phase 0: 実行モード判定
@@ -153,9 +168,18 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Acti
 ### Phase 2: 既存資料の読み込み
 
 以下のフォルダに既存資料があれば全て読み込む:
-- `docs/overview/` / `docs/requirements/` / `docs/design/` / `docs/catalog/` / `docs/data/`
+- `docs/overview/` / `docs/requirements/` / `docs/architecture/` / `docs/flow/` / `docs/design/` / `docs/catalog/` / `docs/data/`
 
-初回生成モードでファイルがない場合はユーザーに確認する。
+ユーザーから外部フォルダ/ファイルパスが指定された場合は、**再帰的に**全ファイルを読み込む（サンプリング禁止）。
+
+読み取り対象に含める種別:
+- `.md` / `.txt` / `.csv` / `.json` → Read 直接
+- `.pdf` → Read（大きい場合はページ指定で分割）
+- `.xlsx` / `.docx` → 上記の Python 変換で全シート/全段落
+- `.pptx` → `python-pptx` で全スライドの文字情報と画像存在を列挙
+- `.vsdx`・`.drawio` 等の図 → 直接読めない場合は「既存図あり・要確認」として `notes` に記録
+
+初回生成モードで資料がない場合のみ、ユーザーに確認する。
 
 ### Phase 3: 組織プロフィールの生成/更新
 
@@ -170,6 +194,161 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Acti
 - 既存資料がある場合: 資料の内容を主軸に、組織情報で補完・裏付け
 - 既存資料がない場合: 組織情報から逆引きで現状（AS-IS）を整理し、TO-BEは「要ヒアリング」
 - 推測で埋めない: 不明な点は「要確認」として明記
+
+### Phase 4.1: システム構成情報の抽出（system.json）
+
+`docs/architecture/system.json` を生成する。**プロジェクト資料のシステム構成図スライドの唯一のソース**。
+
+**抽出観点（全て可能な限り埋める）**:
+- Salesforce組織（本体）: 組織名・Edition・用途
+- 利用者グループ: どのプロファイル/権限セットの誰が何をするか（営業・カスタマーサポート・管理者・パートナー等）
+- 外部システム連携: 会計システム・MA・SFA・顧客ポータル・決済・認証基盤等。**方向（In/Out/双方向）・方式（REST/SOAP/Bulk/Platform Event/File）・頻度（リアルタイム/日次/月次）** を必ず抽出
+- データストア: 外部DB・ファイルストレージ・メールサーバー等
+- エンドユーザー接点: 画面（LWC・Experience Cloud・メール）・API・モバイル
+
+**ソース優先順位**:
+1. 既存システム構成図（画像/PPT/Visio）がある → 最優先で読み込み再構築
+2. Named Credential / Connected App / Apex HTTP呼び出し箇所 → 連携先の実在証拠
+3. 組織プロフィール・要件定義書 → 利用者・業務範囲
+4. 不明な要素は出力に含めず、`notes` 配列に「要確認」として記録
+
+**スキーマ**:
+```json
+{
+  "system_name": "xxx販売管理システム",
+  "core": { "name": "Salesforce (Sales Cloud)", "role": "顧客・商談・契約管理の中核" },
+  "actors": [
+    { "name": "営業担当", "count": 45, "channels": ["Salesforce (Lightning)", "モバイル"] },
+    { "name": "カスタマーサポート", "count": 12, "channels": ["Salesforce (Console)"] }
+  ],
+  "external_systems": [
+    { "name": "SAP (会計)", "direction": "out", "protocol": "REST", "frequency": "日次バッチ", "purpose": "売上・請求データ連携" },
+    { "name": "Marketo", "direction": "in", "protocol": "REST", "frequency": "リアルタイム", "purpose": "リード取り込み" }
+  ],
+  "data_stores": [
+    { "name": "AWS S3", "purpose": "契約書PDF保管" }
+  ],
+  "touchpoints": [
+    { "name": "顧客ポータル", "platform": "Experience Cloud", "users": "既存顧客" }
+  ],
+  "notes": ["決済基盤の詳細は要確認"]
+}
+```
+
+### Phase 4.2: 業務ユースケース一覧の抽出（usecases.md）
+
+`docs/flow/usecases.md` を生成する。**業務フロー図（UC別）の入口**。
+
+**定義**: ユースケースは「新規申込」「解約申込」「見積依頼」「契約更新」「問合せ対応」のような **業務単位** を指す。Apexクラス単位ではない（粒度が細かすぎる）。目安は1プロジェクトあたり5〜15個。
+
+**抽出観点**:
+- UC名（業務担当者が普段呼んでいる名前）
+- トリガー（誰が何をしたら発動するか）
+- 主な登場人物（社内/社外）
+- 主要オブジェクト（どのオブジェクトが作成・更新されるか）
+- 承認の有無・経路
+- 関連する外部連携
+- 頻度（1日/件、月次等、概算でよい）
+
+**ソース優先順位**:
+1. 既存の業務フロー図・業務マニュアル → 最優先
+2. Flow（ProcessType = AutoLaunchedFlow / Workflow）・Approval Process の命名・説明
+3. カスタムオブジェクト名・レコードタイプ・ステータス項目値
+4. Apexトリガーの対象オブジェクトと処理内容
+
+**フォーマット**: 下記のようなMarkdownテーブル＋詳細リストで構成。
+
+```markdown
+# 業務ユースケース一覧
+
+## UC-01: 新規申込
+- トリガー: 申込フォーム送信（Web）または営業が代理登録
+- 主な登場人物: 申込者／営業担当／審査担当／課長（承認）
+- 主要オブジェクト: Lead → Opportunity → Account/Contract
+- 承認: 課長承認（契約金額 ≥ 100万円）
+- 外部連携: 与信チェック（外部API）、契約書生成（AWS S3）
+- 頻度: 約30件/日
+...
+```
+
+### Phase 4.3: 業務フロー図データの抽出（swimlanes.json）
+
+`docs/flow/swimlanes.json` を生成する。**プロジェクト資料の業務フロー図スライド群の唯一のソース**。
+
+**粒度の絶対ルール**:
+- **登場人物を省略しない**: 「システム」で済ませず「Salesforce (Apex Trigger)」「Marketo」「担当者」のようにレーンを分ける
+- **操作タイミングを落とさない**: 「いつ発生するか」（ボタン押下時／日次バッチ／レコード保存時／画面遷移時）を各ステップに明記
+- **承認経路を必ず入れる**: UC内に承認プロセスがあれば申請→承認→差戻しの分岐を描く
+- **データ作成タイミングを入れる**: 「〇〇を作成」「〇〇のステータスを××に更新」を具体的に
+
+**スキーマ（複数フロー対応）**:
+```json
+{
+  "flows": [
+    {
+      "id": "overall",
+      "flow_type": "overall",
+      "title": "全体業務フロー",
+      "description": "主要UCの時系列全体像",
+      "lanes": [
+        { "name": "申込者", "type": "external_actor" },
+        { "name": "営業担当", "type": "internal_actor" },
+        { "name": "Salesforce", "type": "system" },
+        { "name": "外部連携", "type": "external_system" }
+      ],
+      "steps": [
+        { "id": 1, "lane": "申込者", "title": "申込フォーム送信", "trigger": "Web画面から送信", "output": "Lead作成" },
+        { "id": 2, "lane": "Salesforce", "title": "Lead自動採番・担当割当", "trigger": "Lead作成時 (Flow)", "output": "担当者を自動設定" },
+        { "id": 3, "lane": "営業担当", "title": "初回コンタクト", "trigger": "Lead割当後", "output": "活動登録" }
+      ],
+      "transitions": [
+        { "from": 1, "to": 2 },
+        { "from": 2, "to": 3 }
+      ]
+    },
+    {
+      "id": "uc-01-new-application",
+      "flow_type": "usecase",
+      "title": "UC-01: 新規申込",
+      "usecase_id": "UC-01",
+      "lanes": [...],
+      "steps": [...],
+      "transitions": [
+        { "from": 5, "to": 6, "condition": "契約金額 ≥ 100万円" },
+        { "from": 5, "to": 8, "condition": "契約金額 < 100万円" }
+      ]
+    },
+    {
+      "id": "uc-01-exception",
+      "flow_type": "exception",
+      "title": "UC-01: 例外・差戻し",
+      "parent_usecase_id": "UC-01",
+      "lanes": [...],
+      "steps": [...]
+    },
+    {
+      "id": "dataflow-main",
+      "flow_type": "dataflow",
+      "title": "主要データフロー",
+      "lanes": [...],
+      "steps": [...]
+    }
+  ]
+}
+```
+
+**flow_type の使い分け**:
+| flow_type | 用途 | 必須性 |
+|---|---|---|
+| `overall` | プロジェクト全体の時系列俯瞰（1件） | 必須 |
+| `usecase` | 各UCの詳細フロー（UCごと1件、5〜15件） | 必須（最低3件以上） |
+| `exception` | 例外・差戻し・承認却下経路 | 任意 |
+| `dataflow` | データの流れ（誰が作って誰が使うか） | 任意 |
+
+**生成方針**:
+- 既存の業務フロー図があれば忠実に再現。既存図が複数UCをまとめているなら `overall` に、個別UCごとに分かれているならそれぞれ `usecase` に
+- 既存図がない場合: Flow・ApprovalProcess・Apex Trigger・RecordTypeのステータス遷移から逆引きで組み立て、各ステップに `**[推定]**` マーク
+- lanes の `type`: `external_actor`（社外）/ `internal_actor`（社内ユーザー）/ `system`（Salesforce含む社内システム）/ `external_system`（外部連携先）
 
 ### Phase 5: CLAUDE.md の自動更新
 
@@ -357,13 +536,41 @@ docs/design/
 
 `docs/design/` 配下にmdファイルが存在するか確認する。存在する場合はアップデートモード（手動追記・設計判断の根拠は絶対に消さない）。
 
-### Phase 1: 処理モードの実行
+### Phase 1: 対象コンポーネントの収集
 
-#### モードA: 全機能対象（要件定義書あり）— FR基点
+**ソースは force-app/ と docs/ の両方を必ず使う。** /sf-memory が先に実行されていることを前提とし、docs/ には要件定義書・カタログ・設計書等が既に存在する。
 
-`docs/requirements/requirements.md` の機能要件一覧（FR-XXX）を読み込み、ユーザー確認なしで直ちに各FRの実装種別を判定して設計書を生成する。
+#### 1-1. force-app/ からコンポーネント一覧を取得
 
-| FRの実装種別 | 出力フォルダ |
+```bash
+# Apexクラス（テストクラス除外）
+sf data query -q "SELECT Name, IsTest FROM ApexClass WHERE NamespacePrefix = null ORDER BY Name" --json
+# Apexトリガー
+sf data query -q "SELECT Name, TableEnumOrId FROM ApexTrigger WHERE NamespacePrefix = null" --json
+# フロー
+sf data query -q "SELECT ApiName, ProcessType, Label FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json
+```
+
+フロー数が多い（20件超）場合: 5件ずつバッチで順次処理する。
+
+#### 1-2. 対象の絞り込み（特定機能指定の場合）
+
+ユーザーが機能名・要件番号を指定した場合は、対象をそれに絞る。「全機能」の場合はスキップ。
+
+#### 1-3. 各コンポーネントのソースを読み込む
+
+コンポーネントごとに以下を読む（あるものは全て読む）:
+- `force-app/main/default/classes/{ClassName}.cls` — Apexコード本体
+- `force-app/main/default/flows/{FlowApiName}.flow-meta.xml` — フロー定義
+- `force-app/main/default/lwc/{ComponentName}/` — HTML / JS / meta.xml
+- `force-app/main/default/namedCredentials/` — 外部連携先定義
+- `docs/requirements/requirements.md` — 対応するFR要件（あれば）
+- `docs/catalog/` 配下の関連オブジェクト定義書 — 項目・リレーション情報
+- `docs/design/` 配下の既存設計書（あれば） — 差分更新時の保持内容確認
+
+**ソースがない場合の扱い**: force-app/ にコードが存在しない（要件のみ）場合は骨格を生成し、`**[未実装]**` を明記する。docs/ にも force-app/ にも情報がない項目は「要確認」と明記する。
+
+| コンポーネント種別 | 出力フォルダ |
 |---|---|
 | Apexクラス・トリガー | `apex/` |
 | フロー | `flow/` |
@@ -372,48 +579,17 @@ docs/design/
 | 外部API・Named Credential連携 | `integration/` |
 | 入力規則・数式・ページレイアウト等 | `config/` |
 
-**各種別の生成手順**:
-- Apex: `force-app/main/default/classes/` のクラスファイルを読んで設計書を生成
-- Flow: `force-app/main/default/flows/` のXMLを読む。ない場合は `sf data query -q "SELECT ApiName, ProcessType, Description FROM FlowDefinitionView WHERE ActiveVersionId != null" --json`
-- LWC: `force-app/main/default/lwc/` の `.js`・`.html`・`.js-meta.xml` を読む
-- Integration: `force-app/main/default/namedCredentials/` + Apex内HTTP呼び出し箇所
-- Batch: `Database.Batchable`・`Schedulable` 実装クラスを読む
-
-#### モードB: 特定機能指定
-
-指定されたFRに対応する種別の設計書のみをモードAの手順で生成する。
-
-#### モードC: 逆引き生成（要件定義書なし）— コード基点
-
-```bash
-sf data query -q "SELECT Name, IsTest FROM ApexClass WHERE NamespacePrefix = null ORDER BY Name" --json
-sf data query -q "SELECT Name, TableEnumOrId FROM ApexTrigger WHERE NamespacePrefix = null" --json
-sf data query -q "SELECT ApiName, ProcessType, Label FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json
-```
-
-テストクラスを除外して、各コンポーネントを種別ごとに個別ファイルで生成する。
-推定・不明な部分は `**[逆引き推定]**` と明記する。
-フロー数が多い（20件超）場合: 5件ずつバッチ処理して順次生成する。
-
-#### モードD: 既存資料の取り込み
-
-指定されたファイル/フォルダを読み込み、標準フォーマットに変換・統合する。
-
-#### 「全て」選択時のモード決定ルール
-
-| 状況 | 実行モード |
-|---|---|
-| 要件定義書あり | モードA → 完了後にモードCで要件に紐づかないコンポーネントを補完 |
-| 要件定義書なし | モードCのみ |
-| 特定機能の指定あり | モードB |
-| 既存資料の指定あり | モードD |
-
 ### Phase 2: 設計書の生成
 
 **ファイル命名規則**:
 ```
-docs/design/{種別フォルダ}/{要件番号またはMISC-XXX}_{機能名-kebab-case}.md
+docs/design/{種別フォルダ}/【{機能ID}】{機能名-kebab-case}.md
 ```
+
+- `機能ID` は `docs/feature_ids.yml`（台帳）を参照して決定する。台帳は `scripts/python/sf-doc-mcp/scan_features.py` のみが書き込み可能で、このエージェントは **読み取り専用**。
+- 台帳に該当APIが存在する場合はそのIDを使用する（例: `F-017`）。
+- 台帳に存在しない新規機能（要件定義のみ存在し実装前の場合等）は `機能ID` を `TBD` とし、実装後に scan_features.py で採番される。
+- 採番は scan_features.py が一元管理するため、このエージェント側で番号を独自に振ってはならない。
 
 **設計書テンプレート（各ファイルに含める項目）**:
 
@@ -422,11 +598,12 @@ docs/design/{種別フォルダ}/{要件番号またはMISC-XXX}_{機能名-keba
 
 ## 概要
 | 項目 | 内容 |
-| 要件番号 | FR-XXX / MISC-XXX |
+| 機能ID | F-XXX（`docs/feature_ids.yml` より取得。未実装時は TBD） |
+| 要件番号 | FR-XXX（紐づく要件がない場合は空欄） |
 | 実装種別 | Apex / Flow / LWC / Integration / Batch / Config |
 | 担当オブジェクト | |
 | バージョン | v1.0 |
-| 生成方法 | FR基点 / 逆引き（推定） |
+| ソース | force-app/ + docs/requirements/ + docs/catalog/ |
 
 ## スコープ・ユーザーストーリー
 ## 実現方式（処理フロー・アーキテクチャ）
@@ -452,12 +629,14 @@ docs/design/{種別フォルダ}/{要件番号またはMISC-XXX}_{機能名-keba
 
 全4カテゴリの1周目完了後に実行する。
 
-1. 生成した全 docs/ ファイルを読み込む
+1. 生成した全 docs/ ファイルを読み込む（`docs/architecture/system.json` と `docs/flow/swimlanes.json` / `docs/flow/usecases.md` も含む）
 2. 以下を検出して修正・補完する:
    - **用語の統一**: カテゴリ間で同じものを異なる表記で書いている箇所
    - **矛盾の解消**: org-profile の用語集とカタログの項目名が一致していない等
    - **情報の補完**: 1つのカテゴリで「要確認」だった事項を他カテゴリの情報で埋められる場合
-   - **関連付けの強化**: 設計書 ↔ カタログ ↔ 要件定義書の相互参照を補完
+   - **関連付けの強化**: 設計書 ↔ カタログ ↔ 要件定義書 ↔ usecases.md ↔ swimlanes.json の相互参照を補完
+   - **フロー ↔ 設計書の対応付け**: swimlanes.json のステップが、どのApex/Flow/LWC設計書と対応するかを確認
+   - **system.json ↔ Integration設計書の整合**: 外部連携先の名前・方式・頻度が一致しているか
 3. 修正・補完した内容を各ファイルに反映する
 
 ---

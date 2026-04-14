@@ -181,6 +181,11 @@ def main():
     vm    = VersionManager(args.author)
     diffs = vm.compare(old_objects, metadata_list)
 
+    # 既存ファイルがあり、minor更新で差分ゼロなら何もしない
+    if prev_meta and not is_major and not diffs:
+        print("差分なし: 既存ファイルと一致しているため更新をスキップしました")
+        sys.exit(0)
+
     if not is_major:
         for api_name, diff in diffs.items():
             # 新規オブジェクトはタブ色赤のみ。全項目赤字にしない

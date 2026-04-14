@@ -1,0 +1,223 @@
+"""
+フローチャートPNG生成（機能設計書 / 画面設計書 共通モジュール）。
+
+使用側は generate_flowchart(steps, out_path) を呼ぶだけ。
+steps は {no, title, detail?, node_type?, branch?, main_label?, object_ref?} の配列。
+
+node_type: "start" | "end" | "terminator" | "decision" | "object" | "error" | "process"
+branch:    {text, node_type?, label?}  — 右側に分岐ノードを描く
+object_ref:{text}                      — 右側にオブジェクト(円柱)を描く
+main_label: 直前→このノードの矢印に添えるラベル
+"""
+from __future__ import annotations
+import os as _os
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.font_manager as fm
+    from matplotlib.patches import Ellipse, FancyBboxPatch, Polygon, Rectangle
+    HAS_MPL = True
+except ImportError:
+    HAS_MPL = False
+
+_JP_FONT_PATH = "C:/Windows/Fonts/YuGothR.ttc"
+JP_FONT_PROP = None
+if _os.path.exists(_JP_FONT_PATH) and HAS_MPL:
+    JP_FONT_PROP = fm.FontProperties(fname=_JP_FONT_PATH)
+
+
+def _fpkw():
+    return {"fontproperties": JP_FONT_PROP} if JP_FONT_PROP else {}
+
+
+def _draw_cylinder(ax, cx, cy, w, h, face="#DEEAF1", edge="#6A8CAF", lw=1.0):
+    ry = h * 0.12
+    x0 = cx - w / 2
+    y_top, y_bot = cy + h / 2, cy - h / 2
+    ax.add_patch(Rectangle((x0, y_bot + ry), w, h - 2 * ry,
+                           facecolor=face, edgecolor=edge, linewidth=lw))
+    ax.add_patch(Ellipse((cx, y_bot + ry), w, 2 * ry,
+                         facecolor=face, edgecolor=edge, linewidth=lw))
+    ax.add_patch(Ellipse((cx, y_top - ry), w, 2 * ry,
+                         facecolor=face, edgecolor=edge, linewidth=lw))
+
+
+def _draw_diamond(ax, cx, cy, w, h, face="#FFF2CC", edge="#BF8F00", lw=1.0):
+    pts = [(cx, cy + h/2), (cx + w/2, cy), (cx, cy - h/2), (cx - w/2, cy)]
+    ax.add_patch(Polygon(pts, closed=True, facecolor=face, edgecolor=edge, linewidth=lw))
+
+
+def _draw_ellipse(ax, cx, cy, w, h, face="#0070C0", edge="#004F86", lw=1.2):
+    ax.add_patch(Ellipse((cx, cy), w, h, facecolor=face, edgecolor=edge, linewidth=lw))
+
+
+def _draw_roundrect(ax, cx, cy, w, h, face="#DEEAF1", edge="#6A8CAF", lw=1.0):
+    ax.add_patch(FancyBboxPatch(
+        (cx - w/2, cy - h/2), w, h,
+        boxstyle="round,pad=0.02,rounding_size=0.08",
+        facecolor=face, edgecolor=edge, linewidth=lw,
+    ))
+
+
+def _text(ax, cx, cy, txt, fs=7.0, color="#000000"):
+    if txt is None:
+        return
+    ax.text(cx, cy, txt, ha="center", va="center",
+            fontsize=fs, color=color, **_fpkw())
+
+
+def _arrow(ax, x0, y0, x1, y1, color="#444444", lw=1.1):
+    ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
+                arrowprops=dict(arrowstyle="->", color=color, lw=lw,
+                                shrinkA=0, shrinkB=0))
+
+
+def _label(ax, cx, cy, text, color="#444444"):
+    ax.text(cx, cy, text, ha="center", va="center",
+            fontsize=6.5, color=color,
+            bbox=dict(boxstyle="square,pad=0.15", fc="white", ec=color, lw=0.6),
+            **_fpkw())
+
+
+def _render_shape(ax, cx, cy, w, h, node_type, text):
+    if node_type in ("start", "end", "terminator"):
+        _draw_ellipse(ax, cx, cy, w, h)
+        _text(ax, cx, cy, text, fs=8.5, color="white")
+    elif node_type == "decision":
+        _draw_diamond(ax, cx, cy, w, h)
+        _text(ax, cx, cy, text, fs=6.5)
+    elif node_type == "object":
+        _draw_cylinder(ax, cx, cy, w, h)
+        _text(ax, cx, cy, text, fs=6.5)
+    elif node_type == "error":
+        _draw_roundrect(ax, cx, cy, w, h, face="#F8CBAD", edge="#C55A11")
+        _text(ax, cx, cy, text, fs=6.5)
+    else:
+        _draw_roundrect(ax, cx, cy, w, h, face="#DEEAF1", edge="#6A8CAF")
+        _text(ax, cx, cy, text, fs=6.8)
+
+
+def _wrap(text, limit=12):
+    if text is None:
+        return ""
+    out, line = [], ""
+    for ch in text:
+        line += ch
+        if len(line) >= limit or ch == "\n":
+            out.append(line.rstrip("\n"))
+            line = ""
+    if line:
+        out.append(line)
+    return "\n".join(out)
+
+
+def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
+                       wrap_limit=14):
+    """steps[] からフローチャートPNGを生成する。
+
+    戻り値: True/False（mpl未インストールなら False）
+    """
+    if not HAS_MPL:
+        return False
+
+    nodes = []
+    if add_start_end:
+        nodes.append({"type": "start", "text": "開始"})
+    for step in steps:
+        label_no = str(step.get("no", "")).strip()
+        title = step.get("title", "") or step.get("text", "")
+        if label_no:
+            label = f"{label_no}. {title}"
+        else:
+            label = title
+        nodes.append({
+            "type": step.get("node_type", "process"),
+            "text": _wrap(label, wrap_limit),
+            "branch": step.get("branch"),
+            "main_label": step.get("main_label"),
+            "object_ref": step.get("object_ref"),
+        })
+    if add_start_end:
+        nodes.append({"type": "end", "text": "終了"})
+
+    if not nodes:
+        return False
+
+    BOX_W_PROC, BOX_H_PROC = 1.9, 0.60
+    BOX_W_DEC,  BOX_H_DEC  = 1.9, 0.80
+    BOX_W_OBJ,  BOX_H_OBJ  = 1.3, 0.72
+    BOX_W_TERM, BOX_H_TERM = 1.5, 0.48
+    GAP = 0.75
+
+    total_h = 0.8
+    for n in nodes:
+        t = n["type"]
+        h = BOX_H_TERM if t in ("start", "end", "terminator") else \
+            BOX_H_DEC  if t == "decision" else \
+            BOX_H_OBJ  if t == "object"   else BOX_H_PROC
+        total_h += h + GAP
+    total_h = max(5.0, total_h + 0.6)
+
+    fig, ax = plt.subplots(figsize=(fig_w, total_h))
+    ax.set_xlim(0, fig_w); ax.set_ylim(0, total_h)
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    cx_main   = fig_w * 0.28
+    cx_branch = fig_w * 0.74
+
+    y = total_h - 0.50
+    prev_cy, prev_h = None, None
+
+    for i, n in enumerate(nodes):
+        t = n["type"]
+        if t in ("start", "end", "terminator"):
+            w, h = BOX_W_TERM, BOX_H_TERM
+        elif t == "decision":
+            w, h = BOX_W_DEC, BOX_H_DEC
+        elif t == "object":
+            w, h = BOX_W_OBJ, BOX_H_OBJ
+        else:
+            w, h = BOX_W_PROC, BOX_H_PROC
+
+        cy = y - h / 2
+        _render_shape(ax, cx_main, cy, w, h, t, n["text"])
+
+        if prev_cy is not None:
+            y0 = prev_cy - prev_h / 2
+            y1 = cy + h / 2
+            _arrow(ax, cx_main, y0 - 0.02, cx_main, y1 + 0.02)
+            ml = nodes[i - 1].get("main_label") if i - 1 >= 0 else None
+            if ml:
+                _label(ax, cx_main - 0.22, (y0 + y1) / 2, ml)
+
+        obj = n.get("object_ref")
+        if obj and t != "object":
+            _draw_cylinder(ax, cx_branch, cy, BOX_W_OBJ, BOX_H_OBJ)
+            _text(ax, cx_branch, cy, _wrap(obj.get("text", ""), 10), fs=6.8)
+            _arrow(ax, cx_main + w / 2 + 0.02, cy,
+                   cx_branch - BOX_W_OBJ / 2 - 0.02, cy,
+                   color="#888888", lw=0.9)
+
+        br = n.get("branch")
+        if br:
+            br_text = _wrap(br.get("text", ""), 12)
+            br_type = br.get("node_type", "error")
+            bw, bh = BOX_W_PROC * 1.0, BOX_H_PROC * 1.05
+            _render_shape(ax, cx_branch, cy, bw, bh, br_type, br_text)
+            _arrow(ax, cx_main + w / 2 + 0.02, cy,
+                   cx_branch - bw / 2 - 0.02, cy,
+                   color="#444444", lw=1.1)
+            if br.get("label"):
+                midx = (cx_main + w / 2 + cx_branch - bw / 2) / 2
+                _label(ax, midx, cy + 0.16, br["label"])
+
+        prev_cy, prev_h = cy, h
+        y -= h + GAP
+
+    plt.tight_layout(pad=0.3)
+    plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
