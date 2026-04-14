@@ -387,18 +387,21 @@ docs/catalog/
 #### 全オブジェクト対象の場合
 
 ```bash
+# カスタムオブジェクト一覧
 sf sobject list -s custom
-# 標準オブジェクトの使用状況（レコード件数 > 0 のものを対象に含める）
-sf data query -q "SELECT COUNT() FROM Account" --json
-sf data query -q "SELECT COUNT() FROM Contact" --json
-sf data query -q "SELECT COUNT() FROM Lead" --json
-sf data query -q "SELECT COUNT() FROM Opportunity" --json
-sf data query -q "SELECT COUNT() FROM Case" --json
-sf data query -q "SELECT COUNT() FROM Campaign" --json
-sf data query -q "SELECT COUNT() FROM Product2" --json
-sf data query -q "SELECT COUNT() FROM Task" --json
-sf data query -q "SELECT COUNT() FROM Event" --json
+
+# 標準オブジェクトにカスタム項目が追加されているものを検出
+sf data query -q "SELECT EntityDefinition.QualifiedApiName, COUNT(Id) cnt FROM CustomField WHERE EntityDefinition.IsCustom = false AND NamespacePrefix = null GROUP BY EntityDefinition.QualifiedApiName ORDER BY COUNT(Id) DESC" --json
 ```
+
+force-app/ 配下の Apex クラス・フロー・LWC を読み込み、SOQL FROM 句や参照関係から**実際に利用されている標準オブジェクト**を抽出する。
+
+**標準オブジェクトを定義書化する判断基準（いずれか1つを満たすもの）:**
+- カスタム項目が追加されている
+- force-app/ の Apex / Flow / LWC で直接参照されている（SOQL・DML・変数）
+- レコード件数 > 0 かつ主要なビジネスデータとして使用されている（Account・Contact・Opportunity・Case・Lead 等）
+
+**含めない標準オブジェクト**: システム系（ContentVersion・FeedItem・Group・PermissionSet・ProcessInstance など）は、カスタム項目もなくビジネスロジックと直接関係しない場合は除外する。ただし Apex コードで直接参照している場合は含める。
 
 #### 特定オブジェクト指定の場合
 
@@ -622,7 +625,7 @@ docs/design/{種別フォルダ}/【{機能ID}】{機能名-kebab-case}.md
 
 **設計書の品質基準（最重要）**:
 
-- **処理フローは必ず Mermaid `flowchart TD` で図示する**。テキスト箇条書きだけで済ませない
+- **処理の流れが複数ステップある場合は Mermaid `flowchart TD` で図示する**。単純な1ステップ処理や設定ファイル系は不要。複数の分岐・シーケンスがあれば積極的に使う
 - **スコープ・ユーザーストーリーは具体的に書く**。「As a {役割}, I want {目的}, so that {理由}」形式で、コードから読み取れる役割を推定してでも書く
 - **実現方式には採用/非採用の比較表を含める**。なぜこの実装方式を選んだか（または選ばれているか）を記述する
 - **関連要件・関連設計書のクロスリファレンスを必ず入れる**。docs/requirements/requirements.md と照合し、該当FRを列挙する
@@ -788,6 +791,12 @@ flowchart TD
 ### 主な発見・所見
 ### 要確認事項（優先度順）
 ### 次のアクション
+
+**初回セットアップ完了の場合（org-profile.md が今回新規生成された）:**
+- `/project-doc` を実行して設計書・定義書を生成してください
+- docs/ 内の「推定」「要確認」箇所を確認・修正してください
+
+**2回目以降（アップデート）の場合:**
 - docs/ 内の「推定」「要確認」箇所を確認・修正してください
 - 新機能・項目追加時は該当カテゴリを再実行してください
 ```
