@@ -2,7 +2,7 @@
 description: "Salesforce組織からメタデータを取得する。package.xml の生成と取得対象をクリック選択で指定できる。"
 ---
 
-salesforce-devエージェントとして、Salesforce組織からメタデータを取得してください。
+sf-devエージェントとして、Salesforce組織からメタデータを取得してください。
 
 ## ユーザー入力
 

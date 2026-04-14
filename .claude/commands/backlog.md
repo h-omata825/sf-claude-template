@@ -189,7 +189,7 @@ xlsx 生成完了
 
 | 対応内容 | 担当エージェント |
 |---|---|
-| Apex / LWC / Flow / メタデータ | `salesforce-dev` |
+| Apex / LWC / Flow / メタデータ | `sf-dev` |
 | 本番障害・パフォーマンス問題 | `maintenance` |
 | データ修正・移行 | `data-manager` |
 | 外部API連携 | `integration-dev` |

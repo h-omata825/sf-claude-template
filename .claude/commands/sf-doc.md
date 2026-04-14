@@ -18,12 +18,13 @@ AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）
 | 3 | オブジェクト定義書      | Excel（オブジェクト項目定義書）                  | Step C |
 | 4 | 機能別設計書           | Excel（機能一覧＋機能別設計書）                  | Step D |
 
-選択肢:
-- label: "全て"、description: "全資料を順番に生成（A→B→C→D）"
-- label: "プロジェクト資料"、description: "概要+システム構成図+業務フロー図(UC別) → PPTX"
-- label: "データモデル定義書"、description: "docs/catalog/ → ER図・オブジェクト一覧 PPTX"
-- label: "オブジェクト定義書"、description: "オブジェクト・項目定義書 → Excel"
-- label: "機能別設計書"、description: "機能一覧 & 機能別設計書 → Excel（force-app/ + docs/ から自動生成）"
+AskUserQuestion のツールを使い、以下の **5つ全て** を choices に含めて提示する（1つでも欠けてはならない）:
+
+1. 全て — 全資料を順番に生成（A→B→C→D）
+2. プロジェクト資料 — 概要+システム構成図+業務フロー図(UC別) → PPTX
+3. データモデル定義書 — docs/catalog/ → ER図・オブジェクト一覧 PPTX
+4. オブジェクト定義書 — オブジェクト・項目定義書 → Excel
+5. 機能別設計書 — 機能一覧 & 機能別設計書 → Excel（force-app/ + docs/ から自動生成）
 
 「全て」が選択された場合は A-1 からそのまま D-6 まで順番に実行する。各Stepの確認プロンプト（AskUserQuestion）は通常通り行う。
 
