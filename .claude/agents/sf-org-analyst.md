@@ -147,6 +147,9 @@ sf data query -q "SELECT Name, ApiVersion, Status, CreatedDate, LastModifiedDate
 sf data query -q "SELECT Name, TableEnumOrId, ApiVersion, Status FROM ApexTrigger WHERE NamespacePrefix = null" --json
 # Flow一覧
 sf data query -q "SELECT ApiName, ActiveVersionId, Description, ProcessType FROM FlowDefinitionView" --json
+# 有効ユーザー数（本番環境での実態把握用）
+sf data query -q "SELECT COUNT() FROM User WHERE IsActive = true" --json
+sf data query -q "SELECT Profile.Name, COUNT(Id) cnt FROM User WHERE IsActive = true GROUP BY Profile.Name ORDER BY COUNT(Id) DESC" --json
 # プロファイル・権限セット
 sf data query -q "SELECT Name FROM Profile WHERE UserType = 'Standard'" --json
 sf data query -q "SELECT Name, Label, Description FROM PermissionSet WHERE IsCustom = true AND NamespacePrefix = null" --json
@@ -182,7 +185,7 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Acti
 
 `docs/overview/org-profile.md` を生成（または更新）する。
 
-含める内容: 会社・事業概要（業種推定・根拠）/ データ構成（オブジェクト一覧・ER図・Mermaid）/ カスタマイズ構成（Apex・Flow・外部連携）/ セキュリティ構成（プロファイル・権限セット） / 技術的所見 / ステークホルダーマップ / **用語集（Glossary）**
+含める内容: 会社・事業概要（業種推定・根拠）/ 利用規模（ユーザー数・プロファイル分布）/ データ構成（オブジェクト一覧・ER図・Mermaid）/ カスタマイズ構成（Apex・Flow・外部連携）/ セキュリティ構成（プロファイル・権限セット） / 技術的所見 / ステークホルダーマップ / **用語集（Glossary）**
 
 ### Phase 4: 要件定義書の生成/更新
 
@@ -460,7 +463,30 @@ docs/data/
 
 ### Phase 1: マスタデータの収集（master-data.md）
 
-「件数が少なく全レコードを記録しても問題ないデータ」を対象（目安: 500件以下）。
+**対象**: 「実データレコード」が存在するマスタ系オブジェクト（設定値・コード値・商品情報等）。  
+ピックリスト値の定義はオブジェクト定義（catalog/）に含まれるため、ここには書かない。  
+取引先・連絡先・商談等のCRMデータ（個人情報を含む可能性あるもの）は収集しない。
+
+**Step 1: マスタ系オブジェクトの特定**
+
+以下のクエリで全カスタムオブジェクトのレコード件数を確認し、マスタ系（目安: 1,000件以下）を特定する。
+
+```bash
+sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__c' ORDER BY QualifiedApiName" --json
+```
+
+名称に `Product`, `Master`, `Type`, `Category`, `Config`, `Setting`, `Code`, `Item` が含まれるオブジェクトを優先的にマスタ系と判断する。
+
+**Step 2: マスタ系オブジェクトの全レコード取得**
+
+特定したオブジェクトに対して全項目を取得する（500件を超える場合は件数のみ記録）。
+
+例（GFプロジェクトの場合）:
+```bash
+sf data query -q "SELECT Id, Name, IsActive, Description FROM Product__c WHERE IsActive = true ORDER BY Name" --json
+```
+
+**Step 3: 標準マスタオブジェクト**
 
 ```bash
 sf data query -q "SELECT Name, ProductCode, Family, IsActive, Description FROM Product2 ORDER BY Family, Name" --json
@@ -468,7 +494,13 @@ sf data query -q "SELECT Name, IsActive, IsStandard FROM Pricebook2" --json
 sf data query -q "SELECT Pricebook2.Name, Product2.Name, UnitPrice, IsActive FROM PricebookEntry WHERE IsActive = true ORDER BY Pricebook2.Name, Product2.Name" --json
 ```
 
-カスタム設定・カスタムメタデータの値も収集する。
+**Step 4: カスタムメタデータの全レコード取得**
+
+カスタムメタデータ（`__mdt`）は設定値マスタとして全レコードを記録する。
+```bash
+sf data query -q "SELECT QualifiedApiName FROM CustomObject WHERE QualifiedApiName LIKE '%__mdt'" --json
+```
+各 `__mdt` オブジェクトに対して全レコードを取得する。
 
 ### Phase 2: メールテンプレートの収集（email-templates.md）
 
