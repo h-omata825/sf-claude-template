@@ -222,22 +222,24 @@ sf org login web --alias _doc-tmp
 
 **新規作成の場合:**
 
-まず `docs/catalog/_index.md` からオブジェクト一覧を取得する:
+まず `docs/catalog/_index.md` からオブジェクト一覧を取得する（**標準オブジェクトを先頭に、カスタムオブジェクトを後に**並べる）:
 ```bash
 python -c "
 import re, pathlib
 text = pathlib.Path('docs/catalog/_index.md').read_text(encoding='utf-8')
-# テーブル行からAPI名列（2列目）を抽出
 rows = re.findall(r'\|\s*[^\|]+\|\s*([A-Za-z][A-Za-z0-9_]*)\s*\|', text)
-# ヘッダー行・説明文等を除外
 skip = {'API名', 'キープレフィックス', 'オブジェクト', 'バージョン', '定義書'}
-objects = list(dict.fromkeys(r.strip() for r in rows if r.strip() not in skip))
-print(' '.join(objects))
+all_objs = list(dict.fromkeys(r.strip() for r in rows if r.strip() not in skip))
+standard = [o for o in all_objs if not o.endswith('__c')]
+custom   = [o for o in all_objs if o.endswith('__c')]
+print(' '.join(standard + custom))
 "
 ```
 
+> **注意**: `/sf-memory` を再実行していない場合、新規作成したオブジェクトが _index.md に未反映の可能性がある。その場合は「Other」で手動指定するか、先に `/sf-memory` を再実行すること。
+
 取得した一覧をもとに AskUserQuestion で **2択** 提示:
-- label: "_index.md の全オブジェクト（{n}件）"、description: "組織で使用中のカスタム＋標準オブジェクト"
+- label: "_index.md の全オブジェクト（{n}件）"、description: "最終 /sf-memory 時点の使用中オブジェクト（標準→カスタム順）"
 - label: "Other"（自由入力）: 対象オブジェクトを手動で入力
 
 「Other」が選ばれた場合はテキストで入力してもらう:
@@ -258,15 +260,16 @@ if m:
 "
 ```
 
-取得した一覧（例: `Account Opportunity Contact Knowledge__kav`）を表示したうえで、AskUserQuestion で **2択** 提示:
+取得した一覧（例: `Account Opportunity Contact Knowledge__kav`）を表示したうえで、AskUserQuestion で **3択** 提示:
 - label: "既存と同じ（{オブジェクト一覧}）" description: "前回と同じオブジェクトで再生成"
 - label: "既存＋追加" description: "テキストで追加するオブジェクトを入力"
+- label: "Other" description: "対象オブジェクトを全て手動で指定する"
 
 **「既存と同じ」選択時:** 前回のオブジェクトリストをそのまま使う。
 **「既存＋追加」選択時:** テキストで追加オブジェクトを入力してもらい、既存リストに結合する。
+**「Other」選択時:** テキストで全オブジェクトを入力してもらう。
 
-> 誤ってオブジェクトを消してしまわないよう「全て指定し直す」は提供しない。
-> オブジェクト自体を削除したい場合は Other（自由入力）では対応しない。削除は C-8 完了後に手動で行い、改版履歴に記録する（後述）。
+> 誤ってオブジェクトを消してしまわないよう、通常は「既存と同じ」または「既存＋追加」を使うこと。オブジェクト自体を削除したい場合は C-8 完了後に手動で行い、改版履歴に記録する（後述）。
 
 区切り文字は何でもOK（スペース・カンマ・全角スペース等）。
 入力内容を `--objects` に渡す（generate.py 内で名前解決する）。
@@ -353,11 +356,14 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
   --project-dir "{カレントディレクトリ}"
 ```
 
-スキャン結果を表示し、AskUserQuestion で確認:
-- label: "全機能を生成する"、description: "スキャンで検出された全機能の設計書を生成"
-- label: "特定の機能を選択する"、description: "次のメッセージで機能IDまたは名前を入力"
+> **ソースについて**: スキャン対象は `force-app/` ディレクトリ。docs ではなくメタデータを直接読むため、最終 `/sf-retrieve` 時点の内容が対象になる。新規作成したコンポーネントは `/sf-retrieve` を再実行してから本コマンドを実行すること。
+> 更新時も同様に force-app/ を再スキャンするため、追加・削除されたコンポーネントは自動検出される。
 
-「特定の機能を選択する」の場合はテキストで入力してもらい、対象を絞り込む。
+スキャン結果を表示し、AskUserQuestion で **2択** 確認:
+- label: "全て（{n}件）"、description: "スキャンで検出された全コンポーネントの設計書を生成"
+- label: "Other"、description: "次のメッセージで機能IDまたは名前を入力して絞り込む"
+
+「Other」の場合はテキストで入力してもらい、対象を絞り込む。
 
 ### D-3: sf-design-writer エージェントへ委譲
 
