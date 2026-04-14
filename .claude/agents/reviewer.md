@@ -134,7 +134,7 @@ List<Account> results = Database.query(query);
 
 ---
 
-## ドキュメント・資料レビュー（doc-writer / salesforce-architect 成果物）
+## ドキュメント・資料レビュー（doc-writer / sf-architect 成果物）
 
 ### 共通チェック（全ドキュメント）
 - [ ] 依頼の目的・対象読者に合った内容か

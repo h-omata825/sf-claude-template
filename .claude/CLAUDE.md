@@ -11,11 +11,11 @@
 
 | タスクの性質 | エージェント |
 |---|---|
-| Apex / LWC / Flow / メタデータ実装 / 新規開発 / 機能改修 / デプロイ | `salesforce-dev` |
+| Apex / LWC / Flow / メタデータ実装 / 新規開発 / 機能改修 / デプロイ | `sf-dev` |
 | 本番障害対応 / デバッグログ解析 / パフォーマンス問題 / 保守運用 / 定期メンテ | `maintenance` |
 | テスト計画 / テストケース作成 / バグ調査 / UAT支援 / 品質確認 | `qa-engineer` |
 | コードレビュー / セキュリティ監査 / PRレビュー支援 | `reviewer` |
-| 要件定義 / 設計書作成 / 設計レビュー / オブジェクト定義書 / 影響調査 / ユーザーストーリー | `salesforce-architect` |
+| 要件定義 / 設計書作成 / 設計レビュー / オブジェクト定義書 / 影響調査 / ユーザーストーリー | `sf-architect` |
 | タスク管理 / スプリント計画 / 会議メモ / 進捗報告 / リリース管理 / デプロイ計画 | `project-manager` |
 | 資料作成 / 手順書 / マニュアル / Excel→MD変換 / リリースノート / 報告書 | `doc-writer` |
 | データ移行 / CSVマッピング / Data Loader / SOQL最適化 / バルク処理 / データクレンジング | `data-manager` |
@@ -123,7 +123,7 @@ Git操作・ファイル破壊・本番デプロイは上記 Security & Permissi
 - ハードコード禁止 → カスタムメタデータ / カスタム設定で管理
 - コード変更は必ず Before / After 形式で提示
 
-詳細な種別ごとの規約（Apex/LWC/Flow）は `salesforce-dev.md` の「メタデータ種別ごとの振る舞い」を参照。
+詳細な種別ごとの規約（Apex/LWC/Flow）は `sf-dev.md` の「メタデータ種別ごとの振る舞い」を参照。
 
 ### ドキュメント
 - 結論が冒頭にある・読者・目的が明確・アクションが具体的
@@ -141,10 +141,10 @@ Git操作・ファイル破壊・本番デプロイは上記 Security & Permissi
 
 | 作業の種類 | 実行エージェント | チェック担当 | チェック内容 |
 |---|---|---|---|
-| Apex / LWC / トリガー実装 | salesforce-dev | **reviewer** | コード品質・ガバナ制限・FLS・テストカバレッジ |
-| Flow 作成・変更 | salesforce-dev | **reviewer** | ループ内DML・フォールトパス・命名規則 |
-| テストクラス作成 | salesforce-dev | **qa-engineer** | 正常系/異常系/バルクの網羅性・アサーション品質 |
-| 設計書・要件定義書 | salesforce-architect | **reviewer** | 整合性・スコープ・受入基準の明確性・依頼との一致 |
+| Apex / LWC / トリガー実装 | sf-dev | **reviewer** | コード品質・ガバナ制限・FLS・テストカバレッジ |
+| Flow 作成・変更 | sf-dev | **reviewer** | ループ内DML・フォールトパス・命名規則 |
+| テストクラス作成 | sf-dev | **qa-engineer** | 正常系/異常系/バルクの網羅性・アサーション品質 |
+| 設計書・要件定義書 | sf-architect | **reviewer** | 整合性・スコープ・受入基準の明確性・依頼との一致 |
 | データ移行・SOQL | data-manager | **reviewer** | パフォーマンス・データ整合性・ガバナ制限 |
 | 外部API連携 | integration-dev | **reviewer** | エラーハンドリング・リトライ・セキュリティ |
 | 手順書・資料・マニュアル | doc-writer | **reviewer** | 依頼との一致・構成・アクションの具体性・機密情報混入 |
@@ -227,7 +227,7 @@ Git操作・ファイル破壊・本番デプロイは上記 Security & Permissi
 2. `docs/catalog/` で対象オブジェクトの項目・リレーションを確認
 3. `docs/requirements/requirements.md` で関連するビジネスルール（BR-XXX）を確認
 4. Quality Standards に従って実装（バルク対応・テストクラス付き）
-5. 設計書がない場合は「設計書がありませんが実装しますか？先に `salesforce-architect` に設計書作成を依頼することも可能です」と提案
+5. 設計書がない場合は「設計書がありませんが実装しますか？先に `sf-architect` に設計書作成を依頼することも可能です」と提案
 
 #### 「フロー作って」
 1. `docs/design/flow/` に該当設計書があるか確認

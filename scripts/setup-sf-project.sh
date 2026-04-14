@@ -3,7 +3,7 @@
 # setup-sf-project.sh — Salesforce組織の認証とメタデータ取得
 #
 # setup.sh でプロジェクト作成後、このスクリプトで組織接続を行う。
-# /setup-sf-project コマンドから呼ばれる。
+# /sf-setup コマンドから呼ばれる。
 #
 # 使い方:
 #   bash scripts/setup-sf-project.sh                    # 対話モード
