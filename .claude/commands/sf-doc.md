@@ -1,8 +1,25 @@
 Salesforceプロジェクト資料を会話形式で作成します。
 スクリプトは `c:\ClaudeCode\scripts\python\sf-doc-mcp\` にあります。
-ソース情報はカレントディレクトリの `docs/` フォルダおよび Salesforce 組織から取得します。
 
-**選択肢は必ず AskUserQuestion ツールで提示する（クリック選択）。テキスト入力は名前・パス等の自由記述のみ。**
+**選択肢は必ず AskUserQuestion ツールで提示する（クリック選択）。テキスト入力は名前・パス等の自由記述のみ。AskUserQuestion には自動で「Other（自由入力）」が付くため、choices に Other は含めない。**
+
+---
+
+## 前提: 情報源と依存関係
+
+各資料が依存する docs ファイルと、その最新化に必要なコマンド・選択肢を示す。  
+**資料を生成する前に、対応するコマンドを実行して docs を最新化しておくこと。**
+
+| 資料 | 依存する docs ファイル | 最新化コマンド | コマンド内の選択肢 |
+|---|---|---|---|
+| 業務フロー図 | `docs/overview/org-profile.md`<br>`docs/requirements/requirements.md`<br>`docs/architecture/system.json`<br>`docs/flow/swimlanes.json` | `/sf-memory` | 「組織プロフィール」「要件定義」「システム構成」「業務フロー」を選択（または「全て」） |
+| データモデル定義書 | `docs/catalog/_index.md`<br>`docs/catalog/_data-model.md` | `/sf-memory` | 「オブジェクト・データモデル」を選択（または「全て」） |
+| オブジェクト定義書 | `docs/catalog/_index.md`（対象オブジェクト候補の取得のみ）<br>項目メタデータは SF 組織に直接接続して取得 | `/sf-memory` | 「オブジェクト・データモデル」を選択（または「全て」）<br>※新規オブジェクトがある場合は `/sf-retrieve` も必要 |
+| 機能別設計書 | `force-app/`（docs ではなく直接スキャン） | `/sf-retrieve` | 「standard」または「all」を選択 |
+
+> **新規オブジェクト・コンポーネントを追加した後は**:
+> - オブジェクト定義書 → `/sf-retrieve` → `/sf-memory`（オブジェクト・データモデル）の順で再実行
+> - 機能別設計書 → `/sf-retrieve` のみ再実行
 
 ---
 
@@ -51,7 +68,6 @@ else:
 
 **作成者名**: AskUserQuestion で以下の **2択** のみ提示する:
 - label: "スキップ"、description: "作成者名なし"
-- label: "Other"（自由入力）
 
 **プロジェクト名**（機能別設計書 / 全て を選択した場合のみ）:
 
@@ -238,11 +254,10 @@ print(' '.join(standard + custom))
 
 > **注意**: `/sf-memory` を再実行していない場合、新規作成したオブジェクトが _index.md に未反映の可能性がある。その場合は「Other」で手動指定するか、先に `/sf-memory` を再実行すること。
 
-取得した一覧をもとに AskUserQuestion で **2択** 提示:
+取得した一覧をもとに AskUserQuestion で提示（Other は自動表示）:
 - label: "_index.md の全オブジェクト（{n}件）"、description: "最終 /sf-memory 時点の使用中オブジェクト（標準→カスタム順）"
-- label: "Other"（自由入力）: 対象オブジェクトを手動で入力
 
-「Other」が選ばれた場合はテキストで入力してもらう:
+Other が選ばれた場合はテキストで入力してもらう:
 ```
 対象オブジェクトを入力してください（API名またはラベル名、複数可）:
 ```
@@ -260,14 +275,13 @@ if m:
 "
 ```
 
-取得した一覧（例: `Account Opportunity Contact Knowledge__kav`）を表示したうえで、AskUserQuestion で **3択** 提示:
+取得した一覧（例: `Account Opportunity Contact Knowledge__kav`）を表示したうえで、AskUserQuestion で提示（Other は自動表示）:
 - label: "既存と同じ（{オブジェクト一覧}）" description: "前回と同じオブジェクトで再生成"
 - label: "既存＋追加" description: "テキストで追加するオブジェクトを入力"
-- label: "Other" description: "対象オブジェクトを全て手動で指定する"
 
 **「既存と同じ」選択時:** 前回のオブジェクトリストをそのまま使う。
 **「既存＋追加」選択時:** テキストで追加オブジェクトを入力してもらい、既存リストに結合する。
-**「Other」選択時:** テキストで全オブジェクトを入力してもらう。
+**Other 選択時:** テキストで全オブジェクトを入力してもらう。
 
 > 誤ってオブジェクトを消してしまわないよう、通常は「既存と同じ」または「既存＋追加」を使うこと。オブジェクト自体を削除したい場合は C-8 完了後に手動で行い、改版履歴に記録する（後述）。
 
@@ -359,11 +373,10 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
 > **ソースについて**: スキャン対象は `force-app/` ディレクトリ。docs ではなくメタデータを直接読むため、最終 `/sf-retrieve` 時点の内容が対象になる。新規作成したコンポーネントは `/sf-retrieve` を再実行してから本コマンドを実行すること。
 > 更新時も同様に force-app/ を再スキャンするため、追加・削除されたコンポーネントは自動検出される。
 
-スキャン結果を表示し、AskUserQuestion で **2択** 確認:
+スキャン結果を表示し、AskUserQuestion で提示（Other は自動表示）:
 - label: "全て（{n}件）"、description: "スキャンで検出された全コンポーネントの設計書を生成"
-- label: "Other"、description: "次のメッセージで機能IDまたは名前を入力して絞り込む"
 
-「Other」の場合はテキストで入力してもらい、対象を絞り込む。
+Other が選ばれた場合はテキストで入力してもらい、対象を絞り込む。
 
 ### D-3: sf-design-writer エージェントへ委譲
 
