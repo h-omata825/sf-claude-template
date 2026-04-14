@@ -15,6 +15,9 @@ DEFAULT_BRANCH="main"
 VERSION_FILE=".claude/VERSION"
 TMP_DIR=".claude-upgrade-tmp"
 
+# エラー・中断時も必ず一時フォルダを削除する
+trap 'rm -rf "$TMP_DIR"' EXIT
+
 BRANCH="${1:-$DEFAULT_BRANCH}"
 URL="${2:-$DEFAULT_URL}"
 
