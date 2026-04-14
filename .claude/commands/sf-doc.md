@@ -54,6 +54,18 @@ else:
 - label: "Other"（自由入力）
 
 **プロジェクト名**（機能別設計書 / 全て を選択した場合のみ）:
+
+まず `sfdx-project.json` から自動取得する:
+```bash
+python -c "
+import json, pathlib
+p = pathlib.Path('sfdx-project.json')
+if p.exists():
+    print(json.loads(p.read_text()).get('name', ''))
+"
+```
+取得できた場合: 「プロジェクト名: {name} を使用します」と表示してそのまま使用する。質問しない。
+取得できなかった場合: テキストで聞く:
 ```
 プロジェクト名を入力してください（Excelの表紙に表示されます）:
 ```
@@ -209,10 +221,32 @@ sf org login web --alias _doc-tmp
 ### C-6: 対象オブジェクトの選択
 
 **新規作成の場合:**
-テキストで入力してもらう:
+
+まず `docs/catalog/_index.md` からオブジェクト一覧を取得する:
+```bash
+python -c "
+import re, pathlib
+text = pathlib.Path('docs/catalog/_index.md').read_text(encoding='utf-8')
+# カスタムオブジェクトのAPI名（__c で終わる列）を抽出
+custom = re.findall(r'\|\s*([^\|]+__c)\s*\|', text)
+# 標準オブジェクトのAPI名（__c を含まない、英字のみ）を抽出
+standard = re.findall(r'\|\s*([A-Z][A-Za-z]+)\s*\|', text)
+# 重複除去
+custom = list(dict.fromkeys(c.strip() for c in custom))
+standard = list(dict.fromkeys(s.strip() for s in standard if s.strip() not in ['API名', 'キープレフィックス', 'オブジェクト', 'バージョン']))
+print('CUSTOM:' + ' '.join(custom))
+print('STANDARD:' + ' '.join(standard))
+"
+```
+
+取得した一覧をもとに AskUserQuestion で **3択** 提示:
+- label: "カスタムオブジェクト（{n}件）"、description: "{カスタムオブジェクトAPI名の一覧（先頭5件…）}"
+- label: "カスタムオブジェクト＋標準オブジェクト（計{n}件）"、description: "カスタム＋使用中の標準オブジェクト"
+- label: "Other"（自由入力）: 対象オブジェクトを手動で入力
+
+「Other」が選ばれた場合はテキストで入力してもらう:
 ```
 対象オブジェクトを入力してください（API名またはラベル名、複数可）:
-（例: Account 取引先責任者 Opportunity__c）
 ```
 
 **更新の場合:**
