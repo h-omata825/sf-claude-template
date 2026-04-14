@@ -8,17 +8,18 @@
 #   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project
 #   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project /c/workspace
 #
-#   # 既存プロジェクトに参加（プロジェクトリポジトリをソースに指定）
-#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project . https://github.com/your-org/project-a.git
+#   # GitHubリポジトリと連携する場合（第4引数にリポジトリURLを指定）
+#   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project /c/workspace "" https://github.com/your-org/project-a.git
 #
 # または clone 後:
 #   bash scripts/setup.sh my-project /c/workspace
-#   bash scripts/setup.sh my-project . https://github.com/your-org/project-a.git
+#   bash scripts/setup.sh my-project /c/workspace "" https://github.com/your-org/project-a.git
 #
 # 引数:
 #   $1  プロジェクト名（必須）
 #   $2  作成先パス（省略時: カレントディレクトリ）
-#   $3  ソースURL（省略時: sf-claude-template のデフォルトブランチ）
+#   $3  テンプレートURL（省略時: sf-claude-template のデフォルトブランチ）
+#   $4  プロジェクトGitHubリポジトリURL（省略時: git連携はスキップ）
 # =============================================================================
 set -euo pipefail
 
@@ -29,12 +30,14 @@ TEMPLATE_BRANCH="main"
 # --- 色付き出力 ---
 info()  { echo -e "\033[1;34m[INFO]\033[0m  $*"; }
 ok()    { echo -e "\033[1;32m[OK]\033[0m    $*"; }
+warn()  { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
 error() { echo -e "\033[1;31m[ERROR]\033[0m $*"; exit 1; }
 
 # --- 引数 ---
 PROJECT_NAME="${1:-}"
 TARGET_DIR="${2:-.}"
 TEMPLATE_URL="${3:-$DEFAULT_TEMPLATE_URL}"
+GIT_REMOTE_URL="${4:-}"
 
 if [ -z "$PROJECT_NAME" ]; then
     read -p "プロジェクト名を入力してください（英語）: " PROJECT_NAME
@@ -80,10 +83,17 @@ cp -r "$TMP_DIR/docs" "$PROJECT_PATH/docs"
 # --- クリーンアップ ---
 rm -rf "$TMP_DIR"
 
-# --- バージョン情報表示 ---
-VERSION="不明"
-if [ -f "$PROJECT_PATH/.claude/VERSION" ]; then
-    VERSION=$(cat "$PROJECT_PATH/.claude/VERSION" | tr -d '[:space:]')
+# --- Git 連携 ---
+if [ -n "$GIT_REMOTE_URL" ]; then
+    info "GitHubリポジトリと連携中..."
+    cd "$PROJECT_PATH"
+    git init
+    git remote add origin "$GIT_REMOTE_URL"
+    git add .
+    git commit -m "chore: initial setup with sf-claude-template"
+    git push -u origin main
+    ok "GitHubリポジトリと連携完了: $GIT_REMOTE_URL"
+    cd - > /dev/null
 fi
 
 # --- 完了 ---
@@ -93,9 +103,19 @@ echo "  セットアップ完了"
 echo "=========================================="
 echo ""
 echo "  プロジェクト: $PROJECT_PATH"
-echo "  テンプレート: $TEMPLATE_BRANCH ($VERSION)"
+if [ -n "$GIT_REMOTE_URL" ]; then
+    echo "  Git: $GIT_REMOTE_URL"
+fi
 echo ""
 echo "  次のステップ:"
+if [ -z "$GIT_REMOTE_URL" ]; then
+    echo "    0. （推奨）GitHubでリポジトリを作成して連携する:"
+    echo "         cd $PROJECT_PATH"
+    echo "         git init && git remote add origin <URL>"
+    echo "         git add . && git commit -m 'chore: initial setup'"
+    echo "         git push -u origin main"
+    echo ""
+fi
 echo "    1. /sf-setup を実行（組織認証・メタデータ取得）"
 echo "    2. CLAUDE.md を編集してプロジェクト固有情報を記入"
 echo "    3. /setup-mcp を実行してGitHub連携を設定"
