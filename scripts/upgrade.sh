@@ -3,17 +3,19 @@
 # upgrade.sh — テンプレートリポジトリから .claude/ 配下を更新する
 #
 # 使い方:
-#   bash scripts/upgrade.sh                      # develop ブランチの最新版
-#   bash scripts/upgrade.sh v1.2.0               # 指定タグ/ブランチ
-#   bash scripts/upgrade.sh develop <URL>        # 別リポジトリ
+#   bash scripts/upgrade.sh            # main ブランチの最新版
+#   bash scripts/upgrade.sh develop    # ブランチ指定
+#   bash scripts/upgrade.sh main <URL> # 別リポジトリ
 # =============================================================================
 set -euo pipefail
 
 # --- 設定 ---
 DEFAULT_URL="https://github.com/h-omata825/sf-claude-template.git"
 DEFAULT_BRANCH="main"
-VERSION_FILE=".claude/VERSION"
 TMP_DIR=".claude-upgrade-tmp"
+
+# エラー・中断時も必ず一時フォルダを削除する
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 BRANCH="${1:-$DEFAULT_BRANCH}"
 URL="${2:-$DEFAULT_URL}"
@@ -28,34 +30,14 @@ error() { echo -e "\033[1;31m[ERROR]\033[0m $*"; exit 1; }
 command -v git >/dev/null 2>&1 || error "Git がインストールされていません"
 [ -d ".claude" ] || error ".claude/ が見つかりません。プロジェクトのルートで実行してください"
 
-# --- 現在のバージョン取得 ---
-CURRENT_VERSION="不明"
-if [ -f "$VERSION_FILE" ]; then
-    CURRENT_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
-fi
-info "現在のバージョン: $CURRENT_VERSION"
-
-# --- 一時フォルダのクリーンアップ ---
-if [ -d "$TMP_DIR" ]; then
-    warn "前回の一時フォルダが残っています。削除します"
-    rm -rf "$TMP_DIR"
-fi
-
 # --- テンプレート取得 ---
 info "テンプレートを取得中... (${URL} @ ${BRANCH})"
 if ! git clone --depth 1 --branch "$BRANCH" "$URL" "$TMP_DIR" 2>/dev/null; then
     error "テンプレートの取得に失敗しました。URL とブランチ/タグを確認してください"
 fi
 
-# --- テンプレートのバージョン取得 ---
-TEMPLATE_VERSION="不明"
-if [ -f "$TMP_DIR/$VERSION_FILE" ]; then
-    TEMPLATE_VERSION=$(cat "$TMP_DIR/$VERSION_FILE" | tr -d '[:space:]')
-fi
-
-# タグ情報も取得
-TEMPLATE_TAG=$(cd "$TMP_DIR" && git describe --tags --exact-match 2>/dev/null || echo "タグなし")
-info "テンプレートバージョン: $TEMPLATE_VERSION (${TEMPLATE_TAG})"
+# テンプレートのコミットハッシュ（表示用）
+TEMPLATE_COMMIT=$(cd "$TMP_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "不明")
 
 # --- 差分チェック ---
 CHANGES=()
@@ -80,13 +62,6 @@ fi
 if [ -f "$TMP_DIR/.claude/settings.json" ]; then
     if ! diff -q ".claude/settings.json" "$TMP_DIR/.claude/settings.json" >/dev/null 2>&1; then
         CHANGES+=(".claude/settings.json（権限設定）")
-    fi
-fi
-
-# .claude/VERSION
-if [ -f "$TMP_DIR/$VERSION_FILE" ]; then
-    if ! diff -q "$VERSION_FILE" "$TMP_DIR/$VERSION_FILE" >/dev/null 2>&1; then
-        CHANGES+=("$VERSION_FILE")
     fi
 fi
 
@@ -129,7 +104,7 @@ done
 # スクリプト（サブディレクトリ含む再帰チェック）
 if [ -d "$TMP_DIR/scripts" ]; then
     while IFS= read -r f; do
-        rel="${f#$TMP_DIR/}"  # scripts/python/sf-doc-mcp/generate.py 等
+        rel="${f#$TMP_DIR/}"
         if [ ! -f "$rel" ]; then
             ADDITIONS+=("$rel（新規）")
         elif ! diff -q "$rel" "$f" >/dev/null 2>&1; then
@@ -143,7 +118,6 @@ TOTAL=$(( ${#CHANGES[@]} + ${#ADDITIONS[@]} + ${#DELETIONS[@]} ))
 
 if [ "$TOTAL" -eq 0 ]; then
     ok "テンプレートは最新です。変更はありません。"
-    rm -rf "$TMP_DIR"
     exit 0
 fi
 
@@ -168,8 +142,8 @@ echo ""
 echo "  合計: ${TOTAL}件の変更"
 echo ""
 echo "  ※ 以下は変更されません:"
-echo "    - CLAUDE.md（プロジェクト固有ルール → /sync で管理）"
-echo "    - docs/（プロジェクト資材 → /sync で管理）"
+echo "    - CLAUDE.md（プロジェクト固有ルール）"
+echo "    - docs/（プロジェクト資材）"
 echo "    - .mcp.json（個人設定）"
 echo "    - force-app/（Salesforceメタデータ）"
 echo ""
@@ -178,7 +152,6 @@ echo ""
 read -p "適用しますか？ (y/N): " confirm
 if [[ ! "$confirm" =~ ^[yY] ]]; then
     info "キャンセルしました"
-    rm -rf "$TMP_DIR"
     exit 0
 fi
 
@@ -193,9 +166,6 @@ info "適用中..."
 
 # settings.json
 [ -f "$TMP_DIR/.claude/settings.json" ] && cp "$TMP_DIR/.claude/settings.json" .claude/settings.json
-
-# VERSION
-[ -f "$TMP_DIR/$VERSION_FILE" ] && cp "$TMP_DIR/$VERSION_FILE" "$VERSION_FILE"
 
 # エージェント
 for f in "$TMP_DIR"/.claude/agents/*.md; do
@@ -244,23 +214,12 @@ if [ -f "$TMP_DIR/scripts/upgrade.sh" ]; then
     cp "$TMP_DIR/scripts/upgrade.sh" scripts/upgrade.sh
 fi
 
-# --- クリーンアップ ---
-rm -rf "$TMP_DIR"
-
-# --- Git 自動コミット・プッシュ ---
+# --- Git コミット（リポジトリがある場合のみ・pushは手動） ---
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    COMMIT_MSG="chore: upgrade template to ${TEMPLATE_VERSION}"
-
-    # 変更をステージング
     git add .claude/ scripts/ .gitignore 2>/dev/null || true
-
-    # コミット・push（変更がある場合のみ）
     if ! git diff --cached --quiet; then
-        git commit -m "$COMMIT_MSG"
-        ok "コミット: $COMMIT_MSG"
-
-        git push origin HEAD
-        ok "push: $(git rev-parse --abbrev-ref HEAD)"
+        git commit -m "chore: upgrade template (${TEMPLATE_COMMIT})"
+        ok "コミット完了。push は手動で実行してください: git push origin HEAD"
     else
         info "Git: コミット対象の変更なし（スキップ）"
     fi
@@ -274,7 +233,6 @@ echo "=========================================="
 echo "  アップグレード完了"
 echo "=========================================="
 echo ""
-echo "  バージョン: $CURRENT_VERSION → $TEMPLATE_VERSION"
-echo "  ソース: $URL @ $BRANCH"
+echo "  ソース: $URL @ $BRANCH ($TEMPLATE_COMMIT)"
 echo "  変更件数: ${TOTAL}件"
 echo ""
