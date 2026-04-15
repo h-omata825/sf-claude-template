@@ -114,9 +114,11 @@ def _wrap(text, limit=12):
 
 
 def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
-                       wrap_limit=14):
+                       wrap_limit=14, target_h=None):
     """steps[] からフローチャートPNGを生成する。
 
+    target_h: 生成する図の目標高さ（インチ）。指定すると自動計算値より優先される。
+              処理内容の行高さに合わせて縦幅を揃えるために使用する。
     戻り値: True/False（mpl未インストールなら False）
     """
     if not HAS_MPL:
@@ -159,6 +161,8 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
             BOX_H_OBJ  if t == "object"   else BOX_H_PROC
         total_h += h + GAP
     total_h = max(5.0, total_h + 0.6)
+    if target_h is not None:
+        total_h = max(total_h, target_h)
 
     fig, ax = plt.subplots(figsize=(fig_w, total_h))
     ax.set_xlim(0, fig_w); ax.set_ylim(0, total_h)
