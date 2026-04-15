@@ -367,8 +367,23 @@ def main():
         is_initial      = True
         print("新規作成モード: v1.0")
 
-    # ── 差分計算 ────────────────────────────────────────────
-    diffs = compare_features(old_features, features)
+    # ── 部分更新: 入力にない機能を _meta から保持してマージ ──────
+    # 全件処理時は features = old_features と同じ範囲なので影響なし。
+    # 一部機能のみ指定時は、指定外の機能を保持して削除されるのを防ぐ。
+    if prev_meta and not is_major and old_features:
+        input_ids  = {f.get("id") for f in features if f.get("id")}
+        preserved  = [f for f in old_features if f.get("id") not in input_ids]
+        old_subset = [f for f in old_features if f.get("id") in input_ids]
+        # 差分は「今回処理した機能」のみで計算する
+        diffs = compare_features(old_subset, features)
+        # xlsx に書く完全リスト = 今回の更新分 + 保持分
+        features = features + preserved
+        n_preserved = len(preserved)
+        if n_preserved:
+            print(f"  [INFO] {n_preserved}件の機能を _meta から保持（入力外）")
+    else:
+        diffs = compare_features(old_features, features)
+
     if prev_meta and not is_major and not has_any_diff(diffs):
         print("差分なし: 既存ファイルと一致しているため更新をスキップしました")
         sys.exit(0)
