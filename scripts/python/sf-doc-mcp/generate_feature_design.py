@@ -260,8 +260,11 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
     for step in data.get("steps", []):
         step_no = step.get("no", "")
         is_changed = step_no in changed_step_nos
-        # ステップ行（タイトル）
-        set_h(ws, row, 26)
+        # ステップ行（タイトル）— 折り返しを考慮して高さを動的計算
+        title_text = step.get("title", "")
+        TITLE_CPL = 9  # 列幅4.2×4列 ≈ 9日本語文字/行
+        t_lines = max(1, -(-len(title_text) // TITLE_CPL))  # 切り上げ除算
+        set_h(ws, row, max(22, t_lines * 18 + 4))
         c_no = MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, step_no,
                   bold=True, border=B_all(), h="center", bg=C_STEP_BG)
         c_t  = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, step.get("title", ""),
