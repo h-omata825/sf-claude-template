@@ -48,27 +48,31 @@ AskUserQuestion のツールを使い、以下の **4つ** を choices に含め
 
 ### Step 0-2: 共通情報の取得（資料種別選択後に一度だけ聞く）
 
-**管理フォルダ**: テキストメッセージで直接聞く。AskUserQuestion は使わず、選択肢・例も表示しない:
+> **テキスト入力の必須ルール**: チャットでの入力を求めたら、ユーザーが返答するまで次の処理・質問には進まない。
+
+**管理フォルダ**: チャットで直接聞く。AskUserQuestion は使わず、選択肢・例も表示しない:
 ```
 資料の管理フォルダパスを入力してください:
 ```
 
-入力後、サブフォルダ誤指定チェックを実行:
+入力後、ROOT 解決スクリプトを実行:
 ```bash
 python -c "
 import pathlib, sys
 p = pathlib.Path(r'{入力値}')
 known = ['業務フロー図', 'オブジェクト定義書', '機能別設計書']
-if p.name in known:
-    print('PARENT:' + str(p.parent))
-else:
-    print('OK:' + str(p))
+# パス内のどこかに既知のサブフォルダ名があれば、その親を ROOT とする
+for part in [p] + list(p.parents):
+    if part.name in known:
+        print('ROOT:' + str(part.parent))
+        sys.exit()
+print('ROOT:' + str(p))
 "
 ```
-出力が `PARENT:` で始まる場合: 「サブフォルダが指定されました。親フォルダ {parent} を管理フォルダとして使用します。」と伝え、親パスを `ROOT` として使用する。
-出力が `OK:` の場合: そのまま `ROOT` として使用する。
+出力の `ROOT:` 以降を `ROOT` として控える。  
+指定値が調整された場合は「{調整後パス} を管理フォルダとして使用します」と伝える。
 
-**作成者名**: AskUserQuestion で以下の **2択** のみ提示する:
+**作成者名**: AskUserQuestion で以下の **1択** のみ提示する:
 - label: "スキップ"、description: "作成者名なし"
 
 **プロジェクト名**（機能別設計書 / 全て を選択した場合のみ）:
@@ -82,11 +86,9 @@ if p.exists():
     print(json.loads(p.read_text()).get('name', ''))
 "
 ```
-取得できた場合: 「プロジェクト名: {name} を使用します」と表示してそのまま使用する。質問しない。
-取得できなかった場合: テキストで聞く:
-```
-プロジェクト名を入力してください（Excelの表紙に表示されます）:
-```
+AskUserQuestion で提示（1択＋Other自動）:
+- 取得できた場合: label: "{name}（sfdx-project.json から取得）"
+- 取得できなかった場合: label: "スキップ"、description: "プロジェクト名なし"
 
 > 以降の各Stepでは管理フォルダ・作成者名・プロジェクト名を再度聞かない。
 
@@ -220,8 +222,8 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_data_model.py \
 - フィールドメタデータは実行時に SF組織から直接取得するため、別途最新化不要
 
 AskUserQuestion で確認:
-- label: "最新化済み・このまま続ける"
-- label: "_index.md を更新してから続ける（/sf-memory カテゴリ2 を実行して終了）"
+- label: "このまま続ける"、description: "フィールドデータはSF組織から直接取得するため常に最新。_index.md の更新は新規オブジェクト追加時のみ必要"
+- label: "/sf-memory カテゴリ2 を実行してから続ける（終了）"、description: "Salesforceに新しいオブジェクトを追加し、選択候補に追加したい場合"
 
 ### C-1: 接続先の選択
 
@@ -237,9 +239,8 @@ if p.exists():
 ```
 
 **target-org が取得できた場合:**
-その1件だけを AskUserQuestion で提示（その他で手動入力も可能）:
-- label: "{alias}（このプロジェクトのデフォルト組織）" description: ".sf/config.json で設定されている組織"
-- label: "その他" description: "別の組織のエイリアスを手動入力"
+AskUserQuestion で提示（1択＋Other自動）:
+- label: "{alias}（このプロジェクトのデフォルト組織）"、description: ".sf/config.json で設定されている組織"
 
 **target-org が取得できなかった場合:**
 「このフォルダにはSalesforce組織が設定されていません。ブラウザでログインします」と伝え、以下を実行:
@@ -263,12 +264,16 @@ sf org login web --alias _doc-tmp
 
 ### C-5: システム名称
 
-**新規作成の場合のみ** AskUserQuestion で聞く:
-- label: "スキップ" description: "システム名称なしで作成"
-- label: "入力する" description: "システム名称を指定する"（Otherで自由入力）
+新規・更新どちらでも毎回確認する。
 
-「入力する」または Other が選ばれた場合はテキストで入力してもらう。
-更新の場合はこのステップをスキップ（前回の値を自動引き継ぎ）。
+**新規作成の場合:** `docs/overview/org-profile.md` からシステム名を取得する（`システム名`・`system_name` 等のフィールドを探す）。
+**更新の場合:** 既存ファイルの `_meta` シートから前回値を読む（`read_meta()` の `system_name` フィールド）。
+
+AskUserQuestion で提示（1択＋Other自動）:
+- 取得/読込できた場合: label: "{値}（前回/自動取得）"、description: "そのまま使用する"
+- 取得できなかった場合: label: "スキップ"、description: "システム名称なし"
+
+Other が選ばれた場合はチャットで入力してもらう。
 
 ### C-6: 対象オブジェクトの選択
 
