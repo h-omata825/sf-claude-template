@@ -429,9 +429,9 @@ sf org logout --target-org _doc-tmp --no-prompt
 
 AskUserQuestion で確認:
 - label: "生成開始"、description: "force-app/ と docs/design/ が最新の状態で進める"
-- label: "WF最新化してから生成（終了）"、description: "/sf-retrieve → /sf-memory Cat.4 の順で実行してから改めて本コマンドを実行する"
+- label: "先に最新化する"、description: "/sf-retrieve → /sf-memory Cat.4 を実行してから改めて /sf-doc を実行する"
 
-「WF最新化してから生成」が選ばれた場合: 以下を順番に実行してから終了する。
+「先に最新化する」が選ばれた場合: 以下を順番に実行してから終了する。
 ```
 1. /sf-retrieve を実行（standard または all を選択）
 2. /sf-memory を実行（カテゴリ4「設計・機能仕様」を選択）
