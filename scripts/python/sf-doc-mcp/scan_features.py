@@ -50,6 +50,22 @@ def extract_javadoc(path: Path) -> str:
     return ""
 
 
+def extract_trigger_handler(trigger_path: Path) -> str | None:
+    """トリガーファイルからハンドラークラス名を抽出する。
+    見つからない場合は {TriggerStem}Handler を推測して返す。
+    """
+    try:
+        text = trigger_path.read_text(encoding="utf-8", errors="ignore")
+        m = re.search(r'\b(\w+Handler)\b', text)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    # フォールバック: OpportunityTrigger → OpportunityTriggerHandler
+    stem = trigger_path.stem
+    return f"{stem}Handler"
+
+
 def classify_apex(path: Path) -> str:
     """Apexクラスの種別を判定する (Batch / Apex)
 
@@ -112,24 +128,31 @@ def scan(project_dir: Path) -> list[dict]:
         }
         features.append(entry)
 
-    # --- Apex / Trigger / Batch ---
-    for folder, ftype in [("classes", "Apex"), ("triggers", "Trigger")]:
-        base = force_app / folder
-        if not base.exists():
-            continue
+    # --- Apex / Batch ---
+    base = force_app / "classes"
+    if base.exists():
         for cls_file in sorted(base.glob("*.cls")):
-            if ftype == "Apex":
-                classified = classify_apex(cls_file)
-                if classified is None:
-                    continue
-                actual_type = classified
-            else:
-                actual_type = "Trigger"
-            _add(actual_type, cls_file.stem, {
+            classified = classify_apex(cls_file)
+            if classified is None:
+                continue
+            _add(classified, cls_file.stem, {
                 "name":        cls_file.stem,
                 "overview":    extract_javadoc(cls_file),
                 "source_file": cls_file.as_posix(),
                 "design_doc":  get_design_doc(docs_design, cls_file.stem),
+            })
+
+    # --- Trigger（ハンドラークラスに吸収）---
+    base = force_app / "triggers"
+    if base.exists():
+        for trig_file in sorted(base.glob("*.trigger")):
+            handler = extract_trigger_handler(trig_file)
+            _add("Trigger", trig_file.stem, {
+                "name":        trig_file.stem,
+                "overview":    "",
+                "source_file": trig_file.as_posix(),
+                "design_doc":  None,
+                "absorb_into": handler,   # ハンドラークラスの steps/prerequisites に吸収
             })
 
     # --- Flow ---
@@ -146,14 +169,23 @@ def scan(project_dir: Path) -> list[dict]:
                 "design_doc":  get_design_doc(docs_design, flow_file.stem),
             })
 
-    # --- LWC ---
+    # --- LWC（モーダルコンポーネントは親に吸収）---
     base = force_app / "lwc"
     if base.exists():
+        lwc_names = {p.name for p in base.iterdir() if p.is_dir()}
         for comp_dir in sorted(p for p in base.iterdir() if p.is_dir()):
-            _add("LWC", comp_dir.name, {
-                "name":        comp_dir.name,
+            name = comp_dir.name
+            # モーダル検出: 名前が "modal"（大文字小文字不問）で終わる
+            parent_name = None
+            if name.lower().endswith("modal"):
+                candidate = name[:-5]   # "Modal" / "modal" = 5文字
+                if candidate in lwc_names:
+                    parent_name = candidate
+            _add("LWC", name, {
+                "name":        name,
                 "source_file": comp_dir.as_posix(),
-                "design_doc":  get_design_doc(docs_design, comp_dir.name),
+                "design_doc":  get_design_doc(docs_design, name),
+                "absorb_into": parent_name,   # None = 独立設計書を作る
             })
 
     # --- Aura ---
