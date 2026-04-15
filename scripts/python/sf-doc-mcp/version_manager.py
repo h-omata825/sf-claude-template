@@ -98,26 +98,13 @@ class VersionManager:
                 "author": self._author,
             }]
 
-        # メジャー更新：差分の有無にかかわらず「メジャーバージョンアップ」を先頭行に追加
+        # メジャー更新：1行で「メジャーバージョンアップ」を記録
         if is_major:
-            entries = [{
+            return [{
                 "no": start_no, "version": version, "date": today,
                 "sheet": "全シート", "content": "メジャーバージョンアップ（注記リセット）",
                 "author": self._author,
             }]
-            if diffs:
-                label_map = {
-                    m["object_api_name"]: m.get("object_info", {}).get("label", m["object_api_name"])
-                    for m in metadata_list
-                }
-                for api_name, diff in diffs.items():
-                    entries.append({
-                        "no": "", "version": "", "date": "",
-                        "sheet": label_map.get(api_name, api_name),
-                        "content": _summarize(diff),
-                        "author": "",
-                    })
-            return entries
 
         if not diffs:
             return [{
@@ -131,18 +118,17 @@ class VersionManager:
             for m in metadata_list
         }
 
-        entries = []
-        for i, (api_name, diff) in enumerate(diffs.items()):
-            entries.append({
-                "no":      start_no if i == 0 else "",
-                "version": version  if i == 0 else "",
-                "date":    today    if i == 0 else "",
-                "sheet":   label_map.get(api_name, api_name),
-                "content": _summarize(diff),
-                "author":  self._author if i == 0 else "",
-            })
-
-        return entries
+        # 変更箇所・内容を1行に集約
+        sheets   = [label_map.get(api, api) for api in diffs]
+        contents = [_summarize(diff) for diff in diffs.values()]
+        return [{
+            "no":      start_no,
+            "version": version,
+            "date":    today,
+            "sheet":   "・".join(sheets),
+            "content": "・".join(contents),
+            "author":  self._author,
+        }]
 
 
 # ------------------------------------------------------------------ #
