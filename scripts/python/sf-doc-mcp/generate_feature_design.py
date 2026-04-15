@@ -300,7 +300,13 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
 
             sdetail = sub.get("detail", "")
             if sdetail:
-                slines = max(2, len(sdetail.splitlines()) + 1)
+                # 改行数 + 折り返し行数（列幅約32文字）の合計で高さ推定
+                APPROX_CHARS_SUB = 32
+                wrap_lines = sum(
+                    max(1, (len(ln) + APPROX_CHARS_SUB - 1) // APPROX_CHARS_SUB)
+                    for ln in sdetail.splitlines() or [""]
+                )
+                slines = max(2, wrap_lines + 1)
                 set_h(ws, row, max(28, slines * 13))
                 MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, "",
                    border=B_all(), bg=C_SUB_BG)
