@@ -40,7 +40,7 @@ from version_manager import increment_version
 
 DEFAULT_TEMPLATE = Path(__file__).parent / "機能一覧テンプレート.xlsx"
 
-C_ALT_ROW   = "F2F5FA"
+C_ALT_ROW   = "F5F5F5"
 C_FONT_D    = "000000"
 C_FONT_LINK = "0563C1"
 FONT_NAME   = "游ゴシック"
@@ -96,7 +96,7 @@ ST_COLS = {
 }
 
 C_FONT_R  = "C00000"  # 赤字（変更・追加行）
-C_ADD_BG  = "E2EFDA"  # 薄緑（追加行背景）
+C_ADD_BG  = "FFF9C4"  # 薄黄（追加行背景）
 
 
 def _fnt(bold=False, color=C_FONT_D, size=10):
@@ -353,8 +353,12 @@ def main():
     history = history + new_entries
 
     # ── 差分IDセット（赤字・背景用）──────────────────────────
-    added_ids    = {f.get("id") for f in diffs["added"]   if f.get("id")}
-    modified_ids = {m["id"]     for m in diffs["modified"] if m.get("id")}
+    # 初回作成時は全件"追加"扱いになるが、比較対象がないため色付けは不要
+    if is_initial or is_major:
+        added_ids, modified_ids = set(), set()
+    else:
+        added_ids    = {f.get("id") for f in diffs["added"]   if f.get("id")}
+        modified_ids = {m["id"]     for m in diffs["modified"] if m.get("id")}
 
     # ── xlsx 生成 ─────────────────────────────────────────────
     out_dir = Path(args.output_dir)
