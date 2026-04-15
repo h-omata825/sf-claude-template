@@ -38,7 +38,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from meta_store import read_meta, write_meta
 from version_manager import increment_version
 
-DEFAULT_TEMPLATE = Path(r"C:\work\03_tool\新しいフォルダー\機能一覧テンプレート.xlsx")
+DEFAULT_TEMPLATE = Path(__file__).parent / "機能一覧テンプレート.xlsx"
 
 C_ALT_ROW   = "F2F5FA"
 C_FONT_D    = "000000"
