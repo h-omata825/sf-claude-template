@@ -54,8 +54,6 @@ TYPE_FOLDER = {
     "Apex":      "apex",
     "Batch":     "batch",
     "Flow":      "flow",
-    "画面フロー": "flow",
-    "LWC":       "lwc",
     "Aura":      "aura",
     "その他":    "other",
 }
