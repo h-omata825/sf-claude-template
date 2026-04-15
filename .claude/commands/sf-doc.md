@@ -80,17 +80,23 @@ print('ROOT:' + str(p))
 
 **プロジェクト名**（機能別設計書 / 全て を選択した場合のみ）:
 
-まず `sfdx-project.json` から自動取得する:
+`docs/overview/org-profile.md` から組織名を取得する:
 ```bash
 python -c "
-import json, pathlib
-p = pathlib.Path('sfdx-project.json')
+import re, pathlib, sys
+sys.stdout.reconfigure(encoding='utf-8')
+p = pathlib.Path('docs/overview/org-profile.md')
 if p.exists():
-    print(json.loads(p.read_text()).get('name', ''))
+    text = p.read_text(encoding='utf-8')
+    for pat in [r'\|\s*組織名\s*\|\s*(.+?)\s*\|', r'システム名[^\n:：]*[:：]\s*(.+)', r'プロジェクト名[^\n:：]*[:：]\s*(.+)']:
+        m = re.search(pat, text)
+        if m:
+            print(m.group(1).strip())
+            break
 "
 ```
 AskUserQuestion で提示（1択＋Other自動）:
-- 取得できた場合: label: "{name}（sfdx-project.json から取得）"
+- 取得できた場合: label: "{name}"、description: "org-profile.md の組織名を使用する"
 - 取得できなかった場合: label: "スキップ"、description: "プロジェクト名なし"
 
 > 以降の各Stepでは管理フォルダ・作成者名・プロジェクト名を再度聞かない。
@@ -246,11 +252,16 @@ if p.exists():
 `docs/overview/org-profile.md` からシステム名を取得する（C-5 と同じ処理）:
 ```bash
 python -c "
-import re, pathlib
+import re, pathlib, sys
+sys.stdout.reconfigure(encoding='utf-8')
 p = pathlib.Path('docs/overview/org-profile.md')
 if p.exists():
-    m = re.search(r'システム名[^\n:：]*[:：]\s*(.+)', p.read_text(encoding='utf-8'))
-    print(m.group(1).strip() if m else '')
+    text = p.read_text(encoding='utf-8')
+    for pat in [r'\|\s*組織名\s*\|\s*(.+?)\s*\|', r'システム名[^\n:：]*[:：]\s*(.+)', r'プロジェクト名[^\n:：]*[:：]\s*(.+)']:
+        m = re.search(pat, text)
+        if m:
+            print(m.group(1).strip())
+            break
 "
 ```
 
@@ -282,7 +293,7 @@ sf org login web --alias _doc-tmp
 
 新規・更新どちらでも毎回確認する。
 
-**新規作成の場合:** `docs/overview/org-profile.md` からシステム名を取得する（`システム名`・`system_name` 等のフィールドを探す）。
+**新規作成の場合:** `docs/overview/org-profile.md` からシステム名を取得する（`組織名`・`システム名`・`プロジェクト名` の順で検索）。
 **更新の場合:** 既存ファイルの `_meta` シートから前回値を読む（`read_meta()` の `system_name` フィールド）。
 
 AskUserQuestion で提示（1択＋Other自動）:
