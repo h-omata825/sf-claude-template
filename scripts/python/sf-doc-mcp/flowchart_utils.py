@@ -151,18 +151,32 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
     BOX_W_DEC,  BOX_H_DEC  = 1.9, 0.80
     BOX_W_OBJ,  BOX_H_OBJ  = 1.3, 0.72
     BOX_W_TERM, BOX_H_TERM = 1.5, 0.48
-    GAP = 0.75
+    GAP_DEFAULT = 0.75
+    GAP_MIN     = 0.60  # ノード重なりを防ぐ最小間隔
 
-    total_h = 0.8
+    # ノード高さを先に計算（GAP動的調整に使用）
+    node_heights = []
     for n in nodes:
         t = n["type"]
-        h = BOX_H_TERM if t in ("start", "end", "terminator") else \
-            BOX_H_DEC  if t == "decision" else \
-            BOX_H_OBJ  if t == "object"   else BOX_H_PROC
-        total_h += h + GAP
-    total_h = max(5.0, total_h + 0.6)
-    if target_h is not None:
-        total_h = max(total_h, target_h)
+        h_n = BOX_H_TERM if t in ("start", "end", "terminator") else \
+              BOX_H_DEC  if t == "decision" else \
+              BOX_H_OBJ  if t == "object"   else BOX_H_PROC
+        node_heights.append(h_n)
+
+    sum_node_h = sum(node_heights)
+    n_nodes    = len(nodes)
+
+    # デフォルトのtotal_h（固定GAPで計算）
+    total_h = max(5.0, 0.8 + sum_node_h + n_nodes * GAP_DEFAULT + 0.6)
+
+    if target_h is not None and target_h > total_h:
+        # target_h に合わせてGAPを動的に拡大する
+        # MARGIN_TOP=0.50, MARGIN_BOT=0.35 を確保して残りをGAP n個で分配
+        total_h = target_h
+        avail = total_h - 0.50 - 0.35 - sum_node_h
+        GAP = max(GAP_MIN, avail / n_nodes) if n_nodes > 0 else GAP_DEFAULT
+    else:
+        GAP = GAP_DEFAULT
 
     fig, ax = plt.subplots(figsize=(fig_w, total_h))
     ax.set_xlim(0, fig_w); ax.set_ylim(0, total_h)
@@ -177,14 +191,15 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
 
     for i, n in enumerate(nodes):
         t = n["type"]
+        h = node_heights[i]
         if t in ("start", "end", "terminator"):
-            w, h = BOX_W_TERM, BOX_H_TERM
+            w = BOX_W_TERM
         elif t == "decision":
-            w, h = BOX_W_DEC, BOX_H_DEC
+            w = BOX_W_DEC
         elif t == "object":
-            w, h = BOX_W_OBJ, BOX_H_OBJ
+            w = BOX_W_OBJ
         else:
-            w, h = BOX_W_PROC, BOX_H_PROC
+            w = BOX_W_PROC
 
         cy = y - h / 2
         _render_shape(ax, cx_main, cy, w, h, t, n["text"])

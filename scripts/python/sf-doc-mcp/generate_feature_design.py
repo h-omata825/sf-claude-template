@@ -254,8 +254,7 @@ def _estimate_content_height_pts(steps: list) -> float:
     return max(total, 200)
 
 
-def fill_process(ws, data, flowchart_path, changed_step_nos: set = None,
-                 target_h_in: float = None):
+def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
     changed_step_nos = changed_step_nos or set()
     row = PROC_DATA_ROW_START
     for step in data.get("steps", []):
@@ -322,15 +321,10 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None,
         try:
             img = XLImage(flowchart_path)
             img.anchor = f"{get_column_letter(PROC_FLOW_CS)}4"
-            FIG_W_IN = 6.2  # generate_flowchart のデフォルト fig_w と一致させる
-            if target_h_in is not None:
-                # 処理内容の高さに合わせて縦幅を設定（矢印が伸びて内容と揃う）
-                img.height = min(int(target_h_in * 96), 2400)  # pt→px (96DPI)
-                img.width  = int(img.height * FIG_W_IN / target_h_in)
-            else:
-                ratio = img.height / img.width if img.width else 1.6
-                img.width  = 440
-                img.height = min(int(440 * ratio), 1400)
+            # 画像の自然な縦横比を保って貼り付ける（generate_flowchart側がGAP調整済み）
+            ratio = img.height / img.width if img.width else 1.6
+            img.width  = 440
+            img.height = min(int(440 * ratio), 2400)
             ws.add_image(img)
         except Exception as e:
             W(ws, 4, PROC_FLOW_CS, f"[フロー図挿入失敗: {e}]", italic=True, fg="888888")
@@ -506,8 +500,7 @@ def main():
     fill_overview(wb["処理概要"],  data,
                   changed_fields=set() if is_major else changed_scalars)
     fill_process (wb["処理内容"],  data, flowchart_path,
-                  changed_step_nos=set() if is_major else changed_steps,
-                  target_h_in=target_h_in)
+                  changed_step_nos=set() if is_major else changed_steps)
     fill_params  (wb["パラメータ定義"], data,
                   changed_input_keys =set() if is_major else changed_inputs,
                   changed_output_keys=set() if is_major else changed_outputs)
