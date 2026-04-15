@@ -2,6 +2,7 @@
 """Excel 定義書出力"""
 
 from __future__ import annotations
+import re
 from datetime import date
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
@@ -373,7 +374,9 @@ class DefinitionWriter:
     def _write_object(self, meta: dict):
         obj   = meta["object_api_name"]
         label = meta.get("object_info", {}).get("label", obj)
-        ws    = self._wb.create_sheet(f"{label}"[:31])
+        # Excelシート名に使用できない文字を除去: \ / ? * [ ] :
+        safe_label = re.sub(r'[\\/?*\[\]:]', '', label)[:31]
+        ws    = self._wb.create_sheet(safe_label)
         ws.sheet_view.showGridLines = False
 
         # 新規追加オブジェクトはタブ色を赤にする

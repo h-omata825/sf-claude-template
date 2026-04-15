@@ -75,7 +75,7 @@ print('ROOT:' + str(p))
 **作成者名**: AskUserQuestion で以下の **1択** のみ提示する（メールアドレス・組織情報・memory からの自動取得値を選択肢に追加してはならない）:
 - label: "スキップ"、description: "作成者名なし"
 
-**プロジェクト名**:
+**プロジェクト名**（機能別設計書 / 全て を選択した場合のみ）:
 
 まず `sfdx-project.json` から自動取得する:
 ```bash
@@ -239,8 +239,21 @@ if p.exists():
 ```
 
 **target-org が取得できた場合:**
+
+`docs/overview/org-profile.md` からシステム名を取得する（C-5 と同じ処理）:
+```bash
+python -c "
+import re, pathlib
+p = pathlib.Path('docs/overview/org-profile.md')
+if p.exists():
+    m = re.search(r'システム名[^\n:：]*[:：]\s*(.+)', p.read_text(encoding='utf-8'))
+    print(m.group(1).strip() if m else '')
+"
+```
+
 AskUserQuestion で提示（1択＋Other自動）:
-- label: "{alias}（{project_name}）"、description: "このプロジェクトのデフォルト組織（.sf/config.json）"
+- システム名が取得できた場合: label: "{alias}（{system_name}）"、description: "このプロジェクトのデフォルト組織（.sf/config.json）"
+- 取得できなかった場合: label: "{alias}（このプロジェクトのデフォルト組織）"、description: ".sf/config.json で設定されている組織"
 
 **target-org が取得できなかった場合:**
 「このフォルダにはSalesforce組織が設定されていません。ブラウザでログインします」と伝え、以下を実行:
