@@ -98,6 +98,8 @@ ST_COLS = {
 C_FONT_R  = "C00000"  # 赤字（変更・追加行）
 C_ADD_BG  = "FFF9C4"  # 薄黄（追加行背景）
 
+ANNOT_COL_START = 33  # 注記列の開始列（col31 + 1gap）
+
 
 def _fnt(bold=False, color=C_FONT_D, size=10):
     return Font(name=FONT_NAME, bold=bold, color=color, size=size)
@@ -264,9 +266,24 @@ def fill_summary(ws, groups: dict, project_name: str, author: str, today: str,
 
 
 def fill_type_sheet(ws, type_key: str, features: list,
-                    added_ids: set = None, modified_ids: set = None):
-    added_ids   = added_ids   or set()
+                    added_ids: set = None, modified_ids: set = None,
+                    field_changes: dict = None, current_major: str = "1"):
+    from openpyxl.utils import get_column_letter
+    added_ids    = added_ids    or set()
     modified_ids = modified_ids or set()
+    field_changes = field_changes or {}
+
+    # 注記列の準備: このシートに関係するバージョンを収集
+    feature_ids = {f.get("id") for f in features if f.get("id")}
+    seen: list[str] = []
+    for fid in feature_ids:
+        for c in field_changes.get(fid, []):
+            if c["version"] not in seen:
+                seen.append(c["version"])
+    all_versions = sorted(seen, key=lambda v: [int(x) for x in v.split(".")])
+    version_col_map = {v: ANNOT_COL_START + i for i, v in enumerate(all_versions)}
+    for col in version_col_map.values():
+        ws.column_dimensions[get_column_letter(col)].width = 14
 
     # タイトル・セクション帯（件数入り）
     ws.cell(row=1, column=2, value=f"機能一覧 — {type_key}")
@@ -291,8 +308,20 @@ def fill_type_sheet(ws, type_key: str, features: list,
         for label, (cs, ce) in ST_COLS.items():
             val, ha = vals[label]
             cell = MW(ws, r, cs, ce, value=val, border=B_all(), bg=bg, h=ha, v="top")
-            if is_modified:
+            if is_modified or is_added:
                 cell.font = _fnt(color=C_FONT_R)
+
+        # 注記列に ver{version} {author} を書き込む
+        for change in field_changes.get(feat_id, []):
+            col = version_col_map.get(change["version"])
+            if col is None:
+                continue
+            color = C_FONT_R if change["version"].split(".")[0] == current_major else C_FONT_D
+            cc = ws.cell(row=r, column=col,
+                         value=f"ver{change['version']} {change['author']}")
+            cc.font = Font(name=FONT_NAME, color=color, size=8)
+            cc.alignment = Alignment(horizontal="center", vertical="center")
+
         r += 1
 
 
@@ -360,6 +389,20 @@ def main():
         added_ids    = {f.get("id") for f in diffs["added"]   if f.get("id")}
         modified_ids = {m["id"]     for m in diffs["modified"] if m.get("id")}
 
+    # ── 注記列（ver{version} {author}）用の変更履歴 ─────────────
+    prev_field_changes: dict = {} if is_major else (
+        (prev_meta or {}).get("field_changes", {})
+    )
+    current_major = current_version.split(".")[0]
+
+    if is_initial or is_major:
+        field_changes = {}
+    else:
+        field_changes = dict(prev_field_changes)
+        entry = {"version": current_version, "author": args.author}
+        for fid in added_ids | modified_ids:
+            field_changes[fid] = field_changes.get(fid, []) + [entry]
+
     # ── xlsx 生成 ─────────────────────────────────────────────
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -385,7 +428,8 @@ def main():
         new_ws = clone_sheet(wb, "__SHEET_TEMPLATE__", sheet_name)
         sheet_name_map[type_key] = sheet_name
         fill_type_sheet(new_ws, type_key, groups[type_key],
-                        added_ids=added_ids, modified_ids=modified_ids)
+                        added_ids=added_ids, modified_ids=modified_ids,
+                        field_changes=field_changes, current_major=current_major)
 
     fill_summary(wb["サマリー"], groups, args.project_name, args.author, today,
                  sheet_name_map, current_version=current_version)
@@ -396,11 +440,12 @@ def main():
     write_meta(wb, {
         "version":      current_version,
         "date":         today,
-        "project_name": args.project_name,
-        "system_name":  args.system_name,
-        "author":       args.author,
-        "features":     features,
-        "history":      history,
+        "project_name":   args.project_name,
+        "system_name":    args.system_name,
+        "author":         args.author,
+        "features":       features,
+        "history":        history,
+        "field_changes":  field_changes,
     })
 
     wb.save(out_path)
