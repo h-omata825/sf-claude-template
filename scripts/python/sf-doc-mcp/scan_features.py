@@ -51,7 +51,12 @@ def extract_javadoc(path: Path) -> str:
 
 
 def classify_apex(path: Path) -> str:
-    """Apexクラスの種別を判定する (Batch / Schedulable / Apex)"""
+    """Apexクラスの種別を判定する (Batch / Apex)
+
+    Schedulable のみを実装するクラス（バッチの起動設定だけ）は
+    独立した機能として扱わず None を返してスキャン対象から除外する。
+    スケジュール情報（cron式）は対応する Batch の設計書の trigger に記載する。
+    """
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
@@ -61,7 +66,7 @@ def classify_apex(path: Path) -> str:
     if BATCH_PATTERNS.search(text):
         return "Batch"
     if SCHED_PATTERNS.search(text):
-        return "Schedulable"
+        return None          # Schedulable のみ → Batch の trigger に吸収
     return "Apex"
 
 

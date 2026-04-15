@@ -51,14 +51,13 @@ THIN = Side(style="thin",   color="8B9DC3")
 MED  = Side(style="medium", color="1F3864")
 
 TYPE_FOLDER = {
-    "Apex":        "apex",
-    "Batch":       "batch",
-    "Schedulable": "schedulable",
-    "Flow":        "flow",
-    "画面フロー":   "flow",
-    "LWC":         "lwc",
-    "Aura":        "aura",
-    "その他":       "other",
+    "Apex":      "apex",
+    "Batch":     "batch",
+    "Flow":      "flow",
+    "画面フロー": "flow",
+    "LWC":       "lwc",
+    "Aura":      "aura",
+    "その他":    "other",
 }
 
 # ── テンプレートと一致させる定数 ────────────────────────────────

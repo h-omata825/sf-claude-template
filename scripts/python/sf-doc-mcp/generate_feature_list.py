@@ -46,7 +46,7 @@ C_FONT_LINK = "0563C1"
 FONT_NAME   = "游ゴシック"
 THIN        = Side(style="thin", color="8B9DC3")
 
-TYPE_ORDER = ["Apex", "Batch", "Schedulable", "Trigger",
+TYPE_ORDER = ["Apex", "Batch", "Trigger",
               "Flow", "画面フロー", "LWC", "Aura",
               "Visualforce", "その他"]
 
@@ -73,8 +73,9 @@ SUM_META_ROW_2 = 4
 # 値セル: (cs, ce)
 SUM_PROJECT_V = (6, 18)
 SUM_DATE_V    = (23, 31)
-SUM_AUTHOR_V  = (6, 18)
-SUM_TOTAL_V   = (23, 31)
+SUM_AUTHOR_V  = (6, 12)   # 作成者
+SUM_VERSION_V = (17, 22)  # バージョン（追加）
+SUM_TOTAL_V   = (26, 31)  # 合計件数
 SUM_DATA_ROW_START = 8
 SUM_COLS = {
     "No":         (2,  3),
@@ -83,18 +84,19 @@ SUM_COLS = {
     "対応シート": (16, 31),
 }
 
-# 種別別シート
-ST_META_ROW_1 = 3
-ST_META_ROW_2 = 4
-ST_COUNT_V   = (23, 31)  # 件数の値セル
-ST_DATA_ROW_START = 8
+# 種別別シート（メタ行なし・行番号を詰める）
+ST_SEC_ROW        = 3
+ST_HEAD_ROW       = 4
+ST_DATA_ROW_START = 5
 ST_COLS = {
     "ID":              (2,  4),
     "API名/ファイル名": (5,  11),
     "機能名":          (12, 18),
-    "処理概要":        (19, 27),
-    "設計書ファイル":  (28, 31),
+    "処理概要":        (19, 31),
 }
+
+C_FONT_R  = "C00000"  # 赤字（変更・追加行）
+C_ADD_BG  = "E2EFDA"  # 薄緑（追加行背景）
 
 
 def _fnt(bold=False, color=C_FONT_D, size=10):
@@ -139,7 +141,6 @@ def _feature_comparable(f: dict) -> tuple:
         f.get("name", ""),
         f.get("api_name", ""),
         f.get("overview", "") or "",
-        f.get("design_file", "") or "",
     )
 
 
@@ -167,90 +168,79 @@ def has_any_diff(diffs: dict) -> bool:
 def build_revision_entries(current_version: str, diffs: dict, author: str,
                            today: str, start_no: int, is_major: bool,
                            is_initial: bool) -> list[dict]:
-    """改版履歴エントリを構築する。
-    戻り値: [{項番, 版数, 変更箇所, 変更内容, 変更理由, 変更日, 変更者, 備考}, ...]
-    """
+    """改版履歴エントリを1行に集約して構築する。"""
     if is_initial:
         return [{
             "項番": start_no, "版数": current_version, "変更箇所": "全シート",
             "変更内容": "新規作成", "変更理由": "", "変更日": today,
             "変更者": author, "備考": "",
         }]
-
-    entries = []
     if is_major:
-        entries.append({
+        return [{
             "項番": start_no, "版数": current_version, "変更箇所": "全シート",
             "変更内容": "メジャーバージョンアップ", "変更理由": "",
             "変更日": today, "変更者": author, "備考": "",
-        })
-        start_no_incr = False
-    else:
-        start_no_incr = True
+        }]
 
-    rows = []
-    for f in diffs["added"]:
-        rows.append(("サマリー / " + f.get("type", ""),
-                     f"機能追加: {f.get('id')} {f.get('name', '')}"))
-    for f in diffs["removed"]:
-        rows.append(("サマリー / " + f.get("type", ""),
-                     f"機能削除: {f.get('id')} {f.get('name', '')}"))
+    # 影響種別を集約
+    types: set[str] = set()
+    for f in diffs["added"] + diffs["removed"]:
+        types.add(f.get("type", "その他"))
     for m in diffs["modified"]:
-        nv = m["new"]; ov = m["old"]
-        changed = []
-        for k in ("name", "api_name", "overview", "design_file"):
-            if ov.get(k) != nv.get(k):
-                changed.append(k)
-        rows.append(("サマリー / " + nv.get("type", ""),
-                     f"機能変更: {m['id']} {nv.get('name', '')}（{', '.join(changed)}）"))
+        types.add(m["new"].get("type", "その他"))
 
-    for i, (sheet, content) in enumerate(rows):
-        is_first_data = (i == 0 and start_no_incr)
-        entries.append({
-            "項番":     start_no if is_first_data else "",
-            "版数":     current_version if is_first_data else "",
-            "変更箇所": sheet,
-            "変更内容": content,
-            "変更理由": "",
-            "変更日":   today if is_first_data else "",
-            "変更者":   author if is_first_data else "",
-            "備考":     "",
-        })
+    parts = []
+    if diffs["added"]:    parts.append(f"追加{len(diffs['added'])}件")
+    if diffs["removed"]:  parts.append(f"削除{len(diffs['removed'])}件")
+    if diffs["modified"]: parts.append(f"変更{len(diffs['modified'])}件")
 
-    if not entries:
-        entries.append({
-            "項番": start_no, "版数": current_version, "変更箇所": "—",
-            "変更内容": "変更なし", "変更理由": "", "変更日": today,
-            "変更者": author, "備考": "",
-        })
-
-    return entries
+    return [{
+        "項番":     start_no,
+        "版数":     current_version,
+        "変更箇所": "、".join(sorted(types)) if types else "—",
+        "変更内容": "・".join(parts) if parts else "変更なし",
+        "変更理由": "",
+        "変更日":   today,
+        "変更者":   author,
+        "備考":     "",
+    }]
 
 
 # ── 埋め込み ───────────────────────────────────────────────────
 def fill_revision(ws, history: list, project_name: str, today: str):
-    """history 配列を改版履歴テーブルに書き込む。"""
+    """history 配列を改版履歴テーブルに動的書き込みする（行数制限なし）。"""
     vs, ve = REV_META_PROJECT_V
     ws.cell(row=REV_META_ROW, column=vs, value=project_name)
     vs, ve = REV_META_DATE_V
     ws.cell(row=REV_META_ROW, column=vs, value=today)
 
+    CENTER_LABELS = {"項番", "版数", "変更日", "変更者"}
     r = REV_DATA_ROW_START
     for h in history:
+        ws.row_dimensions[r].height = 22
         for label, (cs, ce) in REV_COLS.items():
-            ws.cell(row=r, column=cs, value=h.get(label, ""))
+            for c in range(cs, ce + 1):
+                ws.cell(row=r, column=c).border = B_all()
+            ws.merge_cells(start_row=r, start_column=cs, end_row=r, end_column=ce)
+            cell = ws.cell(row=r, column=cs, value=h.get(label, ""))
+            cell.font = _fnt()
+            cell.alignment = _aln(h="center" if label in CENTER_LABELS else "left")
+            cell.border = B_all()
         r += 1
 
 
 def fill_summary(ws, groups: dict, project_name: str, author: str, today: str,
-                 sheet_name_map: dict):
-    # メタ
+                 sheet_name_map: dict, current_version: str = ""):
+    # メタ行1: プロジェクト名 / 作成日
     vs, ve = SUM_PROJECT_V
     ws.cell(row=SUM_META_ROW_1, column=vs, value=project_name)
     vs, ve = SUM_DATE_V
     ws.cell(row=SUM_META_ROW_1, column=vs, value=today)
+    # メタ行2: 作成者 / バージョン / 合計件数
     vs, ve = SUM_AUTHOR_V
     ws.cell(row=SUM_META_ROW_2, column=vs, value=author)
+    vs, ve = SUM_VERSION_V
+    ws.cell(row=SUM_META_ROW_2, column=vs, value=f"v{current_version}" if current_version else "")
     vs, ve = SUM_TOTAL_V
     total = sum(len(v) for v in groups.values())
     ws.cell(row=SUM_META_ROW_2, column=vs, value=f"{total}件")
@@ -273,30 +263,36 @@ def fill_summary(ws, groups: dict, project_name: str, author: str, today: str,
         r += 1
 
 
-def fill_type_sheet(ws, type_key: str, features: list):
-    # タイトル差し替え
+def fill_type_sheet(ws, type_key: str, features: list,
+                    added_ids: set = None, modified_ids: set = None):
+    added_ids   = added_ids   or set()
+    modified_ids = modified_ids or set()
+
+    # タイトル・セクション帯（件数入り）
     ws.cell(row=1, column=2, value=f"機能一覧 — {type_key}")
-    # 件数
-    vs, ve = ST_COUNT_V
-    ws.cell(row=ST_META_ROW_2, column=vs, value=f"{len(features)}件")
+    ws.cell(row=ST_SEC_ROW, column=2, value=f"■ 機能一覧（{len(features)}件）")
 
     r = ST_DATA_ROW_START
     for i, feat in enumerate(features):
-        bg = C_ALT_ROW if i % 2 == 1 else None
+        feat_id    = feat.get("id", "")
+        is_added   = feat_id in added_ids
+        is_modified = feat_id in modified_ids
+
+        bg = C_ADD_BG if is_added else (C_ALT_ROW if i % 2 == 1 else None)
         overview = feat.get("overview", "") or ""
-        # 高さを概要文字数から推定
         set_h(ws, r, max(26, min(120, (len(overview) // 30) * 16 + 28)))
+
         vals = {
             "ID":              (feat.get("id", ""), "center"),
             "API名/ファイル名": (feat.get("api_name", ""), "left"),
             "機能名":          (feat.get("name", ""), "left"),
             "処理概要":        (overview, "left"),
-            "設計書ファイル":  (feat.get("design_file", ""), "left"),
         }
         for label, (cs, ce) in ST_COLS.items():
             val, ha = vals[label]
-            MW(ws, r, cs, ce, value=val, border=B_all(), bg=bg,
-               h=ha, v="top")
+            cell = MW(ws, r, cs, ce, value=val, border=B_all(), bg=bg, h=ha, v="top")
+            if is_modified:
+                cell.font = _fnt(color=C_FONT_R)
         r += 1
 
 
@@ -356,6 +352,10 @@ def main():
     )
     history = history + new_entries
 
+    # ── 差分IDセット（赤字・背景用）──────────────────────────
+    added_ids    = {f.get("id") for f in diffs["added"]   if f.get("id")}
+    modified_ids = {m["id"]     for m in diffs["modified"] if m.get("id")}
+
     # ── xlsx 生成 ─────────────────────────────────────────────
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -380,10 +380,11 @@ def main():
             sheet_name = sheet_name.replace(ch, "_")
         new_ws = clone_sheet(wb, "__SHEET_TEMPLATE__", sheet_name)
         sheet_name_map[type_key] = sheet_name
-        fill_type_sheet(new_ws, type_key, groups[type_key])
+        fill_type_sheet(new_ws, type_key, groups[type_key],
+                        added_ids=added_ids, modified_ids=modified_ids)
 
     fill_summary(wb["サマリー"], groups, args.project_name, args.author, today,
-                 sheet_name_map)
+                 sheet_name_map, current_version=current_version)
 
     wb["__SHEET_TEMPLATE__"].sheet_state = "hidden"
 

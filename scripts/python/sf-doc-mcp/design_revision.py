@@ -91,55 +91,48 @@ def build_entries(current_version: str, diffs: dict, author: str,
             "変更者": author, "備考": "",
         }]
 
-    entries = []
     if is_major:
-        entries.append({
+        return [{
             "項番": start_no, "版数": current_version, "変更箇所": "全シート",
             "変更内容": "メジャーバージョンアップ（注記リセット）",
             "変更理由": "", "変更日": today, "変更者": author, "備考": "",
-        })
+        }]
 
-    rows: list[tuple[str, str]] = []  # (変更箇所, 変更内容)
-
-    # スカラー変更
+    # 変更箇所を集約（シート名のセット）
+    areas: set[str] = set()
     for s in diffs.get("scalars", []):
-        rows.append((scalar_sheet, f"{s['field']} を変更"))
-
-    # リスト変更
+        areas.add(scalar_sheet)
     for sec_key, sec_diff in (diffs.get("lists") or {}).items():
-        sheet = section_sheet_map.get(sec_key, sec_key)
-        parts = []
-        if sec_diff.get("added"):
-            parts.append(f"追加 {len(sec_diff['added'])}件")
-        if sec_diff.get("removed"):
-            parts.append(f"削除 {len(sec_diff['removed'])}件")
-        if sec_diff.get("modified"):
-            parts.append(f"変更 {len(sec_diff['modified'])}件")
-        if parts:
-            rows.append((sheet, "、".join(parts)))
+        if any([sec_diff.get("added"), sec_diff.get("removed"), sec_diff.get("modified")]):
+            areas.add(section_sheet_map.get(sec_key, sec_key))
 
-    if not rows and not is_major:
+    if not areas:
         return [{
             "項番": start_no, "版数": current_version, "変更箇所": "—",
             "変更内容": "変更なし", "変更理由": "", "変更日": today,
             "変更者": author, "備考": "",
         }]
 
-    # 1行目のみ No/版/日/者、以降は空
-    first_filled = not is_major
-    for i, (sheet, content) in enumerate(rows):
-        is_first = first_filled and (i == 0)
-        entries.append({
-            "項番":     start_no if is_first else "",
-            "版数":     current_version if is_first else "",
-            "変更箇所": sheet,
-            "変更内容": content,
-            "変更理由": "",
-            "変更日":   today if is_first else "",
-            "変更者":   author if is_first else "",
-            "備考":     "",
-        })
-    return entries
+    # 変更内容を集計して1行に収める
+    total_added   = sum(len(sd.get("added", []))    for sd in (diffs.get("lists") or {}).values())
+    total_removed = sum(len(sd.get("removed", []))  for sd in (diffs.get("lists") or {}).values())
+    total_changed = sum(len(sd.get("modified", [])) for sd in (diffs.get("lists") or {}).values())
+    total_changed += len(diffs.get("scalars", []))
+    parts = []
+    if total_added:   parts.append(f"追加{total_added}件")
+    if total_removed: parts.append(f"削除{total_removed}件")
+    if total_changed: parts.append(f"変更{total_changed}件")
+
+    return [{
+        "項番":     start_no,
+        "版数":     current_version,
+        "変更箇所": "・".join(sorted(areas)),
+        "変更内容": "・".join(parts) if parts else "更新",
+        "変更理由": "",
+        "変更日":   today,
+        "変更者":   author,
+        "備考":     "",
+    }]
 
 
 # ── 赤字マーキング ────────────────────────────────────────────

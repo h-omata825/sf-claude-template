@@ -242,7 +242,18 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_design.py \
 ]
 ```
 
+既存の機能一覧.xlsx が `{output_dir}/機能一覧.xlsx` に存在する場合は `--source-file` で渡す（差分検出・バージョン管理に使用）:
+
 ```bash
+# 既存ファイルあり（更新）
+python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_list.py \
+  --input "{tmp_dir}/feature_list.json" \
+  --output-dir "{output_dir}" \
+  --author "{author}" \
+  --project-name "{project_name}" \
+  --source-file "{output_dir}/機能一覧.xlsx"
+
+# 新規作成（初回）
 python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_list.py \
   --input "{tmp_dir}/feature_list.json" \
   --output-dir "{output_dir}" \
