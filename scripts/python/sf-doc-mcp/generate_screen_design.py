@@ -461,7 +461,10 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
             for i, step in enumerate(steps):
                 st_title = _step_title(step, i)
                 detail_text = _step_detail_text(step)
-                set_h(ws, r, 24)
+                # タイトル行の高さを文字数から動的計算（LG_LEFT_TITLE=col4-7, 4列×4.2unit≈9文字/行）
+                TITLE_CPL = 9
+                t_lines = max(1, -(-len(st_title) // TITLE_CPL))
+                set_h(ws, r, max(22, t_lines * 18 + 4))
                 MW(ws, r, *LG_LEFT_NO,     step.get("no", str(i + 1)),
                    bold=True, bg=C_STEP_BG, border=B_all(), h="center")
                 MW(ws, r, *LG_LEFT_TITLE,  st_title,
@@ -486,6 +489,7 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                  "title": _step_title(s, i),
                  "node_type": s.get("node_type", "process"),
                  "branch": s.get("branch"),
+                 "calls": s.get("calls"),
                  "object_ref": s.get("object_ref"),
                  "main_label": s.get("main_label")}
                 for i, s in enumerate(steps)
@@ -497,7 +501,7 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
             try:
                 ok = generate_flowchart(
                     flow_steps, str(flow_path),
-                    fig_w=6.0, add_start_end=True, wrap_limit=14,
+                    fig_w=4.6, add_start_end=True, wrap_limit=14,
                 )
             except Exception:
                 ok = False
@@ -507,8 +511,8 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
             try:
                 img = XLImage(str(flow_path))
                 aspect = img.height / img.width if img.width else 1.5
-                img_w = 420
-                img_h = min(int(img_w * aspect), 1400)
+                img_w = 440
+                img_h = int(img_w * aspect)   # 高さキャップなし・縦横比維持
                 img.width = img_w
                 img.height = img_h
                 # 気持ち下にオフセット（テーブルヘッダ直上にくっつかないように）

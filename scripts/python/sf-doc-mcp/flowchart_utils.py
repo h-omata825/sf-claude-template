@@ -94,6 +94,9 @@ def _render_shape(ax, cx, cy, w, h, node_type, text):
     elif node_type == "error":
         _draw_roundrect(ax, cx, cy, w, h, face="#F8CBAD", edge="#C55A11")
         _text(ax, cx, cy, text, fs=6.5)
+    elif node_type == "call":
+        _draw_roundrect(ax, cx, cy, w, h, face="#E2EFDA", edge="#548235")
+        _text(ax, cx, cy, text, fs=6.5)
     else:
         _draw_roundrect(ax, cx, cy, w, h, face="#DEEAF1", edge="#6A8CAF")
         _text(ax, cx, cy, text, fs=6.8)
@@ -246,6 +249,24 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
                 _arrow(ax, cx_main + w / 2 + 0.02, cy,
                        cx_branch - BOX_W_OBJ / 2 - 0.02, cy,
                        color="#888888", lw=0.9)
+
+        # 別機能呼び出し（calls）: 右側に緑の箱で機能名を表示
+        calls = n.get("calls")
+        if calls and not n.get("branch"):  # branch と同時使用不可
+            if isinstance(calls, str):
+                calls_text = calls
+            else:
+                calls_text = calls.get("text") or calls.get("name") or ""
+            if calls_text:
+                cw = BOX_W_PROC * 1.0
+                cl = len(_wrap(calls_text, 12).split("\n"))
+                ch = BOX_H_PROC * 1.05 + max(0, cl - 1) * 0.18
+                _render_shape(ax, cx_branch, cy, cw, ch, "call", _wrap(calls_text, 12))
+                _arrow(ax, cx_main + w / 2 + 0.02, cy,
+                       cx_branch - cw / 2 - 0.02, cy,
+                       color="#444444", lw=1.1)
+                midx = (cx_main + w / 2 + cx_branch - cw / 2) / 2
+                _label(ax, midx, cy + 0.16, "呼出")
 
         br = n.get("branch")
         if br:
