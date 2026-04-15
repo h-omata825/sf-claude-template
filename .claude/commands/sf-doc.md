@@ -413,12 +413,14 @@ sf org logout --target-org _doc-tmp --no-prompt
 - `force-app/` — Apex/Flow/LWC を直接スキャン（docs は使わない）
 - `docs/design/` — 既存設計書があれば参照（任意）
 
-**【最新化手順】** `/sf-retrieve` → standard または all を選択  
-新規コンポーネントを追加した後は必ず `/sf-retrieve` を再実行すること。
+**【最新化手順】**
+- `force-app/`（Apex/Flow/LWC）: `/sf-retrieve` → standard または all
+- `docs/design/`（個別設計 MD）: `/sf-memory` → カテゴリ4「設計・機能仕様」
 
-AskUserQuestion で確認:
-- label: "最新化済み・このまま続ける"
-- label: "先に /sf-retrieve を実行する（ここで終了）"
+AskUserQuestion で確認（複数選択不可・1択）:
+- label: "最新化済み・このまま続ける"、description: "force-app/ と docs/design/ が最新の状態"
+- label: "先に /sf-retrieve を実行する（終了）"、description: "新規コンポーネントを追加した場合"
+- label: "先に /sf-memory Cat.4 + /sf-retrieve を実行する（終了）"、description: "設計 MD も更新したい場合"
 
 ### D-1: 出力フォルダの準備
 

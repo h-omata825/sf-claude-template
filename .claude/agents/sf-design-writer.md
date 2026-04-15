@@ -269,43 +269,7 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_list.py \
 
 ---
 
-## Phase 4: docs/design/_index.md の更新
-
-全 Excel 生成完了後、`{project_dir}/docs/design/_index.md` を実際の機能ID・設計書パスで上書き更新する。
-
-sf-memory（sf-org-analyst）が先に _index.md を作成した場合、機能IDが TBD のままになっている。このステップで実IDに補正する。
-
-```markdown
-# 機能設計書 インデックス
-
-最終更新: {today}
-
-## 機能一覧
-
-| 機能ID | 種別 | API名 | 機能名 | 処理概要 |
-|---|---|---|---|---|
-| F-001 | Apex | ClassName | 機能名 | overview（先頭80文字） |
-...（feature_list の全件を種別順に記載）
-
-## 設計書リンク
-
-| 機能ID | 種別 | 設計書ファイル |
-|---|---|---|
-| F-001 | Apex | `機能設計書_F-001_ClassName.xlsx` |
-...（生成した Excel ファイルのみ記載）
-
-## 未文書化コンポーネント
-
-> scan_features.py が検出したが設計書生成対象外だったコンポーネント（今回の実行で `target_ids` から除外されたもの）
-
-※ 今回対象外がなければこのセクションは省略する。
-```
-
-`docs/design/` ディレクトリが存在しない場合は作成してから書き込む。
-
----
-
-## Phase 5: 後処理・完了報告
+## Phase 4: 後処理・完了報告
 
 tmp_dir を削除し、output_dir に残った一時ファイルも合わせてクリーンアップする:
 ```bash
