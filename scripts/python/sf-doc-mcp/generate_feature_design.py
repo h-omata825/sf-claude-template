@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 import argparse
 import json
+import re
 import sys
 import tempfile
 from datetime import date as _date
@@ -513,6 +514,31 @@ def main():
 
     # フロー図PNG生成（処理内容の行高さに合わせて縦幅を揃える）
     steps = data.get("steps", [])
+
+    # ── object_ref バリデーション ──────────────────────────────────────
+    # SOQL/DML を含むステップに object_ref が設定されていない場合に警告する
+    _DB_KEYWORDS = re.compile(
+        r'\b(SELECT|SOQL|DML|INSERT|UPDATE|DELETE|UPSERT)\b|'
+        r'(保存|更新|削除|挿入|登録|クエリ)',
+        re.IGNORECASE
+    )
+    for _step in steps:
+        if _step.get("object_ref"):
+            continue
+        _title  = _step.get("title", "")
+        _detail = _step.get("detail", "")
+        _sub_details = " ".join(
+            s.get("detail", "") for s in _step.get("sub_steps", [])
+            if s.get("title", "").upper() in ("SOQL", "DML")
+        )
+        _text = f"{_title} {_detail} {_sub_details}"
+        if _DB_KEYWORDS.search(_text):
+            print(
+                f"  [WARNING] step {_step.get('no', '?')} 「{_title}」"
+                f" にDB操作の可能性がありますが object_ref が未設定です",
+                file=sys.stderr
+            )
+
     content_pts  = _estimate_content_height_pts(steps)
     target_h_in  = content_pts / 72  # pt → inch
     flowchart_path = None

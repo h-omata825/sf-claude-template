@@ -428,7 +428,7 @@ sf org logout --target-org _doc-tmp --no-prompt
 - `docs/design/` — 既存設計書があれば参照（任意）
 
 AskUserQuestion で確認:
-- label: "生成開始"、description: "force-app/ と docs/design/ が最新の状態で進める"
+- label: "最新化済み・このまま続ける"、description: "force-app/ と docs/design/ が最新の状態で進める"
 - label: "先に最新化する"、description: "/sf-retrieve → /sf-memory Cat.4 を実行してからそのまま生成に進む"
 
 「先に最新化する」が選ばれた場合: 以下を順番に実行し、完了後そのまま D-1 へ進む。
@@ -445,7 +445,7 @@ mkdir -p "{ROOT}/機能別設計書"
 
 `output_dir` = `{ROOT}/機能別設計書`、`tmp_dir` = `{ROOT}/機能別設計書/.tmp` として以降の処理に使用する。
 
-### D-2: force-app/ をスキャンして機能一覧を取得
+### D-2: force-app/ をスキャンして対象を確定
 
 ```bash
 python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
@@ -455,11 +455,17 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
 > **ソースについて**: スキャン対象は `force-app/` ディレクトリ。docs ではなくメタデータを直接読むため、最終 `/sf-retrieve` 時点の内容が対象になる。新規作成したコンポーネントは `/sf-retrieve` を再実行してから本コマンドを実行すること。
 > 更新時も同様に force-app/ を再スキャンするため、追加・削除されたコンポーネントは自動検出される。
 
-スキャン結果を表示し、AskUserQuestion で提示:
+スキャン結果を表示し、AskUserQuestion で対象を選択:
 - label: "全て（{n}件）"、description: "スキャンで検出された全コンポーネントの設計書を生成"
 - label: "対象を絞り込む"、description: "API名・機能IDをテキストで指定する"
 
 「対象を絞り込む」が選ばれた場合はチャットで入力してもらい、対象を絞り込む。
+
+**対象が確定したら** AskUserQuestion で最終確認:
+- label: "生成開始"、description: "上記 {n}件の設計書を生成する"
+- label: "キャンセル"、description: "中止する"
+
+「キャンセル」が選ばれた場合は終了。「生成開始」が選ばれたら D-3 へ進む。
 
 ### D-3: sf-design-writer エージェントへ委譲
 
