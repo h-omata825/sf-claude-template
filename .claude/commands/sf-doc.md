@@ -413,14 +413,16 @@ sf org logout --target-org _doc-tmp --no-prompt
 - `force-app/` — Apex/Flow/LWC を直接スキャン（docs は使わない）
 - `docs/design/` — 既存設計書があれば参照（任意）
 
-**【最新化手順】**
-- `force-app/`（Apex/Flow/LWC）: `/sf-retrieve` → standard または all
-- `docs/design/`（個別設計 MD）: `/sf-memory` → カテゴリ4「設計・機能仕様」
+AskUserQuestion で確認:
+- label: "生成開始"、description: "force-app/ と docs/design/ が最新の状態で進める"
+- label: "WF最新化してから生成（終了）"、description: "/sf-retrieve → /sf-memory Cat.4 の順で実行してから改めて本コマンドを実行する"
 
-AskUserQuestion で確認（複数選択不可・1択）:
-- label: "最新化済み・このまま続ける"、description: "force-app/ と docs/design/ が最新の状態"
-- label: "先に /sf-retrieve を実行する（終了）"、description: "新規コンポーネントを追加した場合"
-- label: "先に /sf-memory Cat.4 + /sf-retrieve を実行する（終了）"、description: "設計 MD も更新したい場合"
+「WF最新化してから生成」が選ばれた場合: 以下を順番に実行してから終了する。
+```
+1. /sf-retrieve を実行（standard または all を選択）
+2. /sf-memory を実行（カテゴリ4「設計・機能仕様」を選択）
+```
+完了後「最新化が完了しました。改めて /sf-doc を実行してください。」と案内する。
 
 ### D-1: 出力フォルダの準備
 
