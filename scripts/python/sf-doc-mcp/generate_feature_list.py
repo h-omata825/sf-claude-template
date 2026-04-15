@@ -280,7 +280,7 @@ def fill_type_sheet(ws, type_key: str, features: list,
 
         bg = C_ADD_BG if is_added else (C_ALT_ROW if i % 2 == 1 else None)
         overview = feat.get("overview", "") or ""
-        set_h(ws, r, max(26, min(120, (len(overview) // 30) * 16 + 28)))
+        set_h(ws, r, max(26, min(150, (len(overview) // 30) * 16 + 28)))
 
         vals = {
             "ID":              (feat.get("id", ""), "center"),
