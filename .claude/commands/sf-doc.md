@@ -455,10 +455,11 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
 > **ソースについて**: スキャン対象は `force-app/` ディレクトリ。docs ではなくメタデータを直接読むため、最終 `/sf-retrieve` 時点の内容が対象になる。新規作成したコンポーネントは `/sf-retrieve` を再実行してから本コマンドを実行すること。
 > 更新時も同様に force-app/ を再スキャンするため、追加・削除されたコンポーネントは自動検出される。
 
-スキャン結果を表示し、AskUserQuestion で提示（Other は自動表示）:
+スキャン結果を表示し、AskUserQuestion で提示:
 - label: "全て（{n}件）"、description: "スキャンで検出された全コンポーネントの設計書を生成"
+- label: "対象を絞り込む"、description: "API名・機能IDをテキストで指定する"
 
-Other が選ばれた場合はテキストで入力してもらい、対象を絞り込む。
+「対象を絞り込む」が選ばれた場合はチャットで入力してもらい、対象を絞り込む。
 
 ### D-3: sf-design-writer エージェントへ委譲
 
