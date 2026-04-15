@@ -100,16 +100,35 @@ def _render_shape(ax, cx, cy, w, h, node_type, text):
 
 
 def _wrap(text, limit=12):
+    """limit文字を目安に折り返す。スペース・アンダースコアを折り返し優先位置とする。
+    API名（例: HolidayMaster7__c）はアンダースコアで自然に分割される。
+    limit を超えても区切り文字が見つからない場合は limit+3 文字で強制折り返し。
+    """
     if text is None:
         return ""
-    out, line = [], ""
-    for ch in text:
-        line += ch
-        if len(line) >= limit or ch == "\n":
-            out.append(line.rstrip("\n"))
-            line = ""
-    if line:
-        out.append(line)
+    out = []
+    for para in text.split("\n"):
+        if not para:
+            out.append("")
+            continue
+        line = ""
+        i = 0
+        while i < len(para):
+            ch = para[i]
+            # スペース・アンダースコアで limit 以上なら折り返す（区切り文字自体は次行の先頭へ、スペースは捨てる）
+            if ch in (' ', '_') and len(line) >= limit:
+                out.append(line)
+                line = ch if ch == '_' else ""
+                i += 1
+                continue
+            line += ch
+            i += 1
+            # limit+3 以上で強制折り返し（区切り文字が見つからない長い単語の保険）
+            if len(line) >= limit + 3:
+                out.append(line)
+                line = ""
+        if line:
+            out.append(line)
     return "\n".join(out)
 
 
@@ -229,7 +248,9 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
         if br:
             br_text = _wrap(br.get("text", ""), 12)
             br_type = br.get("node_type", "error")
-            bw, bh = BOX_W_PROC * 1.0, BOX_H_PROC * 1.05
+            br_lines = len(br_text.split("\n"))
+            bw = BOX_W_PROC * 1.0
+            bh = BOX_H_PROC * 1.05 + max(0, br_lines - 1) * 0.18
             _render_shape(ax, cx_branch, cy, bw, bh, br_type, br_text)
             _arrow(ax, cx_main + w / 2 + 0.02, cy,
                    cx_branch - bw / 2 - 0.02, cy,
