@@ -214,11 +214,16 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
 
         obj = n.get("object_ref")
         if obj and t != "object":
-            _draw_cylinder(ax, cx_branch, cy, BOX_W_OBJ, BOX_H_OBJ)
-            _text(ax, cx_branch, cy, _wrap(obj.get("text", ""), 10), fs=6.8)
-            _arrow(ax, cx_main + w / 2 + 0.02, cy,
-                   cx_branch - BOX_W_OBJ / 2 - 0.02, cy,
-                   color="#888888", lw=0.9)
+            if isinstance(obj, str):
+                obj_text = obj
+            else:
+                obj_text = obj.get("text") or obj.get("name") or obj.get("label") or ""
+            if obj_text:
+                _draw_cylinder(ax, cx_branch, cy, BOX_W_OBJ, BOX_H_OBJ)
+                _text(ax, cx_branch, cy, _wrap(obj_text, 10), fs=6.8)
+                _arrow(ax, cx_main + w / 2 + 0.02, cy,
+                       cx_branch - BOX_W_OBJ / 2 - 0.02, cy,
+                       color="#888888", lw=0.9)
 
         br = n.get("branch")
         if br:
