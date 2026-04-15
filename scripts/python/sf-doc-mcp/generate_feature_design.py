@@ -449,10 +449,18 @@ def main():
     today = _date.today().strftime("%Y-%m-%d")
     author = data.get("author", "")
 
+    # ── 種別ガード：画面系は generate_screen_design.py を使うこと ──
+    _SCREEN_TYPES = {"LWC", "画面フロー", "Screen Flow", "Visualforce"}
+    type_key_raw = data.get("type", "")
+    if type_key_raw in _SCREEN_TYPES:
+        print(f"[ERROR] type='{type_key_raw}' は generate_screen_design.py で処理してください。")
+        print("  LWC / 画面フロー / Visualforce は画面設計書テンプレートを使用します。")
+        sys.exit(1)
+
     # ── 出力先を先に確定（既存ファイル自動検出に使用） ──────────────
     feat_id   = data.get("id", "F-000")
     name      = data.get("name", "機能")
-    type_key  = data.get("type", "その他")
+    type_key  = type_key_raw or "その他"
     subfolder = TYPE_FOLDER.get(type_key, "other")
     out_dir   = Path(args.output_dir) / subfolder
     out_dir.mkdir(parents=True, exist_ok=True)
