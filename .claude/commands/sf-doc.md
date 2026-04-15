@@ -1,7 +1,10 @@
 Salesforceプロジェクト資料を会話形式で作成します。
 スクリプトは `c:\ClaudeCode\scripts\python\sf-doc-mcp\` にあります。
 
-**選択肢は必ず AskUserQuestion ツールで提示する（クリック選択）。テキスト入力は名前・パス等の自由記述のみ。AskUserQuestion には自動で「Other（自由入力）」が付くため、choices に Other は含めない。**
+**AskUserQuestion のルール（厳守）:**
+- **1質問1回答**: 複数の質問を1つの AskUserQuestion にまとめない。必ず1問ずつ順番に聞く
+- **選択肢はデフォルト/スキップ値のみ**: AskUserQuestion には自動で「Other（自由入力）」が付く。choices には「スキップ」「デフォルト値を使う」等の選択肢のみ記載し、Other は含めない
+- テキスト入力（パス・名前等）はチャットで直接聞く。AskUserQuestion は使わない
 
 ---
 
