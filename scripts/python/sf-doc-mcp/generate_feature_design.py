@@ -234,7 +234,8 @@ def fill_overview(ws, data, changed_fields: set = None):
 def _estimate_content_height_pts(steps: list) -> float:
     """処理内容の行高さ合計をポイント単位で概算する（フロー図の縦幅合わせに使用）。
 
-    fill_process() と同じ高さロジックを使用するため、実際の行高さと概ね一致する。
+    フロー図はメインステップのみを描画し sub_steps は描画しない。
+    そのためサブステップの高さは含めず、メインステップのタイトル行と概要行のみを計上する。
     """
     APPROX_CHARS = 28
     total = 0.0
@@ -244,12 +245,6 @@ def _estimate_content_height_pts(steps: list) -> float:
         if detail:
             est = max(2, len(detail) // APPROX_CHARS + detail.count("\n") + 1)
             total += max(48, est * 16)
-        for sub in step.get("sub_steps", []):
-            total += 20  # サブタイトル行
-            sdetail = sub.get("detail", "")
-            if sdetail:
-                slines = max(2, len(sdetail.splitlines()) + 1)
-                total += max(28, slines * 13)
         total += 10  # ステップ間スペーサー
     return max(total, 200)
 
@@ -330,10 +325,11 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
         try:
             img = XLImage(flowchart_path)
             img.anchor = f"{get_column_letter(PROC_FLOW_CS)}4"
-            # 画像の自然な縦横比を保って貼り付ける（generate_flowchart側がGAP調整済み）
+            # フロー図列幅（col 18-31, 14列 × 4.2unit ≈ 440px）に合わせて幅を固定し、
+            # 高さは縦横比を維持して比例計算する（高さキャップなし）
             ratio = img.height / img.width if img.width else 1.6
             img.width  = 440
-            img.height = min(int(440 * ratio), 2400)
+            img.height = int(440 * ratio)
             ws.add_image(img)
         except Exception as e:
             W(ws, 4, PROC_FLOW_CS, f"[フロー図挿入失敗: {e}]", italic=True, fg="888888")
@@ -522,7 +518,7 @@ def main():
     flowchart_path = None
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp_path = tmp.name
-    if generate_flowchart(steps, tmp_path, target_h=target_h_in):
+    if generate_flowchart(steps, tmp_path, fig_w=4.6, target_h=target_h_in):
         flowchart_path = tmp_path
     else:
         try: Path(tmp_path).unlink()

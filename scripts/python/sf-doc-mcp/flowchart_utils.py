@@ -172,6 +172,7 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
     BOX_W_TERM, BOX_H_TERM = 1.5, 0.48
     GAP_DEFAULT = 0.75
     GAP_MIN     = 0.60  # ノード重なりを防ぐ最小間隔
+    GAP_MAX     = 1.20  # 矢印が伸びすぎて図形が小さく見えることを防ぐ上限
 
     # ノード高さを先に計算（GAP動的調整に使用）
     node_heights = []
@@ -191,9 +192,11 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
     if target_h is not None and target_h > total_h:
         # target_h に合わせてGAPを動的に拡大する
         # MARGIN_TOP=0.50, MARGIN_BOT=0.35 を確保して残りをGAP n個で分配
-        total_h = target_h
-        avail = total_h - 0.50 - 0.35 - sum_node_h
-        GAP = max(GAP_MIN, avail / n_nodes) if n_nodes > 0 else GAP_DEFAULT
+        # GAP_MAX を超える場合は上限でクランプし、total_h を再計算する
+        avail = target_h - 0.50 - 0.35 - sum_node_h
+        raw_gap = avail / n_nodes if n_nodes > 0 else GAP_DEFAULT
+        GAP = max(GAP_MIN, min(GAP_MAX, raw_gap))
+        total_h = 0.50 + 0.35 + sum_node_h + GAP * n_nodes
     else:
         GAP = GAP_DEFAULT
 
