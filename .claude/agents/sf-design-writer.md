@@ -226,7 +226,9 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_design.py \
 
 ## Phase 3: 機能一覧 Excel の生成
 
-全 JSON から `feature_list.json` を組み立てて実行する:
+全 JSON から feature_list.json を組み立て、**必ず `{tmp_dir}/feature_list.json` に保存**してから実行する:
+
+> **保存先は `{tmp_dir}/feature_list.json` のみ。output_dir やカレントディレクトリには絶対に保存しない。**
 
 ```json
 [
@@ -252,13 +254,24 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_feature_list.py \
 
 ## Phase 4: 後処理・完了報告
 
-tmp_dir を削除する（Windows でも動作する Python で実行）:
+tmp_dir を削除し、output_dir に残った一時ファイルも合わせてクリーンアップする:
 ```bash
-python -c "import shutil; shutil.rmtree(r'{tmp_dir}', ignore_errors=True)"
+python -c "
+import shutil, pathlib, glob
+# tmp_dir を削除
+shutil.rmtree(r'{tmp_dir}', ignore_errors=True)
+# output_dir 直下に残ったゴミファイルを削除（.tmp* / *.json / *.py）
+for p in pathlib.Path(r'{output_dir}').glob('*.json'):
+    p.unlink(missing_ok=True)
+for p in pathlib.Path(r'{output_dir}').glob('.tmp*'):
+    p.unlink(missing_ok=True)
+for p in pathlib.Path(r'{output_dir}').glob('*.py'):
+    p.unlink(missing_ok=True)
+print('クリーンアップ完了')
+"
 ```
 
-> `ignore_errors=True` により、フォルダが存在しない場合や削除に失敗した場合もエラーにならない。  
-> 削除完了後、`{tmp_dir}` が残っていないことを確認する。残っている場合はもう一度実行する。
+> 削除完了後、`{tmp_dir}` および `{output_dir}` 直下に `.json` / `.py` / `.tmp*` ファイルが残っていないことを確認する。
 
 完了報告（sf-doc に返す）:
 
