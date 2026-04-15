@@ -440,9 +440,26 @@ def main():
     today = _date.today().strftime("%Y-%m-%d")
     author = data.get("author", "")
 
+    # ── 出力先を先に確定（既存ファイル自動検出に使用） ──────────────
+    feat_id   = data.get("id", "F-000")
+    name      = data.get("name", "機能")
+    type_key  = data.get("type", "その他")
+    subfolder = TYPE_FOLDER.get(type_key, "other")
+    out_dir   = Path(args.output_dir) / subfolder
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path  = out_dir / f"【{feat_id}】{name}.xlsx"
+
     # ── バージョン判定 ────────────────────────────────────────
     is_major    = (args.version_increment == "major")
     source_file = args.source_file.strip()
+
+    # --source-file 未指定時: 同一IDの既存ファイルを自動検出
+    if not source_file:
+        existing = [f for f in out_dir.glob(f"【{feat_id}】*.xlsx")]
+        if existing:
+            source_file = str(existing[0])
+            print(f"  [AUTO] 既存ファイルを検出: {existing[0].name}")
+
     prev_meta   = read_meta(source_file) if source_file else None
     prev_data   = prev_meta.get("data") if prev_meta else None
 
@@ -514,16 +531,14 @@ def main():
         "history": history,
     })
 
-    type_key  = data.get("type", "その他")
-    subfolder = TYPE_FOLDER.get(type_key, "other")
-    out_dir   = Path(args.output_dir) / subfolder
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    feat_id  = data.get("id", "F-000")
-    name     = data.get("name", "機能")
-    out_path = out_dir / f"【{feat_id}】{name}.xlsx"
     wb.save(out_path)
     print(f"生成完了: v{current_version} → {out_path}")
+
+    # 同一IDで別名の旧ファイルを削除（名称変更時の二重ファイル防止）
+    for old_f in out_dir.glob(f"【{feat_id}】*.xlsx"):
+        if old_f.resolve() != out_path.resolve():
+            old_f.unlink()
+            print(f"  [CLEANUP] 旧ファイルを削除: {old_f.name}")
 
     if flowchart_path:
         try: Path(flowchart_path).unlink()
