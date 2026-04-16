@@ -234,6 +234,9 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
             y1 = cy + h / 2
             _arrow(ax, cx_main, y0 - 0.02, cx_main, y1 + 0.02)
             ml = nodes[i - 1].get("main_label") if i - 1 >= 0 else None
+            # decision ノードの下向き矢印は "Yes" を自動付与（main_label 未指定時）
+            if ml is None and i - 1 >= 0 and nodes[i - 1].get("type") == "decision":
+                ml = "Yes"
             if ml:
                 _label(ax, cx_main - 0.22, (y0 + y1) / 2, ml)
 
@@ -279,9 +282,11 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
             _arrow(ax, cx_main + w / 2 + 0.02, cy,
                    cx_branch - bw / 2 - 0.02, cy,
                    color="#444444", lw=1.1)
-            if br.get("label"):
+            # decision ノードの branch は label 未指定時に "No" をデフォルト表示
+            br_label = br.get("label") or ("No" if t == "decision" else None)
+            if br_label:
                 midx = (cx_main + w / 2 + cx_branch - bw / 2) / 2
-                _label(ax, midx, cy + 0.16, br["label"])
+                _label(ax, midx, cy + 0.16, br_label)
 
         prev_cy, prev_h = cy, h
         y -= h + GAP
