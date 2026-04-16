@@ -270,27 +270,14 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
         title_text = step.get("title", "")
         detail     = step.get("detail", "")
         sub_steps  = step.get("sub_steps", [])
-        no_row_start = row  # Noセル縦結合の起点
 
         # タイトルと詳細を同一行に横並び配置。行高さは両者の最大行数で決定
         t_lines = max(1, -(-len(title_text) // TITLE_CPL))
         d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
         set_h(ws, row, max(22, max(t_lines, d_lines) * 18 + 4))
 
-        # No 列: サブステップ行数分を先に塗り・罫線を付けてから縦結合
-        total_no_rows = 1 + len(sub_steps)
-        for rr in range(no_row_start, no_row_start + total_no_rows):
-            for cc in range(PROC_LEFT_NO_CS, PROC_LEFT_NO_CE + 1):
-                ws.cell(row=rr, column=cc).fill = _fill(C_STEP_BG)
-                ws.cell(row=rr, column=cc).border = B_all()
-        if total_no_rows > 1:
-            ws.merge_cells(start_row=no_row_start, start_column=PROC_LEFT_NO_CS,
-                           end_row=no_row_start + total_no_rows - 1, end_column=PROC_LEFT_NO_CE)
-        c_no = ws.cell(row=no_row_start, column=PROC_LEFT_NO_CS, value=step_no)
-        c_no.font      = _fnt(bold=True)
-        c_no.alignment = _aln(h="center", v="center")
-        c_no.fill      = _fill(C_STEP_BG)
-        c_no.border    = B_all()
+        c_no = MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, step_no,
+                  bold=True, border=B_all(), h="center", bg=C_STEP_BG)
 
         c_t  = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, title_text,
                   bold=True, border=B_all(), bg=C_STEP_BG, v="top")
