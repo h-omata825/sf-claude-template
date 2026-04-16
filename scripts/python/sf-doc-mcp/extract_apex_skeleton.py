@@ -1,0 +1,529 @@
+#!/usr/bin/env python3
+"""
+extract_apex_skeleton.py
+
+Apex ソース (.cls) を静的解析し、generate_feature_design.py 互換の
+スケルトン JSON を生成する。
+
+structural フィールド（node_type / calls / object_ref / sub_steps / branch）を
+機械的に確定し、エージェントは title / detail / overview のみ補完する。
+
+制限事項:
+  - ネストされた制御構造は深さに関係なく認識するが、内側ブロックは統合される
+  - 動的 SOQL（文字列結合）の FROM 句は検出精度が下がる場合がある
+  - ジェネリクスを含む複雑な型は一部不完全に解析される
+
+Usage:
+  python extract_apex_skeleton.py --input MyClass.cls [--output skeleton.json]
+  python extract_apex_skeleton.py --input MyClass.cls  # stdout
+"""
+from __future__ import annotations
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+
+# ─── 正規表現 ────────────────────────────────────────────────────────────────
+
+_RE_CLASS = re.compile(
+    r'(?:public|global)\s+(?:with\s+sharing\s+|without\s+sharing\s+)?'
+    r'(?:virtual\s+|abstract\s+)?class\s+(\w+)',
+    re.I,
+)
+_RE_IMPLEMENTS = re.compile(r'\bimplements\b(.+?)(?=\{)', re.I | re.S)
+_RE_SOQL_INLINE = re.compile(r'\[(\s*SELECT\b.+?)\]', re.I | re.S)
+_RE_FROM = re.compile(r'\bFROM\s+(\w+)\b', re.I)
+_RE_SOQL_DB = re.compile(
+    r'Database\.(?:query|getQueryLocator)\s*\(([^;]+)\)', re.I
+)
+_RE_DML_STMT = re.compile(
+    r'\b(insert|update|delete|upsert|undelete)\s+(\w[\w.]*)\s*;', re.I
+)
+_RE_DML_DB = re.compile(
+    r'Database\.(insert|update|delete|upsert|undelete)\s*\(\s*(\w+)', re.I
+)
+_RE_EXT_CALL = re.compile(
+    r'\b([A-Z]\w*)\.((?!query|getQueryLocator)\w+)\s*\('
+)
+
+_SYSTEM_CLASSES = {
+    'System', 'Database', 'Test', 'Schema', 'Math', 'String', 'Integer', 'Long',
+    'Double', 'Decimal', 'Boolean', 'Date', 'DateTime', 'Time', 'List', 'Map', 'Set',
+    'Blob', 'Id', 'SObject', 'Type', 'JSON', 'UserInfo', 'ApexPages', 'PageReference',
+    'Trigger', 'Logger', 'LoggingLevel', 'Messaging', 'Object', 'Limits', 'Label',
+    'URL', 'EncodingUtil', 'Crypto', 'Pattern', 'Matcher', 'Application',
+    'DmlException', 'QueryException', 'NullPointerException', 'CalloutException',
+    'AsyncException', 'Exception', 'FlowExecutionErrorException',
+}
+
+_ENTRY_METHODS = [
+    'execute', 'invoke', 'start', 'finish', 'run', 'process',
+    'handleAfterInsert', 'handleAfterUpdate', 'handleBeforeInsert', 'handleBeforeUpdate',
+    'handleAfterDelete', 'handleBeforeDelete', 'handleAfterUndelete',
+]
+
+
+# ─── コメント除去 ─────────────────────────────────────────────────────────────
+
+def strip_comments(code: str) -> str:
+    out, i = [], 0
+    in_str, sc = False, ''
+    while i < len(code):
+        c = code[i]
+        if in_str:
+            out.append(c)
+            if c == '\\' and i + 1 < len(code):
+                i += 1
+                out.append(code[i])
+            elif c == sc:
+                in_str = False
+        elif c in ('"', "'"):
+            in_str, sc = True, c
+            out.append(c)
+        elif code[i:i + 2] == '//':
+            while i < len(code) and code[i] != '\n':
+                i += 1
+            continue
+        elif code[i:i + 2] == '/*':
+            i += 2
+            while i < len(code) and code[i:i + 2] != '*/':
+                if code[i] == '\n':
+                    out.append('\n')
+                i += 1
+            i += 2
+            continue
+        else:
+            out.append(c)
+        i += 1
+    return ''.join(out)
+
+
+# ─── ブロック抽出ユーティリティ ───────────────────────────────────────────────
+
+def balanced_end(code: str, pos: int) -> int:
+    """pos 位置の '{' に対応する '}' のインデックスを返す。"""
+    depth = 0
+    in_str, sc = False, ''
+    i = pos
+    while i < len(code):
+        c = code[i]
+        if in_str:
+            if c == '\\':
+                i += 1
+            elif c == sc:
+                in_str = False
+        elif c in ('"', "'"):
+            in_str, sc = True, c
+        elif c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return len(code) - 1
+
+
+def find_brace(code: str, start: int) -> int:
+    for k in range(start, len(code)):
+        if code[k] == '{':
+            return k
+    return len(code)
+
+
+def extract_method(code: str, names: list[str]) -> tuple[str, str]:
+    """優先順位順でメソッド本体 (method_name, body) を返す。"""
+    for name in names:
+        pat = re.compile(
+            r'(?:(?:public|private|global|protected|override|static|virtual|testMethod)\s+)+'
+            r'[\w<>.\[\],\s]+?\b' + re.escape(name) + r'\s*\([^)]*\)\s*\{',
+            re.I,
+        )
+        m = pat.search(code)
+        if not m:
+            continue
+        bp = m.end() - 1
+        ep = balanced_end(code, bp)
+        return name, code[bp + 1:ep]
+    return '', ''
+
+
+# ─── セグメントクラス ─────────────────────────────────────────────────────────
+
+class Seg:
+    """メソッド本体内の論理ブロック。"""
+
+    def __init__(self, kind: str, code: str):
+        self.kind = kind  # if|for|while|try|catch|finally|switch|return|throw|stmts
+        self.code = code
+
+    def soqls(self) -> list[tuple[str, str]]:
+        res = []
+        for m in _RE_SOQL_INLINE.finditer(self.code):
+            q = re.sub(r'\s+', ' ', m.group(0)).strip()
+            fm = _RE_FROM.search(m.group(1))
+            res.append((fm.group(1) if fm else '?', q))
+        for m in _RE_SOQL_DB.finditer(self.code):
+            fm = _RE_FROM.search(m.group(1))
+            if fm:
+                res.append((fm.group(1), re.sub(r'\s+', ' ', m.group(0)).strip()))
+        return res
+
+    def dmls(self) -> list[tuple[str, str]]:
+        res = []
+        for m in _RE_DML_STMT.finditer(self.code):
+            res.append((m.group(1).upper(), m.group(2)))
+        for m in _RE_DML_DB.finditer(self.code):
+            res.append((m.group(1).upper(), m.group(2)))
+        return res
+
+    def ext_calls(self) -> list[str]:
+        seen, res = set(), []
+        for m in _RE_EXT_CALL.finditer(self.code):
+            cls = m.group(1)
+            if cls not in _SYSTEM_CLASSES:
+                k = f"{cls}.{m.group(2)}"
+                if k not in seen:
+                    seen.add(k)
+                    res.append(k)
+        return res
+
+
+# ─── メソッド本体の分割 ───────────────────────────────────────────────────────
+
+def split_body(body: str) -> list[Seg]:
+    """メソッド本体をトップレベルの制御構造単位で Seg リストに分割する。"""
+    segs: list[Seg] = []
+    pos, n = 0, len(body)
+    stmts: list[str] = []
+
+    def flush():
+        text = '\n'.join(stmts).strip()
+        if text:
+            segs.append(Seg('stmts', text))
+        stmts.clear()
+
+    while pos < n:
+        while pos < n and body[pos] in ' \t\n\r':
+            pos += 1
+        if pos >= n:
+            break
+        rest = body[pos:]
+
+        # ── try / catch / finally ──────────────────────────────────────────
+        if re.match(r'try\s*\{', rest, re.I):
+            flush()
+            bp = find_brace(body, pos)
+            ep = balanced_end(body, bp)
+            segs.append(Seg('try', body[bp + 1:ep]))
+            pos = ep + 1
+            # 続く catch / finally を読む
+            while pos < n:
+                while pos < n and body[pos].isspace():
+                    pos += 1
+                r2 = body[pos:]
+                if re.match(r'\}?\s*catch\s*\(', r2, re.I):
+                    bp2 = find_brace(body, pos)
+                    ep2 = balanced_end(body, bp2)
+                    segs.append(Seg('catch', body[bp2 + 1:ep2]))
+                    pos = ep2 + 1
+                elif re.match(r'\}?\s*finally\s*\{', r2, re.I):
+                    bp2 = find_brace(body, pos)
+                    ep2 = balanced_end(body, bp2)
+                    segs.append(Seg('finally', body[bp2 + 1:ep2]))
+                    pos = ep2 + 1
+                    break
+                else:
+                    break
+            continue
+
+        # ── if / else if / else ────────────────────────────────────────────
+        if re.match(r'if\s*\(', rest, re.I):
+            flush()
+            bp = find_brace(body, pos)
+            ep = balanced_end(body, bp)
+            if_code = body[pos:ep + 1]
+            pos = ep + 1
+            while pos < n:
+                while pos < n and body[pos].isspace():
+                    pos += 1
+                r2 = body[pos:]
+                if re.match(r'\}?\s*else\s+if\s*\(', r2, re.I):
+                    bp2 = find_brace(body, pos)
+                    ep2 = balanced_end(body, bp2)
+                    if_code += '\n' + body[pos:ep2 + 1]
+                    pos = ep2 + 1
+                elif re.match(r'\}?\s*else\s*\{', r2, re.I):
+                    bp2 = find_brace(body, pos)
+                    ep2 = balanced_end(body, bp2)
+                    if_code += '\n' + body[pos:ep2 + 1]
+                    pos = ep2 + 1
+                    break
+                else:
+                    break
+            segs.append(Seg('if', if_code))
+            continue
+
+        # ── for / while ────────────────────────────────────────────────────
+        m_loop = re.match(r'(for|while)\s*\(', rest, re.I)
+        if m_loop:
+            flush()
+            bp = find_brace(body, pos)
+            ep = balanced_end(body, bp)
+            segs.append(Seg(m_loop.group(1).lower(), body[pos:ep + 1]))
+            pos = ep + 1
+            continue
+
+        # ── switch on ──────────────────────────────────────────────────────
+        if re.match(r'switch\s+on\s+', rest, re.I):
+            flush()
+            bp = find_brace(body, pos)
+            ep = balanced_end(body, bp)
+            segs.append(Seg('switch', body[pos:ep + 1]))
+            pos = ep + 1
+            continue
+
+        # ── return / throw ─────────────────────────────────────────────────
+        m_rt = re.match(r'(return|throw)\b', rest, re.I)
+        if m_rt:
+            flush()
+            semi = body.find(';', pos)
+            end = (semi + 1) if semi >= 0 else n
+            segs.append(Seg(m_rt.group(1).lower(), body[pos:end]))
+            pos = end
+            continue
+
+        # ── その他のステートメント ─────────────────────────────────────────
+        next_semi = body.find(';', pos)
+        next_brace = body.find('{', pos)
+
+        if next_semi < 0:
+            stmts.append(rest.strip())
+            pos = n
+        elif next_brace >= 0 and next_brace < next_semi:
+            ep = balanced_end(body, next_brace)
+            stmts.append(body[pos:ep + 1].strip())
+            pos = ep + 1
+        else:
+            stmts.append(body[pos:next_semi + 1].strip())
+            pos = next_semi + 1
+
+    flush()
+    return segs
+
+
+# ─── セグメント → ステップ変換 ───────────────────────────────────────────────
+
+def seg_to_step(seg: Seg, no: int) -> dict:
+    step: dict = {
+        'no': no,
+        'title': '',
+        'detail': '',
+        'node_type': 'process',
+        'calls': None,
+        'object_ref': None,
+        'branch': None,
+        'sub_steps': [],
+    }
+
+    soqls = seg.soqls()
+    dmls = seg.dmls()
+    calls = seg.ext_calls()
+
+    for obj, q in soqls:
+        step['sub_steps'].append({'title': 'SOQL', 'detail': q})
+    for op, var in dmls:
+        step['sub_steps'].append({'title': 'DML', 'detail': f'{op} {var}'})
+
+    if soqls:
+        step['object_ref'] = {'text': soqls[0][0]}
+    elif dmls:
+        step['object_ref'] = {'text': dmls[0][1].split('.')[0]}
+
+    # calls は SOQL/DML がない場合のみ設定（DB操作の方が重要度が高い）
+    if calls and not soqls and not dmls:
+        txt = calls[0]
+        step['calls'] = {'text': txt if len(txt) <= 20 else txt[:17] + '...'}
+
+    # node_type の決定
+    if seg.kind == 'if':
+        step['node_type'] = 'decision'
+        has_error_else = bool(re.search(
+            r'\}\s*else\s*\{.*?(throw\b|Exception\b|rollback)', seg.code, re.I | re.S
+        ))
+        step['branch'] = {
+            'text': '',
+            'node_type': 'error' if has_error_else else 'process',
+            'label': 'False',
+        }
+    elif seg.kind == 'switch':
+        step['node_type'] = 'decision'
+        step['branch'] = {'text': '', 'node_type': 'process', 'label': 'default'}
+    elif seg.kind in ('catch', 'throw'):
+        step['node_type'] = 'error'
+    elif seg.kind == 'return':
+        step['node_type'] = 'success' if re.search(
+            r'return\s+(true|result|response|wrapper|res|output)\b', seg.code, re.I
+        ) else 'process'
+    # try / for / while / finally / stmts → process (デフォルト)
+
+    return step
+
+
+def build_steps(segs: list[Seg]) -> list[dict]:
+    steps: list[dict] = []
+    no = 1
+    i = 0
+
+    while i < len(segs):
+        seg = segs[i]
+
+        # 連続する stmts をまとめる
+        if seg.kind == 'stmts':
+            merged_code = seg.code
+            j = i + 1
+            while j < len(segs) and segs[j].kind == 'stmts':
+                merged_code += '\n' + segs[j].code
+                j += 1
+            merged = Seg('stmts', merged_code)
+            # 意味のある処理を含む場合のみステップ化
+            has_content = (
+                merged.soqls()
+                or merged.dmls()
+                or merged.ext_calls()
+                or bool(re.search(r'\w+\s*[\+\-\*\/]?=\s*\w+', merged.code))
+                or bool(re.search(r'\.\w+\s*\(', merged.code))
+            )
+            if has_content:
+                steps.append(seg_to_step(merged, no))
+                no += 1
+            i = j
+
+        # try → 直後の catch/finally と統合
+        elif seg.kind == 'try':
+            step = seg_to_step(seg, no)
+            no += 1
+            j = i + 1
+            catch_segs = []
+            while j < len(segs) and segs[j].kind in ('catch', 'finally'):
+                catch_segs.append(segs[j])
+                j += 1
+            if catch_segs:
+                step['branch'] = {'text': '', 'node_type': 'error', 'label': 'catch'}
+            steps.append(step)
+            for cs in catch_segs:
+                steps.append(seg_to_step(cs, no))
+                no += 1
+            i = j
+
+        else:
+            steps.append(seg_to_step(seg, no))
+            no += 1
+            i += 1
+
+    if not steps:
+        steps = [{
+            'no': 1, 'title': '', 'detail': '', 'node_type': 'process',
+            'calls': None, 'object_ref': None, 'branch': None, 'sub_steps': [],
+        }]
+    return steps
+
+
+# ─── クラス種別検出 ───────────────────────────────────────────────────────────
+
+def detect_type(code: str) -> str:
+    m = _RE_IMPLEMENTS.search(code)
+    if m:
+        s = m.group(1)
+        if re.search(r'Database\.Batchable', s, re.I):
+            return 'Apex_Batch'
+        if re.search(r'Queueable', s, re.I):
+            return 'Apex_Queueable'
+        if re.search(r'Schedulable', s, re.I):
+            return 'Apex_Schedulable'
+    if re.search(r'@InvocableMethod', code, re.I):
+        return 'Apex_Invocable'
+    if re.search(r'TriggerHandler', code, re.I):
+        return 'Apex_TriggerHandler'
+    return 'Apex'
+
+
+# ─── メイン解析 ───────────────────────────────────────────────────────────────
+
+def parse_apex(code: str) -> dict:
+    clean = strip_comments(code)
+
+    m_cls = _RE_CLASS.search(clean)
+    api_name = m_cls.group(1) if m_cls else 'UnknownClass'
+    cls_type = detect_type(clean)
+
+    # エントリーポイント候補（優先順位順）
+    all_public = [
+        m.group(1)
+        for m in re.finditer(
+            r'(?:public|global|override)\s+[\w<>.\[\]]+\s+(\w+)\s*\(', clean, re.I
+        )
+    ]
+    priority = _ENTRY_METHODS + [x for x in all_public if x not in _ENTRY_METHODS]
+
+    method_name, body = extract_method(clean, priority)
+
+    # フォールバック: クラス本体全体
+    if not body and m_cls:
+        bp = find_brace(clean, m_cls.end())
+        if bp < len(clean):
+            body = clean[bp + 1: balanced_end(clean, bp)]
+
+    segs = split_body(body) if body else []
+    steps = build_steps(segs)
+
+    return {
+        'type': cls_type,
+        'api_name': api_name,
+        'name': '',
+        'overview': {
+            'purpose': '',
+            'trigger': '',
+            'preconditions': '',
+            'summary': '',
+        },
+        'steps': steps,
+        'params': {'input': [], 'output': []},
+        'revision_history': [],
+        '_parser_meta': {
+            'entry_method': method_name or '(not found)',
+            'segment_count': len(segs),
+            'step_count': len(steps),
+        },
+    }
+
+
+# ─── CLI ─────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description='Apex ソース → スケルトンJSON')
+    ap.add_argument('--input',  '-i', required=True, help='入力 .cls ファイル')
+    ap.add_argument('--output', '-o', help='出力 JSON ファイル（省略時 stdout）')
+    args = ap.parse_args()
+
+    code = Path(args.input).read_text(encoding='utf-8')
+    result = parse_apex(code)
+    out = json.dumps(result, ensure_ascii=False, indent=2)
+
+    if args.output:
+        Path(args.output).write_text(out, encoding='utf-8')
+        meta = result['_parser_meta']
+        print(
+            f"[OK] {args.output}  "
+            f"entry={meta['entry_method']}  "
+            f"steps={meta['step_count']}",
+            file=sys.stderr,
+        )
+    else:
+        print(out)
+
+
+if __name__ == '__main__':
+    main()
