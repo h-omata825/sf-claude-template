@@ -24,7 +24,16 @@ bash scripts/upgrade.sh $ARGUMENTS
 
 スクリプトが対話的に確認を行うので、そのまま実行させる。
 
+> **なぜ `.claude/` に書き込めるか**:
+> `settings.json` の deny ルール（`Edit(.claude/*)` / `Write(.claude/*)`）は、Claude が **直接** Edit・Write ツールを呼び出す操作をブロックする。
+> `bash scripts/upgrade.sh` は **シェルプロセス** として動作するため deny の対象外となり、スクリプト内の `cp` / `rsync` 等で `.claude/` 配下を自由に上書きできる。
+> テンプレート管理者がアップグレードを意図的に行う場合にのみ使うコマンドのため、この設計は意図的なもの。
+
 ## 実行後
 
 1. スクリプトの出力結果をユーザーに伝える
 2. 変更があった場合は `git diff .claude/` で変更内容を確認するよう提案する
+
+> **注意**: `.gitignore` に `.claude/` が含まれている場合、`git diff` に差分が表示されない。
+> このテンプレートでは `.claude/` を Git 管理対象にしているため通常は問題ないが、
+> もし `.gitignore` を手動編集して除外した場合はファイルを直接確認すること。

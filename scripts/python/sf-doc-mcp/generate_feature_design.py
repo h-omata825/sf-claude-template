@@ -61,6 +61,7 @@ TYPE_FOLDER = {
     "Apex_TriggerHandler": "apex",
     "Batch":            "batch",
     "Flow":             "flow",
+    "Integration":      "integration",
     "Aura":             "aura",
     "その他":           "other",
 }
@@ -514,6 +515,7 @@ def main():
     if not source_file:
         existing = [f for f in out_dir.glob(f"【{feat_id}】*.xlsx")]
         if existing:
+            existing.sort(key=lambda f: f.stat().st_mtime, reverse=True)  # 最新ファイルを優先
             source_file = str(existing[0])
             print(f"  [AUTO] 既存ファイルを検出: {existing[0].name}")
 

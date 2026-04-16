@@ -63,6 +63,7 @@ def extract_trigger_handler(trigger_path: Path) -> str | None:
         pass
     # フォールバック: OpportunityTrigger → OpportunityTriggerHandler
     stem = trigger_path.stem
+    print(f"[警告] {trigger_path.name}: ハンドラークラス名を推測 → {stem}Handler", file=sys.stderr)
     return f"{stem}Handler"
 
 
@@ -160,7 +161,7 @@ def scan(project_dir: Path) -> list[dict]:
     if base.exists():
         for flow_file in sorted(base.glob("*.flow-meta.xml")):
             label, ptype, desc = get_flow_info(flow_file)
-            flow_type = "画面フロー" if "Screen" in ptype else "Flow"
+            flow_type = "画面フロー" if ptype == "Flow" and b"<Screen>" in flow_file.read_bytes() else "Flow"
             api_name = flow_file.name.replace(".flow-meta.xml", "")
             _add(flow_type, api_name, {
                 "name":        label,

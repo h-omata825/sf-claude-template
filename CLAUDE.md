@@ -52,7 +52,7 @@
 |---|---|---|---|
 | 組織プロフィール・要件定義 | `docs/overview/` `docs/requirements/` | `/sf-memory` | 組織概要・用語集・AS-IS/TO-BE・要件一覧 |
 | オブジェクト・項目定義書（Markdown） | `docs/catalog/` | `/sf-memory` | オブジェクト・項目構成・権限。Claude記憶形成用 |
-| オブジェクト・項目定義書（Excel/PowerPoint） | `docs/` 任意 | `/project-doc` | 正式な成果物として提出・共有するための定義書 |
+| オブジェクト・項目定義書（Excel/PowerPoint） | `docs/` 任意 | `/sf-doc` | 正式な成果物として提出・共有するための定義書 |
 | 機能設計書 | `docs/design/{種別}/` | `/sf-memory` | apex/flow/batch/lwc/integration/config |
 | データ統計・マスタ | `docs/data/` | `/sf-memory` | マスタデータ・テンプレート・統計・品質 |
 | 変更履歴 | `docs/changelog.md` | 自動 | コマンド実行時に自動追記 |

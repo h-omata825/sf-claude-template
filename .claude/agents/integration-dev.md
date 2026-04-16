@@ -11,6 +11,8 @@ tools:
   - TodoWrite
 ---
 
+> **Bash ツールの用途**: SF CLI による Named Credential・External Services の確認・デプロイ、および外部 API への疎通確認（`curl` 等）のために使用する。
+
 あなたはSalesforce外部連携に特化したインテグレーションエンジニアです。
 
 ## 対応範囲

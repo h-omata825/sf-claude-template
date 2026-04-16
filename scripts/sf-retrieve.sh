@@ -1,16 +1,16 @@
 #!/bin/bash
 # =============================================================================
-# sf-package.sh — package.xml の生成とメタデータ取得
+# sf-retrieve.sh — package.xml の生成とメタデータ取得
 #
-# /sf-package コマンドの定型部分（package.xml生成・retrieve実行）をスクリプト化。
-# 取得対象の判断（指定/標準セット/全て）は /sf-package コマンド側（Claude）が行い、
+# /sf-retrieve コマンドの定型部分（package.xml生成・retrieve実行）をスクリプト化。
+# 取得対象の判断（指定/標準セット/全て）は /sf-retrieve コマンド側（Claude）が行い、
 # このスクリプトに mode を渡す。
 #
 # 使い方:
-#   bash scripts/sf-package.sh standard             # 標準セットで生成＋取得
-#   bash scripts/sf-package.sh all                   # 全量で生成＋取得
-#   bash scripts/sf-package.sh generate-only standard # 生成のみ（取得しない）
-#   bash scripts/sf-package.sh retrieve              # 既存 package.xml で取得のみ
+#   bash scripts/sf-retrieve.sh standard             # 標準セットで生成＋取得
+#   bash scripts/sf-retrieve.sh all                   # 全量で生成＋取得
+#   bash scripts/sf-retrieve.sh generate-only standard # 生成のみ（取得しない）
+#   bash scripts/sf-retrieve.sh retrieve              # 既存 package.xml で取得のみ
 # =============================================================================
 set -euo pipefail
 
@@ -148,7 +148,7 @@ case "$MODE" in
         retrieve
         ;;
     *)
-        echo "使い方: bash scripts/sf-package.sh <mode>"
+        echo "使い方: bash scripts/sf-retrieve.sh <mode>"
         echo ""
         echo "  standard        標準セットで package.xml 生成 + 取得"
         echo "  all             全量で package.xml 生成 + 取得"

@@ -2,7 +2,7 @@
 description: "Salesforce組織からメタデータを取得する。package.xml の生成と取得対象をクリック選択で指定できる。"
 ---
 
-sf-devエージェントとして、Salesforce組織からメタデータを取得してください。
+Salesforce組織からメタデータを取得してください。
 
 ## ユーザー入力
 
@@ -42,8 +42,40 @@ bash scripts/sf-retrieve.sh all
 指定された名前からメタデータタイプを判定し `manifest/package.xml` を生成して取得する:
 
 ```bash
+# 例: Apex クラス MyClass・フロー MyFlow・オブジェクト Account を指定した場合
+cat > manifest/package.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>MyClass</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>MyFlow</members>
+        <name>Flow</name>
+    </types>
+    <types>
+        <members>Account</members>
+        <name>CustomObject</name>
+    </types>
+    <version>59.0</version>
+</Package>
+EOF
+
 sf project retrieve start --manifest manifest/package.xml
 ```
+
+メタデータタイプの対応表（主要なもの）:
+
+| 指定内容 | `<name>` タグ |
+|---|---|
+| Apex クラス | `ApexClass` |
+| Apex トリガー | `ApexTrigger` |
+| フロー | `Flow` |
+| LWC コンポーネント | `LightningComponentBundle` |
+| オブジェクト・項目 | `CustomObject` |
+| 権限セット | `PermissionSet` |
+| カスタムメタデータ型 | `CustomMetadata` |
 
 ---
 

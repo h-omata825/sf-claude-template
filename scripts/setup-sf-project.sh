@@ -94,7 +94,7 @@ echo ""
 read -p "組織のメタデータを取得しますか？ (y/N): " retrieve
 if [[ ! "$retrieve" =~ ^[yY] ]]; then
     echo ""
-    echo "セットアップ完了。メタデータ取得は後で /sf-package で実行できます。"
+    echo "セットアップ完了。メタデータ取得は後で /sf-retrieve で実行できます。"
     exit 0
 fi
 

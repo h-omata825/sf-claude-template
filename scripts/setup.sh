@@ -118,9 +118,11 @@ if [ -z "$PROJECT_REPO_URL" ]; then
     echo "         git push -u origin main"
     echo ""
 fi
-echo "    1. /sf-setup を実行（組織認証・メタデータ取得）"
-echo "    2. CLAUDE.md を編集してプロジェクト固有情報を記入"
-echo "    3. /setup-mcp を実行してGitHub連携を設定"
+echo "    1. /sf-setup     — Salesforce組織を認証する"
+echo "    2. /sf-retrieve  — メタデータを取得する（force-app/ に展開）"
+echo "    3. /sf-memory    — 組織情報を収集しドキュメントを生成する（docs/ に出力）"
+echo "    4. CLAUDE.md     — プロジェクト固有情報を記入する"
+echo "    5. /setup-mcp    — GitHub・Backlog等の外部連携を設定する（任意）"
 echo ""
 
 # --- VSCode で開く ---
