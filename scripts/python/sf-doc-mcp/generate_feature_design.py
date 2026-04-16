@@ -52,11 +52,17 @@ THIN = Side(style="thin",   color="8B9DC3")
 MED  = Side(style="medium", color="1F3864")
 
 TYPE_FOLDER = {
-    "Apex":      "apex",
-    "Batch":     "batch",
-    "Flow":      "flow",
-    "Aura":      "aura",
-    "その他":    "other",
+    "Apex":             "apex",
+    "Apex_AuraEnabled": "apex",
+    "Apex_Batch":       "batch",
+    "Apex_Queueable":   "batch",
+    "Apex_Schedulable": "batch",
+    "Apex_Invocable":   "apex",
+    "Apex_TriggerHandler": "apex",
+    "Batch":            "batch",
+    "Flow":             "flow",
+    "Aura":             "aura",
+    "その他":           "other",
 }
 
 # ── テンプレートと一致させる定数 ────────────────────────────────
@@ -464,6 +470,24 @@ def main():
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
     today = _date.today().strftime("%Y-%m-%d")
     author = data.get("author", "")
+
+    # ── スケルトンモード: _parser_meta を除去 ──────────────────────
+    data.pop("_parser_meta", None)
+
+    # ── ネスト overview をフラット化 ──────────────────────────────
+    # extract_apex_skeleton.py が出力する overview: {purpose, trigger, preconditions, summary}
+    # を generate_feature_design.py が期待するトップレベルキーに変換する
+    ov = data.get("overview")
+    if isinstance(ov, dict):
+        data["purpose"]       = ov.get("purpose", "")
+        data["trigger"]       = ov.get("trigger", "")
+        data["prerequisites"] = ov.get("preconditions", "")
+        data["overview"]      = ov.get("summary", "")   # dict → str に置換
+    # params ネスト: {input: [...], output: [...]} → input_params / output_params
+    params = data.get("params")
+    if isinstance(params, dict):
+        data["input_params"]  = params.get("input",  [])
+        data["output_params"] = params.get("output", [])
 
     # ── 種別ガード：画面系は generate_screen_design.py を使うこと ──
     _SCREEN_TYPES = {"LWC", "画面フロー", "Screen Flow", "Visualforce"}

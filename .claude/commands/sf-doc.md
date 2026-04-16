@@ -1,5 +1,5 @@
 Salesforceプロジェクト資料を会話形式で作成します。
-スクリプトは `c:\ClaudeCode\scripts\python\sf-doc-mcp\` にあります。
+スクリプトは `scripts/python/sf-doc-mcp/`（プロジェクトルートからの相対パス）にあります。
 
 **AskUserQuestion のルール（厳守）:**
 - **1質問1回答**: 複数の質問を1つの AskUserQuestion にまとめない。必ず1問ずつ順番に聞く
@@ -17,7 +17,7 @@ Salesforceプロジェクト資料を会話形式で作成します。
 |---|---|---|---|
 | 業務フロー図 | `docs/overview/org-profile.md`<br>`docs/requirements/requirements.md`<br>`docs/architecture/system.json`<br>`docs/flow/usecases.md`<br>`docs/flow/swimlanes.json` | `/sf-memory` | **カテゴリ1: 組織概要・環境情報** |
 | データモデル定義書 | `docs/catalog/_index.md`<br>`docs/catalog/_data-model.md`<br>`docs/catalog/custom/*.md`<br>`docs/catalog/standard/*.md`<br>（会社名のみ org-profile.md も参照） | `/sf-memory` | **カテゴリ2: オブジェクト・項目構成** |
-| オブジェクト定義書 | ① `docs/catalog/_index.md`（対象オブジェクト候補の選択のみ）<br>② **SF組織に直接接続**して項目メタデータを取得（force-app/ 不要） | ① `/sf-memory` カテゴリ2<br>② 不要（実行時に接続） | カテゴリ2: オブジェクト・項目構成 |
+| オブジェクト定義書 | ① `docs/catalog/_index.md`（対象オブジェクト候補の選択のみ）<br>② **Salesforce組織に直接接続**して項目メタデータを取得（force-app/ 不要） | ① `/sf-memory` カテゴリ2<br>② 不要（実行時に接続） | カテゴリ2: オブジェクト・項目構成 |
 | 機能別設計書 | `force-app/`（Apex/Flow/LWC を直接スキャン）<br>`docs/design/`（既存設計書があれば参照・任意） | `/sf-retrieve` | standard または all |
 
 > **新規オブジェクト追加後**: `/sf-memory` カテゴリ2 を再実行 → _index.md に反映  
@@ -162,7 +162,7 @@ for k, p in paths.items():
 出力先サブフォルダを作成してから実行:
 ```bash
 mkdir -p "{ROOT}/業務フロー図"
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_project_doc.py \
+python scripts/python/sf-doc-mcp/generate_project_doc.py \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{ROOT}/業務フロー図" \
   --author "{作成者名}"
@@ -209,7 +209,7 @@ print('model:', model.exists())
 
 業務フロー図と同じフォルダ（`{ROOT}/業務フロー図/`）に出力する:
 ```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_data_model.py \
+python scripts/python/sf-doc-mcp/generate_data_model.py \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{ROOT}/業務フロー図" \
   --author "{作成者名}"
@@ -224,14 +224,14 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate_data_model.py \
 
 **【使用する情報源】**
 - `docs/catalog/_index.md` — 対象オブジェクトの候補リスト表示に使用（フィールド情報には使わない）
-- **SF組織に直接接続**してフィールドメタデータを取得（force-app/ は不使用）
+- **Salesforce組織に直接接続**してフィールドメタデータを取得（force-app/ は不使用）
 
 **【最新化手順】**
 - `_index.md` が古い（新規オブジェクトが未反映）場合: `/sf-memory` → カテゴリ2「オブジェクト・項目構成」
-- フィールドメタデータは実行時に SF組織から直接取得するため、別途最新化不要
+- フィールドメタデータは実行時に Salesforce組織から直接取得するため、別途最新化不要
 
 AskUserQuestion で確認:
-- label: "このまま続ける"、description: "フィールドデータはSF組織から直接取得するため常に最新。_index.md の更新は新規オブジェクト追加時のみ必要"
+- label: "このまま続ける"、description: "フィールドデータはSalesforce組織から直接取得するため常に最新。_index.md の更新は新規オブジェクト追加時のみ必要"
 - label: "/sf-memory カテゴリ2 を実行してから続ける（終了）"、description: "Salesforceに新しいオブジェクトを追加し、選択候補に追加したい場合"
 
 ### C-1: 接続先の選択
@@ -335,7 +335,7 @@ Other が選ばれた場合はテキストで入力してもらう:
 ```bash
 python -c "
 import sys
-sys.path.insert(0, r'c:\ClaudeCode\scripts\python\sf-doc-mcp')
+sys.path.insert(0, 'scripts/python/sf-doc-mcp')
 from meta_store import read_meta
 m = read_meta(r'{既存ファイルのフルパス}')
 if m:
@@ -372,7 +372,7 @@ mkdir -p "{ROOT}/オブジェクト定義書"
 
 **SF CLI エイリアスで接続する場合（target-org あり）:**
 ```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate.py \
+python scripts/python/sf-doc-mcp/generate.py \
   --sf-alias {SF_ALIAS} \
   --objects {オブジェクトリスト} \
   --output-dir "{ROOT}/オブジェクト定義書" \
@@ -384,7 +384,7 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate.py \
 
 **username/password で接続する場合（target-org なし）:**
 ```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\generate.py \
+python scripts/python/sf-doc-mcp/generate.py \
   --username {SF_USERNAME} \
   --password {SF_PASSWORD} \
   --security-token {SF_TOKEN} \
@@ -448,7 +448,7 @@ mkdir -p "{ROOT}/機能別設計書"
 ### D-2: force-app/ をスキャンして対象を確定
 
 ```bash
-python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
+python scripts/python/sf-doc-mcp/scan_features.py \
   --project-dir "{カレントディレクトリ}"
 ```
 
@@ -467,27 +467,34 @@ python c:\ClaudeCode\scripts\python\sf-doc-mcp\scan_features.py \
 
 「キャンセル」が選ばれた場合は終了。「生成開始」が選ばれたら D-3 へ進む。
 
-### D-3: sf-design-writer エージェントへ委譲
+### D-3: エージェントへ委譲
 
-以下の情報を self-contained なプロンプトとして `sf-design-writer` エージェントに渡す:
+feature_list のコンポーネント種別に応じて、以下の順序でエージェントに委譲する。
 
-渡す情報:
+**共通で渡す情報**:
 - `project_dir`: カレントディレクトリのフルパス
-- `output_dir`: `{ROOT}/機能別設計書`（apex/ flow/ lwc/ batch/ はこの中に生成される）
+- `output_dir`: `{ROOT}/機能別設計書`
 - `tmp_dir`: `{ROOT}/機能別設計書/.tmp`
 - `author`: 作成者名
 - `project_name`: プロジェクト名
 - `sf_alias`: Step C で使用した SF エイリアス（Step C をスキップした場合は `.sf/config.json` から取得）
-- `feature_list`: D-2 で取得したコンポーネント一覧（JSON 全文）
-- `target_ids`: 対象の機能ID・API名リスト（全機能の場合は全件）
-- sf-design-writer エージェント定義の全文
+- `target_ids`: 対象の機能ID・API名リスト
 
-エージェントは以下を実行して完了報告を返す:
-- 各コンポーネントのソースを徹底的に読んで設計 JSON を生成
-- 機能設計書 Excel を生成（機能数分）
-- 機能一覧 Excel を生成（1ファイル）
-- 一時ファイルを削除
+**D-3a: LWC・画面フロー が含まれる場合 → `sf-screen-writer` を先に呼ぶ**
+
+feature_list のうち `type` が `LWC` または `画面フロー` のもののみを抽出して渡す。
+sf-screen-writer は Phase 2（Excel生成）まで実行して完了報告を返す（機能一覧・クリーンアップは行わない）。
+
+**D-3b: `sf-design-writer` を呼ぶ（常に実行）**
+
+feature_list のうち `type` が `Apex` / `Batch` / `Flow` / `Integration` 等のものを渡す（LWC/画面フローは除外）。
+sf-design-writer は以下を実行して完了報告を返す:
+- Apex/Batch/Flow/Integration の設計 JSON 生成と Excel 生成
+- Phase 3: tmp_dir 内の全 design JSON（sf-screen-writer 分も含む）から機能一覧 Excel を生成
+- Phase 4: tmp_dir クリーンアップ
+
+> LWC/画面フローのみのプロジェクトで Apex が存在しない場合も、sf-design-writer を呼んで Phase 3（機能一覧生成）と Phase 4（クリーンアップ）を実行させること。
 
 ### D-4: 完了報告の表示
 
-エージェントからの完了報告をそのまま表示する。
+各エージェントからの完了報告をまとめて表示する。

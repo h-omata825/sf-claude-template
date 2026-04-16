@@ -64,6 +64,13 @@ _ENTRY_METHODS = [
     'handleAfterDelete', 'handleBeforeDelete', 'handleAfterUndelete',
 ]
 
+_RE_AURA_ENABLED_METHOD = re.compile(
+    r'@AuraEnabled(?:\s*\(\s*cacheable\s*=\s*\w+\s*\))?\s+'
+    r'(?:(?:public|global|private|protected|override|static|virtual|testMethod)\s+)+'
+    r'[\w<>.\[\],\s]+?\s+(\w+)\s*\([^)]*\)\s*\{',
+    re.I,
+)
+
 
 # ─── コメント除去 ─────────────────────────────────────────────────────────────
 
@@ -181,9 +188,10 @@ class Seg:
 
     def ext_calls(self) -> list[str]:
         seen, res = set(), []
+        _sys_upper = {s.upper() for s in _SYSTEM_CLASSES}
         for m in _RE_EXT_CALL.finditer(self.code):
             cls = m.group(1)
-            if cls not in _SYSTEM_CLASSES:
+            if cls.upper() not in _sys_upper:  # 大文字小文字を無視して比較
                 k = f"{cls}.{m.group(2)}"
                 if k not in seen:
                     seen.add(k)
@@ -431,6 +439,55 @@ def build_steps(segs: list[Seg]) -> list[dict]:
     return steps
 
 
+# ─── @AuraEnabled メソッド → ステップ変換 ───────────────────────────────────
+
+def method_to_step(method_name: str, segs: list[Seg], no: int) -> dict:
+    """@AuraEnabled メソッド全体を1ステップに集約する。"""
+    all_soqls: list[tuple[str, str]] = []
+    all_dmls: list[tuple[str, str]] = []
+    all_calls: list[str] = []
+    seen_calls: set[str] = set()
+
+    for seg in segs:
+        all_soqls.extend(seg.soqls())
+        all_dmls.extend(seg.dmls())
+        for c in seg.ext_calls():
+            if c not in seen_calls:
+                seen_calls.add(c)
+                all_calls.append(c)
+
+    sub_steps: list[dict] = []
+    for obj, q in all_soqls:
+        sub_steps.append({'title': 'SOQL', 'detail': q})
+    for op, var in all_dmls:
+        sub_steps.append({'title': 'DML', 'detail': f'{op} {var}'})
+
+    object_ref = None
+    if all_soqls:
+        object_ref = {'text': all_soqls[0][0]}
+    elif all_dmls:
+        object_ref = {'text': all_dmls[0][1].split('.')[0]}
+
+    calls = None
+    if all_calls:
+        txt = all_calls[0]
+        calls = {'text': txt if len(txt) <= 20 else txt[:17] + '...'}
+
+    has_error = any(s.kind in ('catch', 'throw') for s in segs)
+    branch = {'text': '', 'node_type': 'error', 'label': 'catch'} if has_error else None
+
+    return {
+        'no': no,
+        'title': method_name,  # エージェントが意味のある名称に上書き
+        'detail': '',
+        'node_type': 'process',
+        'calls': calls,
+        'object_ref': object_ref,
+        'branch': branch,
+        'sub_steps': sub_steps,
+    }
+
+
 # ─── クラス種別検出 ───────────────────────────────────────────────────────────
 
 def detect_type(code: str) -> str:
@@ -459,7 +516,42 @@ def parse_apex(code: str) -> dict:
     api_name = m_cls.group(1) if m_cls else 'UnknownClass'
     cls_type = detect_type(clean)
 
-    # エントリーポイント候補（優先順位順）
+    # ── @AuraEnabled コントローラ検出（2メソッド以上で確定）───────────────
+    aura_matches = list(_RE_AURA_ENABLED_METHOD.finditer(clean))
+    if len(aura_matches) >= 2:
+        cls_type = 'Apex_AuraEnabled'
+        steps: list[dict] = []
+        total_segs = 0
+        for idx, am in enumerate(aura_matches):
+            mname = am.group(1)
+            bp = am.end() - 1  # '{' の位置
+            ep = balanced_end(clean, bp)
+            body = clean[bp + 1: ep]
+            segs = split_body(body)
+            total_segs += len(segs)
+            steps.append(method_to_step(mname, segs, idx + 1))
+
+        return {
+            'type': cls_type,
+            'api_name': api_name,
+            'name': '',
+            'overview': {
+                'purpose': '',
+                'trigger': '',
+                'preconditions': '',
+                'summary': '',
+            },
+            'steps': steps,
+            'params': {'input': [], 'output': []},
+            'revision_history': [],
+            '_parser_meta': {
+                'entry_method': f'@AuraEnabled×{len(aura_matches)}',
+                'segment_count': total_segs,
+                'step_count': len(steps),
+            },
+        }
+
+    # ── 通常クラス: エントリーポイント候補（優先順位順）───────────────────
     all_public = [
         m.group(1)
         for m in re.finditer(

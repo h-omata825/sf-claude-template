@@ -47,10 +47,16 @@ def auto_enrich_steps(steps: list) -> None:
     _TARGET  = _re.compile(r'対象[：:]\s*(\w+)')
     _SF_NAME = _re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
 
+    _EXCEPTION_LABELS = {"catch", "throw", "finally", "error"}
+
     for step in steps:
-        # 1. branch が設定されているなら必ず decision
-        if step.get("branch") and step.get("node_type", "process") == "process":
-            step["node_type"] = "decision"
+        # 1. branch が設定されているなら decision に補完
+        # ただし catch/throw/finally は例外パス（矩形のまま右逃げ）なので decision にしない
+        br = step.get("branch")
+        if br and step.get("node_type", "process") == "process":
+            br_label = (br.get("label") or "").lower()
+            if br_label not in _EXCEPTION_LABELS:
+                step["node_type"] = "decision"
 
         # 2-3. object_ref の自動補完（calls/branch/object_ref が既に設定済みなら不要）
         if step.get("object_ref") or step.get("calls") or step.get("branch"):
@@ -280,22 +286,18 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
                 lbl_y = y0 - 0.22 if (i - 1 >= 0 and nodes[i - 1].get("type") == "decision") else (y0 + y1) / 2
                 _label(ax, cx_main - 0.22, lbl_y, ml)
 
-        obj = n.get("object_ref")
-        if obj and t != "object":
-            if isinstance(obj, str):
-                obj_text = obj
-            else:
-                obj_text = obj.get("text") or obj.get("name") or obj.get("label") or ""
-            if obj_text:
-                _draw_cylinder(ax, cx_branch, cy, BOX_W_OBJ, BOX_H_OBJ)
-                _text(ax, cx_branch, cy, _wrap(obj_text, 10), fs=6.8)
-                _arrow(ax, cx_main + w / 2 + 0.02, cy,
-                       cx_branch - BOX_W_OBJ / 2 - 0.02, cy,
-                       color="#888888", lw=0.9)
-
-        # 別機能呼び出し（calls）: 右側に緑の箱で機能名を表示
+        # ── 右側要素の描画 ──────────────────────────────────────────────────────
+        # 優先度: calls（外部呼び出し）> object_ref（DMLオブジェクト）> branch（decision のみ）
+        # catch/throw/finally 分岐は右列を占有せず、メインボックス隅にアノテーションで示す
+        _EXCEPTION_LABELS_FC = {"catch", "throw", "finally"}
+        obj   = n.get("object_ref")
         calls = n.get("calls")
-        if calls and not n.get("branch"):  # branch と同時使用不可
+        br    = n.get("branch")
+        br_label_raw = (br.get("label") or "").lower() if br else ""
+        br_is_exception = br_label_raw in _EXCEPTION_LABELS_FC
+
+        if calls:
+            # calls: 他Apex・他LWC呼び出し → 常に右側に表示（最優先）
             if isinstance(calls, str):
                 calls_text = calls
             else:
@@ -311,22 +313,39 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
                 midx = (cx_main + w / 2 + cx_branch - cw / 2) / 2
                 _label(ax, midx, cy + 0.16, "呼出")
 
-        br = n.get("branch")
-        if br:
-            br_text = _wrap(br.get("text", ""), 12)
-            br_type = br.get("node_type", "error")
-            br_lines = len(br_text.split("\n"))
+        elif obj and t != "object":
+            # object_ref: DML操作のオブジェクト円柱 → calls がない場合に表示
+            if isinstance(obj, str):
+                obj_text = obj
+            else:
+                obj_text = obj.get("text") or obj.get("name") or obj.get("label") or ""
+            if obj_text:
+                _draw_cylinder(ax, cx_branch, cy, BOX_W_OBJ, BOX_H_OBJ)
+                _text(ax, cx_branch, cy, _wrap(obj_text, 10), fs=6.8)
+                _arrow(ax, cx_main + w / 2 + 0.02, cy,
+                       cx_branch - BOX_W_OBJ / 2 - 0.02, cy,
+                       color="#888888", lw=0.9)
+
+        elif br and not br_is_exception:
+            # branch(decision): calls も object_ref もない条件分岐のみ右側ボックス
+            br_text  = _wrap(br.get("text", ""), 12)
+            br_type  = br.get("node_type", "error")
+            br_lines = len(br_text.split("\n")) if br_text else 1
             bw = BOX_W_PROC * 1.0
             bh = BOX_H_PROC * 1.05 + max(0, br_lines - 1) * 0.18
             _render_shape(ax, cx_branch, cy, bw, bh, br_type, br_text)
             _arrow(ax, cx_main + w / 2 + 0.02, cy,
                    cx_branch - bw / 2 - 0.02, cy,
                    color="#444444", lw=1.1)
-            # decision ノードの branch は label 未指定時に "False" をデフォルト表示
-            br_label = br.get("label") or ("False" if t == "decision" else None)
-            if br_label:
+            br_lbl = br.get("label") or ("False" if t == "decision" else None)
+            if br_lbl:
                 midx = (cx_main + w / 2 + cx_branch - bw / 2) / 2
-                _label(ax, midx, cy + 0.16, br_label)
+                _label(ax, midx, cy + 0.16, br_lbl)
+
+        # catch/throw アノテーション: 右列を占有せず、メインボックス右上端に小ラベルで示す
+        if br and br_is_exception:
+            _label(ax, cx_main + w / 2 - 0.02, cy + h / 2 - 0.02,
+                   br_label_raw, color="#BF8F00")
 
         prev_cy, prev_h = cy, h
         y -= h + GAP

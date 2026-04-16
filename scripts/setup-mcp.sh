@@ -106,7 +106,7 @@ setup_github() {
 
     local config="\"github\": {
       \"command\": \"npx\",
-      \"args\": [\"-y\", \"@modelcontextprotocol/server-github\"],
+      \"args\": [\"-y\", \"@modelcontextprotocol/server-github@latest\"],
       \"env\": {
         \"GITHUB_PERSONAL_ACCESS_TOKEN\": \"${token}\"
       }
@@ -123,7 +123,7 @@ setup_slack() {
 
     local config="\"slack\": {
       \"command\": \"npx\",
-      \"args\": [\"-y\", \"@anthropic/mcp-server-slack\"],
+      \"args\": [\"-y\", \"@modelcontextprotocol/server-slack\"],
       \"env\": {
         \"SLACK_BOT_TOKEN\": \"${token}\"
       }
@@ -140,7 +140,7 @@ setup_notion() {
 
     local config="\"notion\": {
       \"command\": \"npx\",
-      \"args\": [\"-y\", \"@notionhq/notion-mcp-server\"],
+      \"args\": [\"-y\", \"@notionhq/notion-mcp-server@latest\"],
       \"env\": {
         \"OPENAPI_MCP_HEADERS\": \"{\\\\\"Authorization\\\\\": \\\\\"Bearer ${token}\\\\\", \\\\\"Notion-Version\\\\\": \\\\\"2022-06-28\\\\\"}\"
       }
@@ -152,7 +152,7 @@ setup_notion() {
 setup_playwright() {
     local config="\"playwright\": {
       \"command\": \"npx\",
-      \"args\": [\"-y\", \"@anthropic/mcp-server-playwright\"]
+      \"args\": [\"-y\", \"@playwright/mcp@latest\"]
     }"
     add_server "playwright" "$config"
 }
@@ -175,7 +175,7 @@ setup_backlog() {
 
     local config="\"backlog\": {
       \"command\": \"npx\",
-      \"args\": [\"-y\", \"backlog-mcp-server\"],
+      \"args\": [\"-y\", \"backlog-mcp-server@latest\"],
       \"env\": {
         \"BACKLOG_DOMAIN\": \"${domain}\",
         \"BACKLOG_API_KEY\": \"${api_key}\"
