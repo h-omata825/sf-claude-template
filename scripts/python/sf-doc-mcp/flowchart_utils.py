@@ -182,6 +182,9 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
     if not HAS_MPL:
         return False
 
+    # フロー図品質の自動補完（呼び出し側での明示的呼び出しが不要になる）
+    auto_enrich_steps(steps)
+
     nodes = []
     if add_start_end:
         nodes.append({"type": "start", "text": "開始"})
