@@ -137,12 +137,14 @@ def clone_sheet(wb, source_name: str, new_name: str) -> Worksheet:
 
 # ── 差分計算 ──────────────────────────────────────────────────
 def _feature_comparable(f: dict) -> tuple:
-    """差分検出用に比較対象キーのみ抽出"""
+    """差分検出用に比較対象キーのみ抽出。
+    overview はエージェントの非決定性で毎回微妙に変わるため除外する。
+    type / name / api_name の構造的変化のみを差分として扱う。
+    """
     return (
         f.get("type", ""),
         f.get("name", ""),
         f.get("api_name", ""),
-        f.get("overview", "") or "",
     )
 
 
