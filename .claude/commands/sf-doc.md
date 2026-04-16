@@ -274,6 +274,8 @@ AskUserQuestion で提示（1択＋Other自動）:
 - システム名が取得できた場合: label: "{alias}（{system_name}）"、description: "このプロジェクトのデフォルト組織（.sf/config.json）"
 - 取得できなかった場合: label: "{alias}（このプロジェクトのデフォルト組織）"、description: ".sf/config.json で設定されている組織"
 
+> **重要**: 選択結果を `SF_ALIAS` として使用する際は、`（` より前の alias 部分だけを取り出す。`（{system_name}）` はラベル表示用であり、SF_ALIAS に含めない。
+
 **target-org が取得できなかった場合:**
 「このフォルダにはSalesforce組織が設定されていません。ブラウザでログインします」と伝え、以下を実行:
 ```bash
