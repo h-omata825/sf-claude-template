@@ -423,7 +423,10 @@ AskUserQuestion で確認:
 「先に最新化する」が選ばれた場合: 以下を順番に実行し、完了後そのまま D-1 へ進む。
 ```
 1. /sf-retrieve を実行（standard または all を選択）
+   ※ これにより force-app/ が更新される。scan_features.py は force-app/ を直接読むため、
+     新規追加・削除されたコンポーネントを正しく検出するには /sf-retrieve が必須。
 2. /sf-memory を実行（カテゴリ4「設計・機能仕様」を選択）
+   ※ docs/design/ の既存設計書 MD を更新し、差分検出に使う参照情報を最新化する。
 ```
 
 ### D-1: 出力フォルダの準備
