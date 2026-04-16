@@ -479,7 +479,7 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                 d_lines = max(1, len(detail_text) // DETAIL_CPL + detail_text.count("\n") + 1) if detail_text else 1
                 set_h(ws, r, max(22, max(t_lines, d_lines) * 18 + 4))
                 MW(ws, r, *LG_LEFT_NO,     step.get("no", str(i + 1)),
-                   bold=True, border=B_all(), h="center")
+                   bold=True, bg=C_STEP_BG, border=B_all(), h="center")
                 MW(ws, r, *LG_LEFT_TITLE,  st_title,
                    bold=True, border=B_all(), v="top")
                 MW(ws, r, *LG_LEFT_DETAIL, detail_text,
