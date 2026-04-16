@@ -348,7 +348,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/check_design_json.py \
 python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
   --template "{project_dir}/scripts/python/sf-doc-mcp/画面設計書テンプレート.xlsx" \
-  --output-dir "{output_dir}"
+  --output-dir "{output_dir}" \
+  --version-increment {version_increment}
 ```
 
 既存ファイルがある場合（差分更新）は `--source-file` を追加する:
@@ -357,7 +358,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
   --template "{project_dir}/scripts/python/sf-doc-mcp/画面設計書テンプレート.xlsx" \
   --output-dir "{output_dir}" \
-  --source-file "{output_dir}/{subfolder}/【{id}】{name}.xlsx"
+  --source-file "{output_dir}/{subfolder}/【{id}】{name}.xlsx" \
+  --version-increment {version_increment}
 ```
 
 出力先サブフォルダ（スクリプトが type フィールドに基づいて自動決定）:
