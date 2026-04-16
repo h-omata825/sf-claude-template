@@ -502,9 +502,9 @@ sf-screen-writer が失敗または部分完了で返った場合:
 
 **D-3b: `sf-design-writer` を呼ぶ（常に実行）**
 
-feature_list のうち `type` が `Apex` / `Batch` / `Flow` / `Integration` 等のものを渡す（LWC/画面フロー/Aura/Visualforceは除外）。
+feature_list のうち `type` が `Apex` / `Batch` / `Flow` / `Integration` / `Trigger` のものを渡す（LWC/画面フロー/Aura/Visualforceは除外）。
 sf-design-writer は以下を実行して完了報告を返す:
-- Apex/Batch/Flow/Integration の設計 JSON 生成と Excel 生成
+- Apex/Batch/Flow/Integration/Trigger の設計 JSON 生成と Excel 生成
 - Phase 3: tmp_dir 内の全 design JSON（sf-screen-writer 分も含む）から機能一覧 Excel を生成
 - Phase 4: tmp_dir クリーンアップ
 
