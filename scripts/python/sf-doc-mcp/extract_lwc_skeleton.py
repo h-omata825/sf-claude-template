@@ -9,6 +9,7 @@ LWC JavaScript ソースを静的解析し、generate_screen_design.py 互換の
   - @salesforce/apex インポート → calls フィールド（機械的に確定）
   - @wire デコレータ → ワイヤーアダプターのユースケース
   - handle* / connectedCallback → イベントハンドラのユースケース
+  - プライベートメソッド経由の呼び出しも 3 段階まで追跡
 
 エージェントは title / detail / overview / items のみ補完する。
 calls フィールドは上書きしないこと（機械的に確定済み）。
@@ -39,9 +40,13 @@ _RE_WIRE = re.compile(
     re.I,
 )
 
-# handle* / on* イベントハンドラ（アロー関数・通常関数両対応）
-_RE_HANDLER = re.compile(
-    r'(?:^|\n)[ \t]*(handle\w+)\s*\([^)]*\)\s*\{',
+# クラスのメソッド定義（通常関数・アロー関数）
+# 例: handleSave() { ... }  /  getData = async (id) => { ... }
+_RE_METHOD = re.compile(
+    r'(?:^|\n)[ \t]+'           # インデント（クラスのメンバーは必ずインデント）
+    r'(?:async\s+)?'             # 任意の async
+    r'(\w+)'                     # メソッド名
+    r'\s*(?:=\s*(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>|\([^)]*\)\s*)\{',  # 引数 + {
     re.I,
 )
 
@@ -51,8 +56,8 @@ _RE_LIFECYCLE = re.compile(
     re.I,
 )
 
-# 関数内でのメソッド呼び出し: someAlias({ ... }) or await someAlias(...)
-_RE_CALL = re.compile(r'\b(\w+)\s*\(', re.I)
+# ある本体の中で呼ばれているメソッド: this.xxx( または単独の xxx(
+_RE_CALL = re.compile(r'(?:this\.)?(\w+)\s*\(', re.I)
 
 
 # ─── ユーティリティ ──────────────────────────────────────────────────────────
@@ -136,8 +141,37 @@ def calls_text(class_name: str, method_name: str) -> str:
     return full[:17] + '...'
 
 
-def apex_calls_in_body(body: str, apex_imports: dict[str, tuple[str, str]]) -> list[str]:
-    """本体内で呼ばれている Apex エイリアス名を出現順で返す（重複除去）。"""
+# ─── メソッドマップ構築 ───────────────────────────────────────────────────────
+
+def build_method_map(clean: str) -> dict[str, str]:
+    """クラス内の全メソッド名 → 本体文字列 のマップを返す。"""
+    method_map: dict[str, str] = {}
+
+    # lifecycle も含めて全メソッド定義を検出
+    for m in re.finditer(
+        r'(?:^|\n)[ \t]+'
+        r'(?:(?:get|set)\s+)?'    # getter/setter
+        r'(?:async\s+)?'
+        r'(\w+)'
+        r'\s*(?:=\s*(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>|\([^)]*\)\s*)\{',
+        clean, re.I,
+    ):
+        name = m.group(1)
+        # JS キーワードを除外
+        if name.lower() in ('if', 'for', 'while', 'switch', 'catch', 'return'):
+            continue
+        brace = clean.find('{', m.start())
+        if brace < 0:
+            continue
+        end = balanced_end(clean, brace)
+        body = clean[brace + 1:end]
+        method_map[name] = body
+
+    return method_map
+
+
+def direct_apex_calls(body: str, apex_imports: dict[str, tuple[str, str]]) -> list[str]:
+    """本体内で直接呼ばれている Apex エイリアス名を返す（重複除去・出現順）。"""
     seen: set[str] = set()
     result: list[str] = []
     for m in _RE_CALL.finditer(body):
@@ -145,6 +179,56 @@ def apex_calls_in_body(body: str, apex_imports: dict[str, tuple[str, str]]) -> l
         if name in apex_imports and name not in seen:
             seen.add(name)
             result.append(name)
+    return result
+
+
+def direct_local_calls(body: str, method_map: dict[str, str]) -> list[str]:
+    """本体内で直接呼ばれているローカルメソッド名を返す（重複除去・出現順）。"""
+    seen: set[str] = set()
+    result: list[str] = []
+    for m in _RE_CALL.finditer(body):
+        name = m.group(1)
+        if name in method_map and name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
+
+
+def resolve_apex_calls(
+    body: str,
+    apex_imports: dict[str, tuple[str, str]],
+    method_map: dict[str, str],
+    max_depth: int = 3,
+    _visited: frozenset[str] | None = None,
+) -> list[str]:
+    """本体から推移的に呼ばれる全 Apex エイリアスを返す（プライベートメソッド経由を含む）。"""
+    if _visited is None:
+        _visited = frozenset()
+
+    seen: set[str] = set()
+    result: list[str] = []
+
+    # 直接 Apex 呼び出し
+    for alias in direct_apex_calls(body, apex_imports):
+        if alias not in seen:
+            seen.add(alias)
+            result.append(alias)
+
+    # ローカルメソッド経由（最大 max_depth まで）
+    if max_depth > 0:
+        for local_name in direct_local_calls(body, method_map):
+            if local_name in _visited:
+                continue
+            local_body = method_map[local_name]
+            sub_calls = resolve_apex_calls(
+                local_body, apex_imports, method_map,
+                max_depth - 1, _visited | {local_name},
+            )
+            for alias in sub_calls:
+                if alias not in seen:
+                    seen.add(alias)
+                    result.append(alias)
+
     return result
 
 
@@ -197,6 +281,9 @@ def parse_lwc(code: str, component_name: str) -> dict:
         mth = m.group(3)
         apex_imports[alias] = (cls, mth)
 
+    # ── クラスのメソッドマップを構築 ─────────────────────────────────────
+    method_map = build_method_map(clean)
+
     # ── @wire で使われているエイリアスを記録 ──────────────────────────────
     wire_aliases: set[str] = set()
     for m in _RE_WIRE.finditer(clean):
@@ -207,27 +294,24 @@ def parse_lwc(code: str, component_name: str) -> dict:
     usecases: list[dict] = []
     uc_no = 1
 
-    # ── connectedCallback（初期表示） ────────────────────────────────────
+    # ── connectedCallback / renderedCallback ──────────────────────────────
     for m in _RE_LIFECYCLE.finditer(clean):
         func_name = m.group(1)
         body = extract_body(clean, m.start())
-        apex_in_body = apex_calls_in_body(body, apex_imports)
+        apex_in_body = resolve_apex_calls(body, apex_imports, method_map)
+        # wire で呼ばれるものは別ユースケースで扱う
+        apex_in_body = [a for a in apex_in_body if a not in wire_aliases]
 
         if func_name == 'renderedCallback' and not apex_in_body:
             continue  # Apex 呼び出しのない renderedCallback は省略
 
         steps: list[dict] = []
         step_no = 1
-
-        # 先頭に処理前の初期化ステップ（エージェントが補完）
         steps.append(make_placeholder_step(step_no))
         step_no += 1
-
         for alias in apex_in_body:
-            # wire で既に使われているものは別ユースケースで扱う
-            if alias not in wire_aliases:
-                steps.append(make_apex_step(alias, apex_imports, step_no))
-                step_no += 1
+            steps.append(make_apex_step(alias, apex_imports, step_no))
+            step_no += 1
 
         usecases.append({
             'no': uc_no,
@@ -250,18 +334,22 @@ def parse_lwc(code: str, component_name: str) -> dict:
         uc_no += 1
 
     # ── handle* イベントハンドラ ─────────────────────────────────────────
-    for m in _RE_HANDLER.finditer(clean):
+    seen_methods: set[str] = set()
+    for m in _RE_METHOD.finditer(clean):
         func_name = m.group(1)
+        if not func_name.startswith('handle') and not func_name.startswith('Handle'):
+            continue
+        if func_name in seen_methods:
+            continue
+        seen_methods.add(func_name)
+
         body = extract_body(clean, m.start())
-        apex_in_body = apex_calls_in_body(body, apex_imports)
+        apex_in_body = resolve_apex_calls(body, apex_imports, method_map)
 
         steps: list[dict] = []
         step_no = 1
-
-        # バリデーション / 前処理プレースホルダー
         steps.append(make_placeholder_step(step_no))
         step_no += 1
-
         for alias in apex_in_body:
             steps.append(make_apex_step(alias, apex_imports, step_no))
             step_no += 1
@@ -276,7 +364,6 @@ def parse_lwc(code: str, component_name: str) -> dict:
 
     # ── フォールバック ───────────────────────────────────────────────────
     if not usecases and apex_imports:
-        # ハンドラが検出できなかった場合: インポートから1ユースケース生成
         steps = []
         for i, alias in enumerate(apex_imports):
             steps.append(make_apex_step(alias, apex_imports, i + 1))
@@ -287,7 +374,6 @@ def parse_lwc(code: str, component_name: str) -> dict:
             'steps': steps,
         })
     elif not usecases:
-        # Apex インポートも何もない場合: 空のプレースホルダー
         usecases.append({
             'no': 1,
             'title': '',
