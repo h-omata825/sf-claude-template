@@ -102,6 +102,18 @@ def parse_system_json(path: Path) -> dict:
         return {}
 
 
+def parse_diagrams_json(path: Path) -> dict:
+    """docs/overview/diagrams.json を読み込む。
+    Returns: {"asis": {...}, "tobe": {...}, "system": {...}} 形式の dict。
+    """
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def parse_usecases(path: Path) -> list:
     """usecases.md から UC 一覧（id, title, trigger 等）を抽出。"""
     if not path.exists():
@@ -368,7 +380,7 @@ _FLOW_TYPE_ORDER = {"overall": 0, "usecase": 1, "exception": 2, "dataflow": 3}
 
 
 def build_json(org: dict, req: dict, system: dict, usecases: list,
-               swimlanes: dict, author: str) -> dict:
+               swimlanes: dict, author: str, diagrams: dict = None) -> dict:
     company = org.get("company", "")
     today   = datetime.date.today().strftime("%Y年%m月")
 
@@ -424,7 +436,43 @@ def build_json(org: dict, req: dict, system: dict, usecases: list,
             },
         })
 
-    # ── 2. システム構成図 ──
+    # ── 2. AS-IS / TO-BE / システム全体像（diagrams.json から）──
+    if diagrams:
+        # AS-IS 業務フロー
+        asis = diagrams.get("asis")
+        if asis and asis.get("elements"):
+            n = len(toc_items) + 1
+            toc_items.append({"label": f"{n}. AS-IS 業務フロー", "target": "AS-IS 業務フロー（現状）"})
+            slides.append({"layout": "section", "title": "AS-IS 業務フロー（現状）"})
+            slides.append({
+                "layout": "diagram",
+                "title": asis.get("title", "AS-IS 業務フロー（現状）"),
+                "elements": asis["elements"],
+            })
+        # TO-BE 業務フロー
+        tobe = diagrams.get("tobe")
+        if tobe and tobe.get("elements"):
+            n = len(toc_items) + 1
+            toc_items.append({"label": f"{n}. TO-BE 業務フロー", "target": "TO-BE 業務フロー（Salesforce導入後）"})
+            slides.append({"layout": "section", "title": "TO-BE 業務フロー（Salesforce導入後）"})
+            slides.append({
+                "layout": "diagram",
+                "title": tobe.get("title", "TO-BE 業務フロー（Salesforce導入後）"),
+                "elements": tobe["elements"],
+            })
+        # システム全体像
+        sys_diag = diagrams.get("system")
+        if sys_diag and sys_diag.get("elements"):
+            n = len(toc_items) + 1
+            toc_items.append({"label": f"{n}. システム全体像", "target": "システム全体像"})
+            slides.append({"layout": "section", "title": "システム全体像"})
+            slides.append({
+                "layout": "diagram",
+                "title": sys_diag.get("title", "システム全体像"),
+                "elements": sys_diag["elements"],
+            })
+
+    # ── 3. システム構成図（architecture/system.json）──
     if system:
         n = len(toc_items) + 1
         toc_items.append({"label": f"{n}. システム構成図", "target": "システム構成図"})
@@ -493,7 +541,7 @@ def build_json(org: dict, req: dict, system: dict, usecases: list,
     slides.insert(0, {"layout": "toc", "title": "目次", "items": toc_items})
 
     return {
-        "title":    "プロジェクト資料",
+        "title":    "プロジェクト概要書",
         "subtitle": "Salesforce プロジェクト概要・システム構成・業務フロー",
         "company":  company,
         "version":  "1.0",
@@ -519,6 +567,7 @@ def main():
     org       = parse_org_profile(docs_dir / "overview" / "org-profile.md")
     req       = parse_requirements(docs_dir / "requirements" / "requirements.md")
     system    = parse_system_json(docs_dir / "architecture" / "system.json")
+    diagrams  = parse_diagrams_json(docs_dir / "overview" / "diagrams.json")
     usecases  = parse_usecases(docs_dir / "flow" / "usecases.md")
     swimlanes = parse_swimlanes(docs_dir / "flow" / "swimlanes.json")
 
@@ -529,8 +578,8 @@ def main():
         )
         sys.exit(1)
 
-    data = build_json(org, req, system, usecases, swimlanes, args.author)
-    output_path = output_dir / "プロジェクト資料.pptx"
+    data = build_json(org, req, system, usecases, swimlanes, args.author, diagrams=diagrams)
+    output_path = output_dir / "プロジェクト概要書.pptx"
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, encoding="utf-8"
