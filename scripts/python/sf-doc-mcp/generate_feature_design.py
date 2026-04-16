@@ -153,6 +153,23 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
     ws.merge_cells(start_row=row, start_column=cs, end_row=row, end_column=ce)
     return W(ws, row, cs, value, border=border, bg=bg, **kwargs)
 
+
+def _safe_merge_rows(ws, r1, r2, c1, c2):
+    """r1〜r2 行・c1〜c2 列を縦結合する（既存 merge との衝突を自動解除）。
+    r1 == r2 の場合は何もしない。
+    """
+    if r1 >= r2:
+        return
+    target = {(r, c) for r in range(r1, r2 + 1) for c in range(c1, c2 + 1)}
+    for mr in list(ws.merged_cells.ranges):
+        if any((r, c) in target
+               for r in range(mr.min_row, mr.max_row + 1)
+               for c in range(mr.min_col, mr.max_col + 1)):
+            ws.unmerge_cells(str(mr))
+    ws.merge_cells(
+        start_row=r1, start_column=c1, end_row=r2, end_column=c2
+    )
+
 def set_h(ws, row, h):
     ws.row_dimensions[row].height = h
 
@@ -255,7 +272,7 @@ def _estimate_content_height_pts(steps: list) -> float:
             sd_lines = max(1, len(sd) // DETAIL_CPL + sd.count("\n") + 1) if sd else 1
             total += max(20, max(st_lines, sd_lines) * 16 + 4)  # サブステップ行
 
-        total += 10  # ステップ間スペーサー
+        total += 16  # ステップ間スペーサー（2行 × 8pt）
     return max(total, 200)
 
 
@@ -276,8 +293,10 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
         d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
         set_h(ws, row, max(22, max(t_lines, d_lines) * 18 + 4))
 
+        no_row_start = row  # No列の縦結合開始行
+
         c_no = MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, step_no,
-                  bold=True, border=B_all(), h="center", bg=C_STEP_BG)
+                  bold=True, border=B_all(), h="center", v="center", bg=C_STEP_BG)
 
         c_t  = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, title_text,
                   bold=True, border=B_all(), bg=C_STEP_BG, v="top")
@@ -289,7 +308,7 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
             dr.apply_red(c_d)
         row += 1
 
-        # サブステップ（No列は縦結合済みのためスキップ。No は先頭にプレフィックス付与）
+        # サブステップ（No列は罫線・背景のみ設定し値なし。縦結合で上の No を表示）
         for sub in sub_steps:
             sub_no    = sub.get("no", "")
             sub_title = sub.get("title", "")
@@ -299,19 +318,27 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
             sd_lines  = max(1, len(sdetail) // DETAIL_CPL + sdetail.count("\n") + 1) if sdetail else 1
             set_h(ws, row, max(20, max(st_lines, sd_lines) * 16 + 4))
 
+            # No列: 罫線・背景のみ（縦結合後は主行の値が表示される）
+            MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, "",
+               border=B_all(), bg=C_STEP_BG)
             MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, sub_title_display,
                bold=True, fg=C_FONT_GRAY, border=B_all(), bg=C_SUB_BG, v="top")
             MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, sdetail,
                fg=C_FONT_GRAY, border=B_all(), wrap=True, v="top", bg=C_SUB_BG)
             row += 1
 
+        # No列を主行〜最終 sub_step 行まで縦結合
+        _safe_merge_rows(ws, no_row_start, row - 1,
+                         PROC_LEFT_NO_CS, PROC_LEFT_NO_CE)
+
         # APEX呼び出し表
         for apex in step.get("apex_calls", []):
             row = build_apex_table(ws, row, apex)
 
-        # ステップ間のスペーサー
-        set_h(ws, row, 10)
-        row += 1
+        # ステップ間のスペーサー（2行）
+        for _ in range(2):
+            set_h(ws, row, 8)
+            row += 1
 
     # フロー画像貼付
     if flowchart_path and Path(flowchart_path).exists():
