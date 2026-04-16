@@ -450,6 +450,7 @@ python scripts/python/sf-doc-mcp/scan_features.py \
 - label: "対象を絞り込む"、description: "API名・機能IDをテキストで指定する"
 
 「対象を絞り込む」が選ばれた場合はチャットで入力してもらい、対象を絞り込む。
+区切り文字は何でもOK（スペース・カンマ・改行・全角スペース等）。API名・機能ID（F-001等）どちらでも受け付ける。
 
 **対象が確定したら** AskUserQuestion で最終確認:
 
