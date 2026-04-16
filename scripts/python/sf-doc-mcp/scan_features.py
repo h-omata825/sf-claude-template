@@ -29,9 +29,15 @@ FEATURE_TYPES = {
     "aura":      "Aura",
 }
 
-BATCH_PATTERNS = re.compile(r"\bDatabase\.Batchable\b", re.IGNORECASE)
-SCHED_PATTERNS = re.compile(r"\bSchedulable\b", re.IGNORECASE)
-TEST_PATTERNS  = re.compile(r"@IsTest|@isTest|isTest", re.IGNORECASE)
+BATCH_PATTERNS       = re.compile(r"\bDatabase\.Batchable\b", re.IGNORECASE)
+SCHED_PATTERNS       = re.compile(r"\bSchedulable\b", re.IGNORECASE)
+TEST_PATTERNS        = re.compile(r"@IsTest|@isTest|isTest", re.IGNORECASE)
+INTEGRATION_PATTERNS = re.compile(
+    r"\bHttp\b|\bHttpRequest\b|\bHttpResponse\b"
+    r"|\bHttpCalloutMock\b"
+    r"|\bWebServiceCallout\b",
+    re.IGNORECASE,
+)
 
 FLOW_NS = "http://soap.sforce.com/2006/04/metadata"
 
@@ -68,11 +74,13 @@ def extract_trigger_handler(trigger_path: Path) -> str | None:
 
 
 def classify_apex(path: Path) -> str:
-    """Apexクラスの種別を判定する (Batch / Apex)
+    """Apexクラスの種別を判定する (Batch / Integration / Apex)
 
     Schedulable のみを実装するクラス（バッチの起動設定だけ）は
     独立した機能として扱わず None を返してスキャン対象から除外する。
     スケジュール情報（cron式）は対応する Batch の設計書の trigger に記載する。
+
+    Http / HttpRequest / HttpResponse を使う外部連携クラスは Integration に分類する。
     """
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
@@ -84,6 +92,8 @@ def classify_apex(path: Path) -> str:
         return "Batch"
     if SCHED_PATTERNS.search(text):
         return None          # Schedulable のみ → Batch の trigger に吸収
+    if INTEGRATION_PATTERNS.search(text):
+        return "Integration"
     return "Apex"
 
 

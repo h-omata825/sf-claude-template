@@ -522,6 +522,8 @@ def detect_type(code: str) -> str:
         return 'Apex_Invocable'
     if re.search(r'TriggerHandler', code, re.I):
         return 'Apex_TriggerHandler'
+    if re.search(r'\bHttp\b|\bHttpRequest\b|\bHttpResponse\b', code, re.I):
+        return 'Apex_Integration'
     return 'Apex'
 
 
