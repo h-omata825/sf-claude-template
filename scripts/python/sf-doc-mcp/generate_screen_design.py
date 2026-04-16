@@ -177,6 +177,16 @@ def W(ws, row, col, value="", bold=False, fg=C_FONT_D, bg=None,
     if border: c.border = border
     return c
 
+def _safe_unmerge(ws, row, cs, ce):
+    """指定行・列範囲と重なる既存マージを先に解除してから再マージする。"""
+    target = {(row, c) for c in range(cs, ce + 1)}
+    for mr in list(ws.merged_cells.ranges):
+        if mr.min_row <= row <= mr.max_row and any(
+            (row, c) in target
+            for c in range(mr.min_col, mr.max_col + 1)
+        ):
+            ws.unmerge_cells(str(mr))
+
 def MW(ws, row, cs, ce, value="", border=None, bg=None,
        bold=False, fg=C_FONT_D, h="left", v="center",
        wrap=True, size=10, italic=False):
@@ -186,6 +196,7 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None,
     if bg:
         for c in range(cs, ce + 1):
             ws.cell(row=row, column=c).fill = _fill(bg)
+    _safe_unmerge(ws, row, cs, ce)
     ws.merge_cells(start_row=row, start_column=cs, end_row=row, end_column=ce)
     cell = ws.cell(row=row, column=cs, value=value)
     cell.font = _fnt(bold=bold, color=fg, size=size, italic=italic)
@@ -367,22 +378,22 @@ def fill_items(ws, data, changed_item_nos: set = None):
     for i, it in enumerate(items):
         no = it.get("no", str(i + 1))
         is_changed = no in changed_item_nos
-        cells = []
-        cells.append(ws.cell(row=r, column=IT_COLS["no"][0],         value=no))
-        cells.append(ws.cell(row=r, column=IT_COLS["label"][0],      value=it.get("label", "")))
-        cells.append(ws.cell(row=r, column=IT_COLS["api_name"][0],   value=it.get("api_name", "")))
-        cells.append(ws.cell(row=r, column=IT_COLS["ui_type"][0],    value=it.get("ui_type", "")))
-        cells.append(ws.cell(row=r, column=IT_COLS["type"][0],       value=it.get("type", "")))
-        cells.append(ws.cell(row=r, column=IT_COLS["required"][0],
-                             value="○" if it.get("required") else ""))
-        cells.append(ws.cell(row=r, column=IT_COLS["default"][0],    value=it.get("default", "")))
-        cells.append(ws.cell(row=r, column=IT_COLS["validation"][0], value=it.get("validation", "")))
-        cells.append(ws.cell(row=r, column=IT_COLS["note"][0],       value=it.get("note", "")))
-        if is_changed:
-            for c in cells:
-                dr.apply_red(c)
         long_text = (it.get("validation", "") or "") + " " + (it.get("note", "") or "")
         set_h(ws, r, max(24, min(80, len(long_text) // 25 * 14 + 24)))
+
+        c1 = MW(ws, r, *IT_COLS["no"],         no,                              border=B_all(), h="center", v="top")
+        c2 = MW(ws, r, *IT_COLS["label"],      it.get("label", ""),             border=B_all(), v="top", wrap=True)
+        c3 = MW(ws, r, *IT_COLS["api_name"],   it.get("api_name", ""),          border=B_all(), v="top")
+        c4 = MW(ws, r, *IT_COLS["ui_type"],    it.get("ui_type", ""),           border=B_all(), h="center", v="top")
+        c5 = MW(ws, r, *IT_COLS["type"],       it.get("type", ""),              border=B_all(), h="center", v="top")
+        c6 = MW(ws, r, *IT_COLS["required"],   "○" if it.get("required") else "", border=B_all(), h="center", v="top")
+        c7 = MW(ws, r, *IT_COLS["default"],    it.get("default", ""),           border=B_all(), v="top", wrap=True)
+        c8 = MW(ws, r, *IT_COLS["validation"], it.get("validation", ""),        border=B_all(), v="top", wrap=True)
+        c9 = MW(ws, r, *IT_COLS["note"],       it.get("note", ""),              border=B_all(), v="top", wrap=True)
+
+        if is_changed:
+            for c in (c1, c2, c3, c4, c5, c6, c7, c8, c9):
+                dr.apply_red(c)
         r += 1
 
 
@@ -468,11 +479,11 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                 d_lines = max(1, len(detail_text) // DETAIL_CPL + detail_text.count("\n") + 1) if detail_text else 1
                 set_h(ws, r, max(22, max(t_lines, d_lines) * 18 + 4))
                 MW(ws, r, *LG_LEFT_NO,     step.get("no", str(i + 1)),
-                   bold=True, bg=C_STEP_BG, border=B_all(), h="center")
+                   bold=True, border=B_all(), h="center")
                 MW(ws, r, *LG_LEFT_TITLE,  st_title,
-                   bold=True, bg=C_STEP_BG, border=B_all(), v="top")
+                   bold=True, border=B_all(), v="top")
                 MW(ws, r, *LG_LEFT_DETAIL, detail_text,
-                   bg=C_STEP_BG, border=B_all(), wrap=True, v="top")
+                   border=B_all(), wrap=True, v="top")
                 r += 1
 
         # 右側: フロー図（flow_steps 優先、なければ steps から生成）
@@ -740,14 +751,9 @@ def main():
     changed_params   = _build_changed_params_map(diffs)
 
     with tempfile.TemporaryDirectory(prefix="screen_design_") as tmp_dir:
-        wf_path = str(Path(tmp_dir) / "wireframe.png")
-        if not generate_wireframe(data.get("name", ""),
-                                  data.get("items", []), wf_path):
-            wf_path = None
-
         wb = load_workbook(args.template)
         fill_revision(wb["改版履歴"],         data, history)
-        fill_overview(wb["画面概要"],         data, wireframe_path=wf_path,
+        fill_overview(wb["画面概要"],         data, wireframe_path=None,
                       changed_fields=set() if is_major else changed_scalars)
         fill_items   (wb["画面項目定義"],     data,
                       changed_item_nos=set() if is_major else changed_items)
