@@ -58,6 +58,18 @@ _SYSTEM_CLASSES = {
     'AsyncException', 'Exception', 'FlowExecutionErrorException',
 }
 
+# コレクション / 文字列変数のメソッド名 — これらを呼び出しているなら外部クラス呼び出しではない
+# (例: PLC.size() は List 変数の .size() であり CommonUtil.size() ではない)
+_COLLECTION_METHODS = {
+    'size', 'isEmpty', 'get', 'add', 'remove', 'contains', 'put',
+    'keySet', 'values', 'clear', 'clone', 'getSObject', 'addAll',
+    'removeAll', 'entrySet', 'containsKey', 'compareTo', 'equals',
+    'hashCode', 'toString', 'format', 'indexOf', 'split', 'substring',
+    'toLowerCase', 'toUpperCase', 'trim', 'length', 'replace',
+    'startsWith', 'endsWith', 'join', 'sort', 'iterator', 'next',
+    'hasNext', 'subList', 'set', 'append', 'replaceAll', 'toList',
+}
+
 _ENTRY_METHODS = [
     'execute', 'invoke', 'start', 'finish', 'run', 'process',
     'handleAfterInsert', 'handleAfterUpdate', 'handleBeforeInsert', 'handleBeforeUpdate',
@@ -189,13 +201,19 @@ class Seg:
     def ext_calls(self) -> list[str]:
         seen, res = set(), []
         _sys_upper = {s.upper() for s in _SYSTEM_CLASSES}
+        _coll_upper = {m.upper() for m in _COLLECTION_METHODS}
         for m in _RE_EXT_CALL.finditer(self.code):
             cls = m.group(1)
-            if cls.upper() not in _sys_upper:  # 大文字小文字を無視して比較
-                k = f"{cls}.{m.group(2)}"
-                if k not in seen:
-                    seen.add(k)
-                    res.append(k)
+            method = m.group(2)
+            # システムクラスおよびコレクション/文字列メソッドは除外
+            if cls.upper() in _sys_upper:
+                continue
+            if method.upper() in _coll_upper:
+                continue
+            k = f"{cls}.{method}"
+            if k not in seen:
+                seen.add(k)
+                res.append(k)
         return res
 
 

@@ -53,13 +53,6 @@ def check_feature(data: dict) -> tuple[list[str], list[str]]:
                 "条件分岐には必ず branch を付与すること。"
             )
 
-        # calls と object_ref の同時設定
-        if calls and obj:
-            errors.append(
-                f"{label}: calls と object_ref が同時に設定されている。"
-                "どちらか一方のみ使用すること。"
-            )
-
         # calls テキストが長すぎる
         if calls:
             calls_text = calls if isinstance(calls, str) else calls.get("text", "")
