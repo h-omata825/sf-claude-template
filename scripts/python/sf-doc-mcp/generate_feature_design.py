@@ -256,11 +256,18 @@ def fill_overview(ws, data, changed_fields: set = None):
             dr.apply_red(cell, size=10)
 
 
+def _display_len(s: str) -> int:
+    """文字列の表示幅を返す。全角文字（CJK等）は2、半角は1としてカウントする。"""
+    import unicodedata
+    return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in s)
+
+
 def _estimate_content_height_pts(steps: list) -> float:
     """処理内容の行高さ合計をポイント単位で概算する（フロー図の縦幅合わせに使用）。
 
     タイトルと詳細は横並び（同一行）。sub_steps も含めて全行を計上し、
     フロー図の矢印長を調整してコンテンツ全体の高さに合わせる。
+    日本語（全角）文字は表示幅2として折り返し行数を推定する。
     """
     TITLE_CPL  = 9
     DETAIL_CPL = 28
@@ -270,15 +277,15 @@ def _estimate_content_height_pts(steps: list) -> float:
         detail = step.get("detail", "")
         if step.get("method_name"):
             total += 18  # メソッド名ヘッダー行
-        t_lines = max(1, -(-len(title)  // TITLE_CPL))
-        d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
+        t_lines = max(1, -(-_display_len(title)  // TITLE_CPL))
+        d_lines = max(1, _display_len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
         total += max(22, t_lines * 18 + 4)   # メインステップ行（タイトル行数のみで計算）
 
         for sub in step.get("sub_steps", []):
             st = sub.get("title",  "")
             sd = sub.get("detail", "")
-            st_lines = max(1, -(-len(st) // TITLE_CPL))
-            sd_lines = max(1, len(sd) // DETAIL_CPL + sd.count("\n") + 1) if sd else 1
+            st_lines = max(1, -(-_display_len(st) // TITLE_CPL))
+            sd_lines = max(1, _display_len(sd) // DETAIL_CPL + sd.count("\n") + 1) if sd else 1
             total += min(80, max(20, max(st_lines, sd_lines) * 16 + 4))  # サブステップ行（上限80pt）
 
         total += 24  # ステップ間スペーサー（3行 × 8pt）
