@@ -458,28 +458,22 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                fg=C_FONT_GRAY, italic=True, border=B_all(), h="center")
             r += 1
         else:
+            TITLE_CPL  = 9
+            DETAIL_CPL = 28
             for i, step in enumerate(steps):
-                st_title = _step_title(step, i)
+                st_title    = _step_title(step, i)
                 detail_text = _step_detail_text(step)
-                # タイトル行の高さを文字数から動的計算（LG_LEFT_TITLE=col4-7, 4列×4.2unit≈9文字/行）
-                TITLE_CPL = 9
+                # タイトルと詳細を同一行に横並び。行高さは両者の最大行数で決定
                 t_lines = max(1, -(-len(st_title) // TITLE_CPL))
-                set_h(ws, r, max(22, t_lines * 18 + 4))
+                d_lines = max(1, len(detail_text) // DETAIL_CPL + detail_text.count("\n") + 1) if detail_text else 1
+                set_h(ws, r, max(22, max(t_lines, d_lines) * 18 + 4))
                 MW(ws, r, *LG_LEFT_NO,     step.get("no", str(i + 1)),
                    bold=True, bg=C_STEP_BG, border=B_all(), h="center")
                 MW(ws, r, *LG_LEFT_TITLE,  st_title,
-                   bold=True, bg=C_STEP_BG, border=B_all())
-                MW(ws, r, *LG_LEFT_DETAIL, "",
-                   bg=C_STEP_BG, border=B_all())
+                   bold=True, bg=C_STEP_BG, border=B_all(), v="top")
+                MW(ws, r, *LG_LEFT_DETAIL, detail_text,
+                   bg=C_STEP_BG, border=B_all(), wrap=True, v="top")
                 r += 1
-                if detail_text:
-                    est_lines = max(2, len(detail_text) // 32
-                                    + detail_text.count("\n") + 1)
-                    set_h(ws, r, max(40, est_lines * 15))
-                    MW(ws, r, *LG_LEFT_NO,     "", border=B_all())
-                    MW(ws, r, LG_LEFT_TITLE[0], LG_LEFT_END, detail_text,
-                       border=B_all(), v="top", wrap=True)
-                    r += 1
 
         # 右側: フロー図（flow_steps 優先、なければ steps から生成）
         flow_steps = uc.get("flow_steps")
@@ -590,7 +584,7 @@ def fill_params(ws, data, changed_params_map: dict = None,
         else:
             changed_keys = changed_params_map.get(title, set())
             for i, p in enumerate(items):
-                desc = p.get("description", "") or ""
+                desc = p.get("desc", "") or p.get("description", "") or ""
                 set_h(ws, r, max(24, min(80, len(desc) // 30 * 14 + 24)))
                 item_key = p.get("key", "")
                 is_changed = item_key in changed_keys

@@ -506,26 +506,18 @@ def main():
     steps = data.get("steps", [])
 
     # ── object_ref バリデーション ──────────────────────────────────────
-    # SOQL/DML を含むステップに object_ref が設定されていない場合に警告する
-    _DB_KEYWORDS = re.compile(
-        r'\b(SELECT|SOQL|DML|INSERT|UPDATE|DELETE|UPSERT)\b|'
-        r'(保存|更新|削除|挿入|登録|クエリ)',
-        re.IGNORECASE
-    )
+    # SOQL/DML サブステップがあるのに object_ref が未設定の場合のみ警告する
     for _step in steps:
         if _step.get("object_ref"):
             continue
-        _title  = _step.get("title", "")
-        _detail = _step.get("detail", "")
-        _sub_details = " ".join(
-            s.get("detail", "") for s in _step.get("sub_steps", [])
-            if s.get("title", "").upper() in ("SOQL", "DML")
+        _has_db_substep = any(
+            s.get("title", "").upper() in ("SOQL", "DML")
+            for s in _step.get("sub_steps", [])
         )
-        _text = f"{_title} {_detail} {_sub_details}"
-        if _DB_KEYWORDS.search(_text):
+        if _has_db_substep:
             print(
-                f"  [WARNING] step {_step.get('no', '?')} 「{_title}」"
-                f" にDB操作の可能性がありますが object_ref が未設定です",
+                f"  [WARNING] step {_step.get('no', '?')} 「{_step.get('title', '')}」"
+                f" に SOQL/DML サブステップがありますが object_ref が未設定です",
                 file=sys.stderr
             )
 
