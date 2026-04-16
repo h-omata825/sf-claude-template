@@ -524,6 +524,10 @@ def main():
         if not str(_s.get("no", "")).strip():
             _s["no"] = str(_i + 1)
 
+    # フロー図品質の自動補完（branch→decision強制 / SOQL/DMLからobject_ref抽出）
+    from flowchart_utils import auto_enrich_steps
+    auto_enrich_steps(steps)
+
     # ── object_ref バリデーション ──────────────────────────────────────
     # SOQL/DML サブステップがあるのに object_ref が未設定の場合のみ警告する
     for _step in steps:

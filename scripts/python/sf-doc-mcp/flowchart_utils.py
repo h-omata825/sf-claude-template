@@ -32,6 +32,39 @@ def _fpkw():
     return {"fontproperties": JP_FONT_PROP} if JP_FONT_PROP else {}
 
 
+def auto_enrich_steps(steps: list) -> None:
+    """フロー図の品質をスクリプト側で自動補完する（エージェント依存を減らす）。
+
+    補完内容:
+    1. branch が設定されているステップの node_type を "decision" に強制
+    2. SOQL サブステップの FROM 句からオブジェクト名を抽出して object_ref を補完
+    3. DML サブステップの「対象: ObjectName」パターンから object_ref を補完
+
+    エージェントが node_type や object_ref を省略しても最低限の図形分類が保証される。
+    """
+    import re as _re
+    _FROM    = _re.compile(r'\bFROM\s+(\w+)', _re.IGNORECASE)
+    _TARGET  = _re.compile(r'対象[：:]\s*(\w+)')
+    _SF_NAME = _re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
+
+    for step in steps:
+        # 1. branch が設定されているなら必ず decision
+        if step.get("branch") and step.get("node_type", "process") == "process":
+            step["node_type"] = "decision"
+
+        # 2-3. object_ref の自動補完（calls/branch/object_ref が既に設定済みなら不要）
+        if step.get("object_ref") or step.get("calls") or step.get("branch"):
+            continue
+        for sub in step.get("sub_steps", []):
+            if sub.get("title", "").upper() not in ("SOQL", "DML"):
+                continue
+            detail = sub.get("detail", "")
+            m = _FROM.search(detail) or _TARGET.search(detail)
+            if m and _SF_NAME.match(m.group(1)):
+                step["object_ref"] = {"text": m.group(1)}
+                break
+
+
 def _draw_cylinder(ax, cx, cy, w, h, face="#DEEAF1", edge="#6A8CAF", lw=1.0):
     ry = h * 0.12
     x0 = cx - w / 2

@@ -53,7 +53,7 @@ JP_FONT_PROP = None
 if _os.path.exists(_JP_FONT_PATH) and HAS_MPL:
     JP_FONT_PROP = fm.FontProperties(fname=_JP_FONT_PATH)
 
-from flowchart_utils import generate_flowchart
+from flowchart_utils import generate_flowchart, auto_enrich_steps
 
 # ── 色 ──────────────────────────────────────────────────────────
 C_HDR_BLUE   = "2E75B6"
@@ -485,9 +485,12 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                  "branch": s.get("branch"),
                  "calls": s.get("calls"),
                  "object_ref": s.get("object_ref"),
-                 "main_label": s.get("main_label")}
+                 "main_label": s.get("main_label"),
+                 "sub_steps": s.get("sub_steps", [])}
                 for i, s in enumerate(steps)
             ]
+        # フロー図品質の自動補完（branch→decision強制 / SOQL/DMLからobject_ref抽出）
+        auto_enrich_steps(flow_steps)
 
         flow_path = Path(tmp_dir) / f"flow_uc{uc_idx + 1}.png"
         ok = False
