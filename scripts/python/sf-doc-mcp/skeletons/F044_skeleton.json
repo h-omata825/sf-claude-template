@@ -1,0 +1,358 @@
+{
+  "type": "Apex_AuraEnabled",
+  "api_name": "RequestController",
+  "name": "",
+  "overview": {
+    "purpose": "",
+    "trigger": "",
+    "preconditions": "",
+    "summary": ""
+  },
+  "steps": [
+    {
+      "no": 1,
+      "title": "saveDraftQuoteController",
+      "detail": "",
+      "node_type": "process",
+      "calls": null,
+      "object_ref": {
+        "text": "BusinessTraveler__c"
+      },
+      "branch": null,
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id FROM BusinessTraveler__c WHERE Id = :recordIdList[0]"
+        },
+        {
+          "title": "DML",
+          "detail": "UPSERT quote"
+        }
+      ]
+    },
+    {
+      "no": 2,
+      "title": "createQuoteController",
+      "detail": "",
+      "node_type": "process",
+      "calls": {
+        "text": "Datetime.valueOf"
+      },
+      "object_ref": {
+        "text": "BusinessTraveler__c"
+      },
+      "branch": {
+        "text": "",
+        "node_type": "error",
+        "label": "catch"
+      },
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, ApplicantName__c,Status__c, BusinessTravelerHeader__c, BusinessTravelerHeader__r.Account__r.Name, LastModifiedDate FROM BusinessTraveler__c WHERE Id IN :recordIdList]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, Name, AccountId, ContactId FROM User WHERE Id = :userId]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id FROM ProductListCondition__c WHERE ServiceMaster__c = :(Id)conditionsMap.get('serviceMaster') AND ApplicationTypeMasterId__c = :(Id)conditionsMap.get('applicationType') AND ResponseSpeed__c = :(String)conditionsMap.get('supportSpeed') ]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, Product__c, Amount__c, Remarks__c, Taxable__c FROM ProductListConditionDetail__c WHERE ProductListCondition__c = :PLC[0]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[ SELECT Id, QuantityType__c FROM Product__c WHERE Id IN :productIds ]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, DeveloperName FROM CustomNotificationType WHERE DeveloperName='NotificationQuoteCreate']"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT (SELECT UserOrGroupId FROM GroupMembers) FROM Group where DeveloperName = 'Group_QuoteRequest']"
+        },
+        {
+          "title": "DML",
+          "detail": "UPDATE btList"
+        },
+        {
+          "title": "DML",
+          "detail": "UPSERT insertQuoteList"
+        },
+        {
+          "title": "DML",
+          "detail": "INSERT insertQuoteDetailList"
+        }
+      ]
+    },
+    {
+      "no": 3,
+      "title": "createQuoteControllerForHeader",
+      "detail": "",
+      "node_type": "process",
+      "calls": null,
+      "object_ref": {
+        "text": "BusinessTravelerHeader__c"
+      },
+      "branch": {
+        "text": "",
+        "node_type": "error",
+        "label": "catch"
+      },
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[ SELECT Id, Account__c, Account__r.Name FROM BusinessTravelerHeader__c WHERE Id = :recordId ]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, Name, AccountId, ContactId FROM User WHERE Id = :userId]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id ,BusinessTraveler__r.BusinessTravelerHeader__r.Account__r.Name ,ApplicantNameBT__c FROM Quote__c WHERE Id = :quote.Id]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, DeveloperName FROM CustomNotificationType WHERE DeveloperName='NotificationQuoteCreate']"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT (SELECT UserOrGroupId FROM GroupMembers) FROM Group where DeveloperName = 'Group_QuoteRequest']"
+        },
+        {
+          "title": "DML",
+          "detail": "UPSERT quote"
+        }
+      ]
+    },
+    {
+      "no": 4,
+      "title": "updateContactController",
+      "detail": "",
+      "node_type": "process",
+      "calls": null,
+      "object_ref": {
+        "text": "Contact"
+      },
+      "branch": {
+        "text": "",
+        "node_type": "error",
+        "label": "catch"
+      },
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, IsInvoiceContact__c, IsConsignee__c FROM Contact WHERE Id = :id]"
+        },
+        {
+          "title": "DML",
+          "detail": "UPDATE ContactToUpdate"
+        }
+      ]
+    },
+    {
+      "no": 5,
+      "title": "createContactController",
+      "detail": "",
+      "node_type": "process",
+      "calls": {
+        "text": "CommonUtil.create..."
+      },
+      "object_ref": {
+        "text": "Contact"
+      },
+      "branch": {
+        "text": "",
+        "node_type": "error",
+        "label": "catch"
+      },
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id FROM Contact WHERE Email = :email]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT COUNT() FROM User WHERE Email = :email]"
+        },
+        {
+          "title": "DML",
+          "detail": "INSERT newContact"
+        }
+      ]
+    },
+    {
+      "no": 6,
+      "title": "createContactControllerForInvoice",
+      "detail": "",
+      "node_type": "process",
+      "calls": {
+        "text": "CommonUtil.create..."
+      },
+      "object_ref": {
+        "text": "Contact"
+      },
+      "branch": {
+        "text": "",
+        "node_type": "error",
+        "label": "catch"
+      },
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, AccountId FROM Contact WHERE Email = :email]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT COUNT() FROM User WHERE Email = :email]"
+        },
+        {
+          "title": "DML",
+          "detail": "INSERT newContact"
+        }
+      ]
+    },
+    {
+      "no": 7,
+      "title": "createExtarnalAccountController",
+      "detail": "",
+      "node_type": "process",
+      "calls": null,
+      "object_ref": {
+        "text": "RecordType"
+      },
+      "branch": {
+        "text": "",
+        "node_type": "error",
+        "label": "catch"
+      },
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, DeveloperName FROM RecordType WHERE DeveloperName = :recordTypeName]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id FROM ExternalAccount__c WHERE Name = :targetName AND Account__c = :accId AND RecordTypeId = :rtId]"
+        },
+        {
+          "title": "DML",
+          "detail": "INSERT externalAccount"
+        }
+      ]
+    },
+    {
+      "no": 8,
+      "title": "updateApplicantContactController",
+      "detail": "",
+      "node_type": "process",
+      "calls": null,
+      "object_ref": {
+        "text": "Contact"
+      },
+      "branch": {
+        "text": "",
+        "node_type": "error",
+        "label": "catch"
+      },
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id FROM Contact WHERE Email = :applicantEmail]"
+        },
+        {
+          "title": "DML",
+          "detail": "UPDATE applicantContact"
+        }
+      ]
+    },
+    {
+      "no": 9,
+      "title": "updateUnderstandConsultation",
+      "detail": "",
+      "node_type": "process",
+      "calls": null,
+      "object_ref": {
+        "text": "BusinessTraveler__c"
+      },
+      "branch": null,
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, Status__c FROM BusinessTraveler__c WHERE Id = :id]"
+        },
+        {
+          "title": "DML",
+          "detail": "UPDATE businessTraveler"
+        }
+      ]
+    },
+    {
+      "no": 10,
+      "title": "getInitData",
+      "detail": "",
+      "node_type": "process",
+      "calls": {
+        "text": "CommonUtil.getApp..."
+      },
+      "object_ref": {
+        "text": "BusinessTraveler__c"
+      },
+      "branch": null,
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[ SELECT Id, Status__c, ConsultationResult__c, ConsultationResultContent__c, RequestInputPossible__c, BusinessTravelerHeader__r.Account__c, ServiceMaster__c, ServiceMaster__r.Name, ServiceMaster__r.Code__c, AssignedCompanyNameId__c, ApplicantLastName__c, ApplicantFirstName__c, ApplicantCompanyName__c, ApplicantEmail__c, LastModifiedDate, ApplicantCompanyId__c, ApplicantCompanyAccountId__c, ApplicantAppointedCompanyId__c, ApplicationTypeMaster__r.Name, ApplicantAppointedCompanyAccountId__c, PersonName__c, PersonEmail__c, ApplicantDepartment__c, HoldVisaType__c, ApplicantDirectAllowed__c, ContactPersonName__c, ContactPersonEmail__c, CcRequired__c, CcEmail__c, ContactStartDate__c, TrainingCompany__c, TrainingPeriod__c, ResponseSpeed__c, ApplicantVisaType__c, Tdy2__c, SameProject__c, NumberOfFamilyMembersRequiringVisa__c, CompanyNameToVisit__c FROM BusinessTraveler__c WHERE Id = :id ]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[ SELECT Id, QuoteIssuingCompanyId__c, QuoteIssuingCompanyAccountId__c, QuoteIssuingCompanyName__c, ConsigneeAttentionId__c, ConsigneeAttentionName__c, ConsigneeContactId1__c, ConsigneeContactId1AccountNameForMail__c, ConsigneeContactId1__r.DepartmentName__c, ConsigneeContactId1__r.Phone, ConsigneeContactId1__r.Email, ConsigneeContactId2__c, ConsigneeContactId2AccountNameForMail__c, ConsigneeContactId2__r.DepartmentName__c, ConsigneeContactId2__r.Phone, ConsigneeContactId2__r.Email, ConsigneeContactId3__c, ConsigneeContactId3AccountNameForMail__c, ConsigneeContactId3__r.DepartmentName__c, ConsigneeContactId3__r.Phone, ConsigneeContactId3__r.Email, ConsigneeContactId4__c, ConsigneeContactId4AccountNameForMail__c, ConsigneeContactId4__r.DepartmentName__c, ConsigneeContactId4__r.Phone, ConsigneeContactId4__r.Email, ConsigneeContactId5__c, ConsigneeContactId5AccountNameForMail__c, ConsigneeContactId5__r.DepartmentName__c, ConsigneeContactId5__r.Phone, ConsigneeContactId5__r.Email, SameAsConsignee__c, InvoiceBillingAccountId__c, InvoiceBillingId__c, InvoiceBillingEngName__c, InvoiceContactId__c, InvoiceContactId__r.Account.Name, InvoiceContactId__r.DepartmentName__c, InvoiceContactId__r.Email, InvoiceContactId2__c, InvoiceContactId2__r.Account.Name, InvoiceContactId2__r.DepartmentName__c, InvoiceContactId2__r.Email, InvoiceContactId3__c, InvoiceContactId3__r.Account.Name, InvoiceContactId3__r.DepartmentName__c, InvoiceContactId3__r.Email, InvoiceContactId4__c, InvoiceContactId4__r.Account.Name, InvoiceContactId4__r.DepartmentName__c, InvoiceContactId4__r.Email, InvoiceContactId5__c, InvoiceContactId5__r.Account.Name, InvoiceContactId5__r.DepartmentName__c, InvoiceContactId5__r.Email, FinancialUpdateRequired__c, IsGreenProgram__c, NumberOfVisaApplications__c, IsEnglishVersion__c, Note__c FROM Quote__c WHERE BusinessTraveler__c = :id AND Status__c = '見積作成依頼入力' LIMIT 1 ]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[ SELECT Id, Segment__c, Account__c FROM BusinessTravelerHeader__c WHERE Id = :id ]"
+        }
+      ]
+    },
+    {
+      "no": 11,
+      "title": "createViewAbleData",
+      "detail": "",
+      "node_type": "process",
+      "calls": null,
+      "object_ref": {
+        "text": "User"
+      },
+      "branch": null,
+      "sub_steps": [
+        {
+          "title": "SOQL",
+          "detail": "[SELECT Id, Name, AccountId, ContactId FROM User WHERE Id = :userId or ContactId In :contactList]"
+        },
+        {
+          "title": "SOQL",
+          "detail": "[ SELECT Id, User__c, Quote__c FROM ViewAblePerson__c WHERE Quote__c = :quoteId AND User__c IN :resultIds ]"
+        },
+        {
+          "title": "DML",
+          "detail": "UPSERT upsertDatas"
+        }
+      ]
+    }
+  ],
+  "params": {
+    "input": [],
+    "output": []
+  },
+  "revision_history": [],
+  "_parser_meta": {
+    "entry_method": "@AuraEnabled×11",
+    "segment_count": 45,
+    "step_count": 11
+  }
+}

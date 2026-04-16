@@ -268,18 +268,20 @@ def _estimate_content_height_pts(steps: list) -> float:
     for step in steps:
         title  = step.get("title", "")
         detail = step.get("detail", "")
+        if step.get("method_name"):
+            total += 18  # メソッド名ヘッダー行
         t_lines = max(1, -(-len(title)  // TITLE_CPL))
         d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
-        total += max(22, max(t_lines, d_lines) * 18 + 4)   # メインステップ行
+        total += max(22, t_lines * 18 + 4)   # メインステップ行（タイトル行数のみで計算）
 
         for sub in step.get("sub_steps", []):
             st = sub.get("title",  "")
             sd = sub.get("detail", "")
             st_lines = max(1, -(-len(st) // TITLE_CPL))
             sd_lines = max(1, len(sd) // DETAIL_CPL + sd.count("\n") + 1) if sd else 1
-            total += max(20, max(st_lines, sd_lines) * 16 + 4)  # サブステップ行
+            total += min(80, max(20, max(st_lines, sd_lines) * 16 + 4))  # サブステップ行（上限80pt）
 
-        total += 16  # ステップ間スペーサー（2行 × 8pt）
+        total += 24  # ステップ間スペーサー（3行 × 8pt）
     return max(total, 200)
 
 
@@ -289,16 +291,25 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
     TITLE_CPL  = 9   # 処理タイトル列幅 (4列 × 約2.3文字/列)
     DETAIL_CPL = 28  # 処理詳細列幅 (9列 × 約3.1文字/列)
     for i, step in enumerate(data.get("steps", [])):
-        step_no    = str(step.get("no", "") or (i + 1))  # no 未設定時は連番で補完
-        is_changed = step_no in changed_step_nos
-        title_text = step.get("title", "")
-        detail     = step.get("detail", "")
-        sub_steps  = step.get("sub_steps", [])
+        step_no     = str(step.get("no", "") or (i + 1))  # no 未設定時は連番で補完
+        is_changed  = step_no in changed_step_nos
+        title_text  = step.get("title", "")
+        detail      = step.get("detail", "")
+        sub_steps   = step.get("sub_steps", [])
+        method_name = step.get("method_name", "")
 
-        # タイトルと詳細を同一行に横並び配置。行高さは両者の最大行数で決定
+        # メソッド名ヘッダー行（枠の上に小さくグレーで表示）
+        if method_name:
+            set_h(ws, row, 18)
+            MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_END, method_name,
+               italic=True, fg=C_FONT_GRAY, size=9)
+            row += 1
+
+        # タイトルと詳細を同一行に横並び配置。行高さはタイトルの行数のみで決定
+        # （詳細・SOQL/DMLは文字量が多くなりがちなため、タイトルに合わせる）
         t_lines = max(1, -(-len(title_text) // TITLE_CPL))
         d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
-        set_h(ws, row, max(22, max(t_lines, d_lines) * 18 + 4))
+        set_h(ws, row, max(22, t_lines * 18 + 4))
 
         no_row_start = row  # No列の縦結合開始行
 
@@ -323,7 +334,7 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
             sub_title_display = f"{sub_no} {sub_title}".strip() if sub_no else sub_title
             st_lines  = max(1, -(-len(sub_title_display) // TITLE_CPL))
             sd_lines  = max(1, len(sdetail) // DETAIL_CPL + sdetail.count("\n") + 1) if sdetail else 1
-            set_h(ws, row, max(20, max(st_lines, sd_lines) * 16 + 4))
+            set_h(ws, row, min(80, max(20, max(st_lines, sd_lines) * 16 + 4)))
 
             # No列: 罫線・背景のみ（縦結合後は主行の値が表示される）
             MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, "",
@@ -342,8 +353,8 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
         for apex in step.get("apex_calls", []):
             row = build_apex_table(ws, row, apex)
 
-        # ステップ間のスペーサー（2行）
-        for _ in range(2):
+        # ステップ間のスペーサー（3行）
+        for _ in range(3):
             set_h(ws, row, 8)
             row += 1
 

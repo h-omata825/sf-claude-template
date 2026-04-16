@@ -467,7 +467,10 @@ python scripts/python/sf-doc-mcp/scan_features.py \
 「対象を絞り込む」が選ばれた場合はチャットで入力してもらい、対象を絞り込む。
 
 **対象が確定したら** AskUserQuestion で最終確認:
-- label: "生成開始"、description: "上記 {n}件の設計書を生成する"
+
+**質問**: 「設計書を生成します（対象: {n}件）。よろしいですか？」
+
+- label: "生成開始"、description: "{n}件の設計書を生成する"
 - label: "キャンセル"、description: "中止する"
 
 「キャンセル」が選ばれた場合は終了。「生成開始」が選ばれたら D-3 へ進む。

@@ -17,8 +17,18 @@ TMP_DIR=".claude-upgrade-tmp"
 # エラー・中断時も必ず一時フォルダを削除する
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-BRANCH="${1:-$DEFAULT_BRANCH}"
-URL="${2:-$DEFAULT_URL}"
+AUTO_YES=false
+BRANCH=""
+URL=""
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes) AUTO_YES=true ;;
+        http*) URL="$arg" ;;
+        *) BRANCH="$arg" ;;
+    esac
+done
+BRANCH="${BRANCH:-$DEFAULT_BRANCH}"
+URL="${URL:-$DEFAULT_URL}"
 
 # --- 色付き出力 ---
 info()  { echo -e "\033[1;34m[INFO]\033[0m  $*"; }
@@ -149,10 +159,14 @@ echo "    - force-app/（Salesforceメタデータ）"
 echo ""
 
 # --- 確認 ---
-read -p "適用しますか？ (y/N): " confirm
-if [[ ! "$confirm" =~ ^[yY] ]]; then
-    info "キャンセルしました"
-    exit 0
+if [ "$AUTO_YES" = true ]; then
+    info "自動適用モード (-y) で続行します"
+else
+    read -p "適用しますか？ (y/N): " confirm
+    if [[ ! "$confirm" =~ ^[yY] ]]; then
+        info "キャンセルしました"
+        exit 0
+    fi
 fi
 
 # --- 適用 ---
@@ -190,23 +204,14 @@ if [ -d "$TMP_DIR/scripts" ]; then
     done < <(find "$TMP_DIR/scripts" -type f)
 fi
 
-# --- 削除対象の処理 ---
+# --- 削除対象の処理（自動削除しない・警告のみ） ---
 if [ ${#DELETIONS[@]} -gt 0 ]; then
     echo ""
-    warn "以下のファイルはテンプレートから削除されています:"
+    warn "以下のファイルはテンプレートに存在しません（プロジェクト固有ファイルの可能性）:"
     for item in "${DELETIONS[@]}"; do
         echo "    - $item"
     done
-    read -p "プロジェクトからも削除しますか？ (y/N): " del_confirm
-    if [[ "$del_confirm" =~ ^[yY] ]]; then
-        for item in "${DELETIONS[@]}"; do
-            filepath=$(echo "$item" | sed 's/（.*//') # 説明部分を除去
-            if [ -f "$filepath" ]; then
-                rm "$filepath"
-                ok "削除: $filepath"
-            fi
-        done
-    fi
+    warn "これらは自動削除されません。不要であれば手動で削除してください。"
 fi
 
 # upgrade.sh 自身を最後に上書き（実行完了後に安全に置き換え）

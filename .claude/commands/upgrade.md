@@ -19,10 +19,11 @@ $ARGUMENTS
 ## 実行
 
 ```bash
-bash scripts/upgrade.sh $ARGUMENTS
+bash scripts/upgrade.sh -y $ARGUMENTS
 ```
 
-スクリプトが対話的に確認を行うので、そのまま実行させる。
+`-y` フラグで「適用しますか？」の確認を自動承認する。
+テンプレートに存在しないプロジェクト固有ファイルは **自動削除されない**（警告のみ表示）。
 
 > **なぜ `.claude/` に書き込めるか**:
 > `settings.json` の deny ルール（`Edit(.claude/*)` / `Write(.claude/*)`）は、Claude が **直接** Edit・Write ツールを呼び出す操作をブロックする。
