@@ -32,6 +32,13 @@ def check_feature(data: dict) -> tuple[list[str], list[str]]:
         calls = step.get("calls")
         obj = step.get("object_ref")
 
+        # 禁止された node_type: "object" の使用
+        if ntype == "object":
+            errors.append(
+                f"{label}: node_type='object' は禁止。"
+                "node_type='process' + object_ref に変更すること。"
+            )
+
         # エラーステップがメインフローに独立して存在している
         if ntype == "error":
             errors.append(
@@ -111,6 +118,13 @@ def check_screen(data: dict) -> tuple[list[str], list[str]]:
             ntype = step.get("node_type", "process")
             branch = step.get("branch")
             calls = step.get("calls")
+
+            # 禁止された node_type: "object" の使用
+            if ntype == "object":
+                errors.append(
+                    f"{label}: node_type='object' は禁止。"
+                    "node_type='process' + object_ref に変更すること。"
+                )
 
             # エラーステップがメインフローに独立して存在している
             if ntype == "error":

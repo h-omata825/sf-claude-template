@@ -394,7 +394,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/check_design_json.py \
 
 全 JSON の生成完了後、`generate_feature_design.py` で Excel を生成する（このエージェントは常にこのスクリプトのみ使う）:
 
-**Apex / Batch / Flow（非画面）/ Integration / Aura → generate_feature_design.py**:
+**Apex / Batch / Flow（非画面）/ Integration → generate_feature_design.py**:
 
 > `--version-increment` の指定方法:
 > - 既存の設計書がある場合（更新）→ `--version-increment minor`
@@ -412,8 +412,6 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_design.py \
 出力先フォルダとファイル名:
 | 種別 | 出力先サブフォルダ | ファイル名 |
 |---|---|---|
-| LWC | `{output_dir}/lwc/` | `【F-XXX】{name}.xlsx` |
-| 画面フロー | `{output_dir}/flow/` | `【F-XXX】{name}.xlsx` |
 | Apex / Batch | `{output_dir}/apex/` | `【F-XXX】{name}.xlsx` |
 | Flow（非画面）| `{output_dir}/flow/` | `【F-XXX】{name}.xlsx` |
 | Integration | `{output_dir}/integration/` | `【F-XXX】{name}.xlsx` |
