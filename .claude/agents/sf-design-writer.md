@@ -493,6 +493,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py \
   --output-dir "{output_dir}" \
   --author "{author}" \
   --project-name "{project_name}" \
+  --version-increment {version_increment} \
   --source-file "{output_dir}/機能一覧.xlsx"
 
 # 新規作成（初回）
@@ -500,7 +501,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py \
   --input "{tmp_dir}/feature_list.json" \
   --output-dir "{output_dir}" \
   --author "{author}" \
-  --project-name "{project_name}"
+  --project-name "{project_name}" \
+  --version-increment {version_increment}
 ```
 
 ---
