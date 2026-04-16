@@ -59,18 +59,28 @@ def extract_javadoc(path: Path) -> str:
 def extract_trigger_handler(trigger_path: Path) -> str | None:
     """トリガーファイルからハンドラークラス名を抽出する。
     見つからない場合は {TriggerStem}Handler を推測して返す。
+    推測したクラスファイルが classes/ に存在しない場合は None を返す。
     """
+    classes_dir = trigger_path.parent.parent / "classes"
     try:
         text = trigger_path.read_text(encoding="utf-8", errors="ignore")
         m = re.search(r'\b(\w+Handler)\b', text)
         if m:
-            return m.group(1)
+            handler_name = m.group(1)
+            if not (classes_dir / f"{handler_name}.cls").exists():
+                print(f"[警告] {trigger_path.name}: ハンドラー {handler_name}.cls が classes/ に存在しません → absorb_into=None", file=sys.stderr)
+                return None
+            return handler_name
     except Exception:
         pass
     # フォールバック: OpportunityTrigger → OpportunityTriggerHandler
     stem = trigger_path.stem
-    print(f"[警告] {trigger_path.name}: ハンドラークラス名を推測 → {stem}Handler", file=sys.stderr)
-    return f"{stem}Handler"
+    guessed = f"{stem}Handler"
+    if not (classes_dir / f"{guessed}.cls").exists():
+        print(f"[警告] {trigger_path.name}: ハンドラークラス名を推測 → {guessed} だが classes/ に存在しません → absorb_into=None", file=sys.stderr)
+        return None
+    print(f"[警告] {trigger_path.name}: ハンドラークラス名を推測 → {guessed}", file=sys.stderr)
+    return guessed
 
 
 def classify_apex(path: Path) -> str:
