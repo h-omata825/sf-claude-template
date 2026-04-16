@@ -19,7 +19,7 @@ Usage:
 Input JSON:
 [
   { "id":"F-001", "type":"Apex", "name":"機能名", "api_name":"ClassName",
-    "overview":"処理概要", "design_file":"【F-001】機能名.xlsx" },
+    "overview":"処理概要" },
   ...
 ]
 """

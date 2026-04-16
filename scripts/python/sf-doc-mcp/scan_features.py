@@ -199,6 +199,18 @@ def scan(project_dir: Path) -> list[dict]:
                 "design_doc":  get_design_doc(docs_design, comp_dir.name),
             })
 
+    # --- Visualforce ---
+    base = force_app / "pages"
+    if base.exists():
+        for page_file in sorted(base.glob("*.page-meta.xml")):
+            api_name = page_file.name.replace(".page-meta.xml", "")
+            _add("Visualforce", api_name, {
+                "name":        api_name,
+                "overview":    "",
+                "source_file": page_file.as_posix(),
+                "design_doc":  get_design_doc(docs_design, api_name),
+            })
+
     # 今回見つからなかった機能は deprecated にする
     newly_deprecated = mark_deprecated(ledger, active_keys)
     if newly_deprecated:
