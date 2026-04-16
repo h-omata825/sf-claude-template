@@ -10,15 +10,7 @@
       "Bash(sf project deploy start --target-org *prod*)",
       "Bash(sf project deploy start --target-org *production*)",
       "Bash(rm -rf *)",
-      "Bash(rm -r .claude*)",
-      "Edit(.claude/CLAUDE.md)",
-      "Edit(.claude/agents/*)",
-      "Edit(.claude/commands/*)",
-      "Edit(.claude/settings.json)",
-      "Write(.claude/CLAUDE.md)",
-      "Write(.claude/agents/*)",
-      "Write(.claude/commands/*)",
-      "Write(.claude/settings.json)"
+      "Bash(rm -r .claude*)"
     ]
   },
 

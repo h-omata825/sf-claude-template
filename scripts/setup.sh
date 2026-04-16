@@ -73,7 +73,10 @@ info "テンプレートを配置中..."
 cp -r "$TMP_DIR/.claude" "$PROJECT_PATH/.claude"
 cp "$TMP_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
 cp -r "$TMP_DIR/docs" "$PROJECT_PATH/docs"
-[ -d "$TMP_DIR/scripts" ] && cp -r "$TMP_DIR/scripts" "$PROJECT_PATH/scripts"
+if [ -d "$TMP_DIR/scripts" ]; then
+    mkdir -p "$PROJECT_PATH/scripts"
+    cp -r "$TMP_DIR/scripts/." "$PROJECT_PATH/scripts/"
+fi
 
 # --- .gitignore 更新 ---
 {
