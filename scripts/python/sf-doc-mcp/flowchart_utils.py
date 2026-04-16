@@ -92,10 +92,13 @@ def _render_shape(ax, cx, cy, w, h, node_type, text):
         _draw_cylinder(ax, cx, cy, w, h)
         _text(ax, cx, cy, text, fs=6.5)
     elif node_type == "error":
-        _draw_roundrect(ax, cx, cy, w, h, face="#F8CBAD", edge="#C55A11")
+        _draw_roundrect(ax, cx, cy, w, h, face="#FFE699", edge="#BF9000")
+        _text(ax, cx, cy, text, fs=6.5)
+    elif node_type == "success":
+        _draw_roundrect(ax, cx, cy, w, h, face="#C6EFCE", edge="#538135")
         _text(ax, cx, cy, text, fs=6.5)
     elif node_type == "call":
-        _draw_roundrect(ax, cx, cy, w, h, face="#E2EFDA", edge="#548235")
+        _draw_roundrect(ax, cx, cy, w, h, face="#E1D5E7", edge="#9673A6")
         _text(ax, cx, cy, text, fs=6.5)
     else:
         _draw_roundrect(ax, cx, cy, w, h, face="#DEEAF1", edge="#6A8CAF")
@@ -175,7 +178,6 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
     BOX_W_TERM, BOX_H_TERM = 1.5, 0.48
     GAP_DEFAULT = 0.75
     GAP_MIN     = 0.60  # ノード重なりを防ぐ最小間隔
-    GAP_MAX     = 1.20  # 矢印が伸びすぎて図形が小さく見えることを防ぐ上限
 
     # ノード高さを先に計算（GAP動的調整に使用）
     node_heights = []
@@ -198,7 +200,7 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
         # GAP_MAX を超える場合は上限でクランプし、total_h を再計算する
         avail = target_h - 0.50 - 0.35 - sum_node_h
         raw_gap = avail / n_nodes if n_nodes > 0 else GAP_DEFAULT
-        GAP = max(GAP_MIN, min(GAP_MAX, raw_gap))
+        GAP = max(GAP_MIN, raw_gap)
         total_h = 0.50 + 0.35 + sum_node_h + GAP * n_nodes
     else:
         GAP = GAP_DEFAULT
@@ -234,11 +236,13 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
             y1 = cy + h / 2
             _arrow(ax, cx_main, y0 - 0.02, cx_main, y1 + 0.02)
             ml = nodes[i - 1].get("main_label") if i - 1 >= 0 else None
-            # decision ノードの下向き矢印は "Yes" を自動付与（main_label 未指定時）
+            # decision ノードの下向き矢印は "True" を自動付与（main_label 未指定時）
             if ml is None and i - 1 >= 0 and nodes[i - 1].get("type") == "decision":
-                ml = "Yes"
+                ml = "True"
             if ml:
-                _label(ax, cx_main - 0.22, (y0 + y1) / 2, ml)
+                # decision の下向き Yes ラベルはひし形のすぐ下に配置
+                lbl_y = y0 - 0.22 if (i - 1 >= 0 and nodes[i - 1].get("type") == "decision") else (y0 + y1) / 2
+                _label(ax, cx_main - 0.22, lbl_y, ml)
 
         obj = n.get("object_ref")
         if obj and t != "object":
@@ -282,8 +286,8 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
             _arrow(ax, cx_main + w / 2 + 0.02, cy,
                    cx_branch - bw / 2 - 0.02, cy,
                    color="#444444", lw=1.1)
-            # decision ノードの branch は label 未指定時に "No" をデフォルト表示
-            br_label = br.get("label") or ("No" if t == "decision" else None)
+            # decision ノードの branch は label 未指定時に "False" をデフォルト表示
+            br_label = br.get("label") or ("False" if t == "decision" else None)
             if br_label:
                 midx = (cx_main + w / 2 + cx_branch - bw / 2) / 2
                 _label(ax, midx, cy + 0.16, br_label)

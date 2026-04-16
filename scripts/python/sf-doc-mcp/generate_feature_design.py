@@ -235,17 +235,26 @@ def fill_overview(ws, data, changed_fields: set = None):
 def _estimate_content_height_pts(steps: list) -> float:
     """処理内容の行高さ合計をポイント単位で概算する（フロー図の縦幅合わせに使用）。
 
-    フロー図はメインステップのみを描画し sub_steps は描画しない。
-    そのためサブステップの高さは含めず、メインステップのタイトル行と概要行のみを計上する。
+    タイトルと詳細は横並び（同一行）。sub_steps も含めて全行を計上し、
+    フロー図の矢印長を調整してコンテンツ全体の高さに合わせる。
     """
-    APPROX_CHARS = 28
+    TITLE_CPL  = 9
+    DETAIL_CPL = 28
     total = 0.0
     for step in steps:
-        total += 26  # タイトル行
+        title  = step.get("title", "")
         detail = step.get("detail", "")
-        if detail:
-            est = max(2, len(detail) // APPROX_CHARS + detail.count("\n") + 1)
-            total += max(48, est * 16)
+        t_lines = max(1, -(-len(title)  // TITLE_CPL))
+        d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
+        total += max(22, max(t_lines, d_lines) * 18 + 4)   # メインステップ行
+
+        for sub in step.get("sub_steps", []):
+            st = sub.get("title",  "")
+            sd = sub.get("detail", "")
+            st_lines = max(1, -(-len(st) // TITLE_CPL))
+            sd_lines = max(1, len(sd) // DETAIL_CPL + sd.count("\n") + 1) if sd else 1
+            total += max(20, max(st_lines, sd_lines) * 16 + 4)  # サブステップ行
+
         total += 10  # ステップ間スペーサー
     return max(total, 200)
 
@@ -253,65 +262,46 @@ def _estimate_content_height_pts(steps: list) -> float:
 def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
     changed_step_nos = changed_step_nos or set()
     row = PROC_DATA_ROW_START
+    TITLE_CPL  = 9   # 処理タイトル列幅 (4列 × 約2.3文字/列)
+    DETAIL_CPL = 28  # 処理詳細列幅 (9列 × 約3.1文字/列)
     for step in data.get("steps", []):
-        step_no = step.get("no", "")
+        step_no    = step.get("no", "")
         is_changed = step_no in changed_step_nos
-        # ステップ行（タイトル）— 折り返しを考慮して高さを動的計算
         title_text = step.get("title", "")
-        TITLE_CPL = 9  # 列幅4.2×4列 ≈ 9日本語文字/行
-        t_lines = max(1, -(-len(title_text) // TITLE_CPL))  # 切り上げ除算
-        set_h(ws, row, max(22, t_lines * 18 + 4))
+        detail     = step.get("detail", "")
+
+        # タイトルと詳細を同一行に横並び配置。行高さは両者の最大行数で決定
+        t_lines = max(1, -(-len(title_text) // TITLE_CPL))
+        d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
+        set_h(ws, row, max(22, max(t_lines, d_lines) * 18 + 4))
+
         c_no = MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, step_no,
                   bold=True, border=B_all(), h="center", bg=C_STEP_BG)
-        c_t  = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, step.get("title", ""),
-                  bold=True, border=B_all(), bg=C_STEP_BG)
-        MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, "",
-           border=B_all(), bg=C_STEP_BG)
+        c_t  = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, title_text,
+                  bold=True, border=B_all(), bg=C_STEP_BG, v="top")
+        c_d  = MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, detail,
+                  border=B_all(), bg=C_STEP_BG, wrap=True, v="top")
         if is_changed:
             dr.apply_red(c_no, bold=True)
             dr.apply_red(c_t,  bold=True)
+            dr.apply_red(c_d)
         row += 1
 
-        # 詳細
-        detail = step.get("detail", "")
-        if detail:
-            # 文字数から概算行数を出して高さ調整（ゆとり持たせる）
-            approx_chars_per_line = 28
-            est_lines = max(2, len(detail) // approx_chars_per_line + detail.count("\n") + 1)
-            set_h(ws, row, max(48, est_lines * 16))
-            MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, "", border=B_all())
-            c_d = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_DETAIL_CE, detail,
-                     border=B_all(), wrap=True, v="top")
-            if is_changed:
-                dr.apply_red(c_d)
-            row += 1
-
-        # サブステップ
+        # サブステップ（タイトルと詳細を同一行に横並び）
         for sub in step.get("sub_steps", []):
-            set_h(ws, row, 20)
+            sub_title = sub.get("title",  "")
+            sdetail   = sub.get("detail", "")
+            st_lines  = max(1, -(-len(sub_title) // TITLE_CPL))
+            sd_lines  = max(1, len(sdetail) // DETAIL_CPL + sdetail.count("\n") + 1) if sdetail else 1
+            set_h(ws, row, max(20, max(st_lines, sd_lines) * 16 + 4))
+
             MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, sub.get("no", ""),
                fg=C_FONT_GRAY, border=B_all(), h="center", bg=C_SUB_BG)
-            MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, sub.get("title", ""),
-               bold=True, fg=C_FONT_GRAY, border=B_all(), bg=C_SUB_BG)
-            MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, "",
-               border=B_all(), bg=C_SUB_BG)
+            MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, sub_title,
+               bold=True, fg=C_FONT_GRAY, border=B_all(), bg=C_SUB_BG, v="top")
+            MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, sdetail,
+               fg=C_FONT_GRAY, border=B_all(), wrap=True, v="top", bg=C_SUB_BG)
             row += 1
-
-            sdetail = sub.get("detail", "")
-            if sdetail:
-                # 改行数 + 折り返し行数（列幅約32文字）の合計で高さ推定
-                APPROX_CHARS_SUB = 32
-                wrap_lines = sum(
-                    max(1, (len(ln) + APPROX_CHARS_SUB - 1) // APPROX_CHARS_SUB)
-                    for ln in sdetail.splitlines() or [""]
-                )
-                slines = max(2, wrap_lines + 1)
-                set_h(ws, row, max(28, slines * 13))
-                MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, "",
-                   border=B_all(), bg=C_SUB_BG)
-                MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_DETAIL_CE, sdetail,
-                   fg=C_FONT_GRAY, border=B_all(), wrap=True, v="top", bg=C_SUB_BG)
-                row += 1
 
         # APEX呼び出し表
         for apex in step.get("apex_calls", []):
