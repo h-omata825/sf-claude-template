@@ -264,19 +264,34 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
     row = PROC_DATA_ROW_START
     TITLE_CPL  = 9   # 処理タイトル列幅 (4列 × 約2.3文字/列)
     DETAIL_CPL = 28  # 処理詳細列幅 (9列 × 約3.1文字/列)
-    for step in data.get("steps", []):
-        step_no    = step.get("no", "")
+    for i, step in enumerate(data.get("steps", [])):
+        step_no    = str(step.get("no", "") or (i + 1))  # no 未設定時は連番で補完
         is_changed = step_no in changed_step_nos
         title_text = step.get("title", "")
         detail     = step.get("detail", "")
+        sub_steps  = step.get("sub_steps", [])
+        no_row_start = row  # Noセル縦結合の起点
 
         # タイトルと詳細を同一行に横並び配置。行高さは両者の最大行数で決定
         t_lines = max(1, -(-len(title_text) // TITLE_CPL))
         d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
         set_h(ws, row, max(22, max(t_lines, d_lines) * 18 + 4))
 
-        c_no = MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, step_no,
-                  bold=True, border=B_all(), h="center", bg=C_STEP_BG)
+        # No 列: サブステップ行数分を先に塗り・罫線を付けてから縦結合
+        total_no_rows = 1 + len(sub_steps)
+        for rr in range(no_row_start, no_row_start + total_no_rows):
+            for cc in range(PROC_LEFT_NO_CS, PROC_LEFT_NO_CE + 1):
+                ws.cell(row=rr, column=cc).fill = _fill(C_STEP_BG)
+                ws.cell(row=rr, column=cc).border = B_all()
+        if total_no_rows > 1:
+            ws.merge_cells(start_row=no_row_start, start_column=PROC_LEFT_NO_CS,
+                           end_row=no_row_start + total_no_rows - 1, end_column=PROC_LEFT_NO_CE)
+        c_no = ws.cell(row=no_row_start, column=PROC_LEFT_NO_CS, value=step_no)
+        c_no.font      = _fnt(bold=True)
+        c_no.alignment = _aln(h="center", v="center")
+        c_no.fill      = _fill(C_STEP_BG)
+        c_no.border    = B_all()
+
         c_t  = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, title_text,
                   bold=True, border=B_all(), bg=C_STEP_BG, v="top")
         c_d  = MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, detail,
@@ -287,17 +302,17 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
             dr.apply_red(c_d)
         row += 1
 
-        # サブステップ（タイトルと詳細を同一行に横並び）
-        for sub in step.get("sub_steps", []):
-            sub_title = sub.get("title",  "")
+        # サブステップ（No列は縦結合済みのためスキップ。No は先頭にプレフィックス付与）
+        for sub in sub_steps:
+            sub_no    = sub.get("no", "")
+            sub_title = sub.get("title", "")
             sdetail   = sub.get("detail", "")
-            st_lines  = max(1, -(-len(sub_title) // TITLE_CPL))
+            sub_title_display = f"{sub_no} {sub_title}".strip() if sub_no else sub_title
+            st_lines  = max(1, -(-len(sub_title_display) // TITLE_CPL))
             sd_lines  = max(1, len(sdetail) // DETAIL_CPL + sdetail.count("\n") + 1) if sdetail else 1
             set_h(ws, row, max(20, max(st_lines, sd_lines) * 16 + 4))
 
-            MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, sub.get("no", ""),
-               fg=C_FONT_GRAY, border=B_all(), h="center", bg=C_SUB_BG)
-            MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, sub_title,
+            MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, sub_title_display,
                bold=True, fg=C_FONT_GRAY, border=B_all(), bg=C_SUB_BG, v="top")
             MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, sdetail,
                fg=C_FONT_GRAY, border=B_all(), wrap=True, v="top", bg=C_SUB_BG)
@@ -504,6 +519,10 @@ def main():
 
     # フロー図PNG生成（処理内容の行高さに合わせて縦幅を揃える）
     steps = data.get("steps", [])
+    # no 未設定のステップに連番を補完（図形・表の両方で No を表示するため）
+    for _i, _s in enumerate(steps):
+        if not str(_s.get("no", "")).strip():
+            _s["no"] = str(_i + 1)
 
     # ── object_ref バリデーション ──────────────────────────────────────
     # SOQL/DML サブステップがあるのに object_ref が未設定の場合のみ警告する
