@@ -43,21 +43,65 @@ bash scripts/setup-sf-project.sh <alias> sandbox    # Sandboxの場合（test.sa
 
 ## Step 4: 完了案内
 
-認証完了後、AskUserQuestion ツールで以下を表示する:
+### 4-1: 接続組織の種別を確認
+
+```bash
+sf org display --target-org <alias> --json
+```
+
+`isSandbox` フィールドを読み取り、ルートの `CLAUDE.md` に以下の形式で記録する（既存エントリがあれば上書き、なければ末尾に追加）:
+
+```
+<!-- sf-setup により自動記録 -->
+接続組織: 本番 (alias: prod) — 初期セットアップ中。DML・デプロイ・force-app書き込み禁止
+```
+
+または
+
+```
+<!-- sf-setup により自動記録 -->
+接続組織: Sandbox (alias: dev)
+```
+
+### 4-2: 次のアクション分岐
+
+`docs/` 配下に `.md` ファイルが存在するか確認する:
+
+```bash
+find docs -name "*.md" -type f 2>/dev/null | head -1
+```
+
+**docs/ にファイルが存在する場合（メンバーセットアップ）**:
+
+組織情報・設計書はプロジェクトテンプレートに含まれています。すぐに作業を開始できます。
+
+```
+次のアクション（任意）:
+- /setup-mcp  — Backlog・Notion・GitHub 等の外部ツール連携を設定する
+```
+
+**docs/ が空の場合（初期セットアップ）**:
+
+AskUserQuestion ツールで以下を表示する:
 
 **質問**: 「認証が完了しました。続けてメタデータの取得を行いますか？」
 
 **選択肢**:
 - `取得する` — そのまま /sf-retrieve を実行する
-- `あとで` — ここで終了する（あとで /sf-retrieve を実行する）
+- `あとで` — 手順を案内して終了する
 
-`取得する` を選択した場合は、続けて /sf-retrieve コマンドを実行する。
+`取得する` の場合は /sf-retrieve を実行する。
 
-`あとで` を選択した場合は、以下を案内して終了する:
+`あとで` の場合は以下を案内して終了する:
 
 ```
-セットアップの次のステップ:
-1. /sf-retrieve   — メタデータの取得
-2. /setup-mcp     — 外部ツール連携（任意: Backlog・Notion・Slack 等）
-3. /sf-memory     — 組織情報の記録（初回は本番環境で実施推奨）
+初期セットアップの次のステップ:
+1. /sf-retrieve  — メタデータを取得する（force-app/ に展開）
+2. /sf-memory    — 組織情報を収集・記録する（docs/ を生成） ★本番接続中に実施
+3. /sf-doc       — 設計書・定義書を生成する
+4. CLAUDE.md     — プロジェクト固有情報を記入する
+5. /setup-mcp    — 外部ツール連携（任意）
+
+⚠️ 本番接続中（Step 2〜4）は読み取り操作のみです。
+   データの変更・デプロイ・force-app への書き込みは行いません。
 ```

@@ -113,19 +113,35 @@ if [ -n "$PROJECT_REPO_URL" ]; then
 fi
 echo ""
 echo "  次のステップ:"
-if [ -z "$PROJECT_REPO_URL" ]; then
-    echo "    0. GitHubでリポジトリを作成して連携する:"
-    echo "         cd $PROJECT_PATH"
-    echo "         git init && git remote add origin <URL>"
-    echo "         git add . && git commit -m 'chore: initial setup'"
-    echo "         git push -u origin main"
+# docs/ に .md ファイルがあるかで初期セットアップ／メンバーセットアップを判定
+DOC_COUNT=$(find "$PROJECT_PATH/docs" -name "*.md" -type f 2>/dev/null | wc -l)
+
+if [ "$DOC_COUNT" -gt 0 ]; then
+    # --- メンバーセットアップ（プロジェクトテンプレートから作成）---
+    echo "    組織情報・設計書はプロジェクトテンプレートに含まれています。"
     echo ""
+    echo "    1. /sf-setup   — Sandbox組織を認証する"
+    echo "    2. CLAUDE.md   — 担当者名・Sandbox alias 等を記入する"
+    echo "    3. /setup-mcp  — 外部ツール連携を設定する（任意: Backlog・Notion・GitHub 等）"
+else
+    # --- 初期セットアップ（テンプレートから新規作成）---
+    if [ -z "$PROJECT_REPO_URL" ]; then
+        echo "    0. GitHubでリポジトリを作成して連携する:"
+        echo "         cd $PROJECT_PATH"
+        echo "         git init && git remote add origin <URL>"
+        echo "         git add . && git commit -m 'chore: initial setup'"
+        echo "         git push -u origin main"
+        echo ""
+    fi
+    echo "    1. /sf-setup    — 本番組織を認証する ★記憶形成は本番接続を推奨"
+    echo "    2. /sf-retrieve — メタデータを取得する（force-app/ に展開）"
+    echo "    3. /sf-memory   — 組織情報を収集しドキュメントを生成する（docs/ に出力）"
+    echo "    4. /sf-doc      — 設計書・定義書を生成する"
+    echo "    5. CLAUDE.md    — プロジェクト固有情報を記入する"
+    echo "    6. /setup-mcp   — 外部ツール連携を設定する（任意）"
+    echo ""
+    echo "    ※ 初期セットアップ完了後、プロジェクトリポジトリをチームメンバーに配布してください"
 fi
-echo "    1. /sf-setup     — Salesforce組織を認証する"
-echo "    2. /sf-retrieve  — メタデータを取得する（force-app/ に展開）"
-echo "    3. /sf-memory    — 組織情報を収集しドキュメントを生成する（docs/ に出力）"
-echo "    4. CLAUDE.md     — プロジェクト固有情報を記入する"
-echo "    5. /setup-mcp    — GitHub・Backlog等の外部連携を設定する（任意）"
 echo ""
 
 # --- VSCode で開く ---
