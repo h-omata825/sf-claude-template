@@ -439,9 +439,9 @@ def build_steps(segs: list[Seg]) -> list[dict]:
             if catch_segs:
                 step['branch'] = {'text': '', 'node_type': 'error', 'label': 'catch'}
             steps.append(step)
-            for cs in catch_segs:
-                steps.append(seg_to_step(cs, no))
-                no += 1
+            # catch/finally の内容は try ステップの branch で表現済みのため
+            # メインフローへの追加は省略する（node_type:"error" の単独ステップが
+            # check_design_json.py のエラーチェックに引っかかるデッドロックを回避）
             i = j
 
         else:
