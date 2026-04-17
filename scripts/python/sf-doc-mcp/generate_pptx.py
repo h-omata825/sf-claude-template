@@ -59,6 +59,20 @@ FONT_NAME = "BIZ UDPゴシック"
 FONT_NAME_EN = "Segoe UI"
 
 
+def _swimlane_trunc(text: str, max_w: int = 22) -> str:
+    """スイムレーンのステップラベルを表示幅でトリムする（全角=2、半角=1）"""
+    import unicodedata
+    total, out = 0, []
+    for c in text:
+        w = 2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1
+        if total + w > max_w:
+            out.append('…')
+            break
+        out.append(c)
+        total += w
+    return ''.join(out)
+
+
 def _add_bg_rect(slide, x, y, w, h, color, alpha=None):
     """背景矩形を追加"""
     shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, x, y, w, h)
@@ -825,7 +839,12 @@ def build_swimlane(prs, slide_data: dict, page_num: int, total: int):
         tf = shape.text_frame
         tf.word_wrap = True
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-        lines = step.get("label", "").split("\n")
+        # 列数に応じた1行あたりの表示幅上限（全角換算）
+        _max_w = 14 if n_cols >= 8 else 18 if n_cols >= 6 else 22
+        raw_lines = step.get("label", "").split("\n")
+        lines = [_swimlane_trunc(ln, _max_w) for ln in raw_lines[:4]]
+        if len(raw_lines) > 4:
+            lines.append("…")
         for li, ln_text in enumerate(lines):
             p = tf.paragraphs[0] if li == 0 else tf.add_paragraph()
             p.text = ln_text

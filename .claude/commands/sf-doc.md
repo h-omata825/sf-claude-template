@@ -32,14 +32,14 @@ AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）
 | # | 資料 | 出力 | 分岐 |
 |---|---|---|---|
 | 0 | 全て                       | 全資料を順番に生成（A→B→C→D）                                  | Step A〜D |
-| 1 | 業務フロー図               | PPTX（システム構成図・業務フロー図・ER図・オブジェクト一覧）   | Step A→B |
+| 1 | プロジェクト概要書          | PPTX 2ファイル（業務フロー図 + データモデル定義書）            | Step A→B |
 | 2 | オブジェクト定義書          | Excel（オブジェクト項目定義書）                                 | Step C |
 | 3 | 機能別設計書                | Excel（機能一覧＋機能別設計書）                                 | Step D |
 
 AskUserQuestion のツールを使い、以下の **4つ** を choices に含めて提示する:
 
 - 全て — 全資料を順番に生成（A→B→C→D）
-- 業務フロー図 — システム構成図・業務フロー図・ER図 + データモデル定義書 → PPTX 2ファイル（Step A→B の順）
+- プロジェクト概要書 — 業務フロー図 + データモデル定義書（ER図）→ PPTX 2ファイル（Step A→B の順）
 - オブジェクト定義書 — オブジェクト・項目定義書 → Excel
 - 機能別設計書 — 機能一覧 & 機能別設計書 → Excel
 
@@ -49,7 +49,7 @@ AskUserQuestion のツールを使い、以下の **4つ** を choices に含め
 Step A（業務フロー図 PPTX）→ Step B（データモデル定義書 PPTX）→ Step C（オブジェクト定義書 Excel）→ Step D（機能別設計書 Excel）
 ```
 
-「業務フロー図」→ Step A 完了後そのまま Step B を実行する。
+「プロジェクト概要書」→ Step A 完了後そのまま Step B を実行する。
 
 ### Step 0-2: 共通情報の取得（資料種別選択後に一度だけ聞く）
 
@@ -65,7 +65,7 @@ Step A（業務フロー図 PPTX）→ Step B（データモデル定義書 PPTX
 python -c "
 import pathlib, sys
 p = pathlib.Path(r'{入力値}')
-known = ['業務フロー図', 'オブジェクト定義書', '機能別設計書']
+known = ['プロジェクト概要書', 'オブジェクト定義書', '機能別設計書']
 # パス内のどこかに既知のサブフォルダ名があれば、その親を ROOT とする
 for part in [p] + list(p.parents):
     if part.name in known:
@@ -166,15 +166,15 @@ for k, p in paths.items():
 
 出力先サブフォルダを作成してから実行:
 ```bash
-mkdir -p "{ROOT}/業務フロー図"
+mkdir -p "{ROOT}/プロジェクト概要書"
 python scripts/python/sf-doc-mcp/generate_project_doc.py \
   --docs-dir "{カレントディレクトリ}/docs" \
-  --output-dir "{ROOT}/業務フロー図" \
+  --output-dir "{ROOT}/プロジェクト概要書" \
   --author "{作成者名}"
 ```
 
 完了後、出力パスを表示:
-- `{ROOT}/業務フロー図/業務フロー図.pptx`
+- `{ROOT}/プロジェクト概要書/業務フロー図.pptx`
 
 ---
 
@@ -216,12 +216,12 @@ print('model:', model.exists())
 ```bash
 python scripts/python/sf-doc-mcp/generate_data_model.py \
   --docs-dir "{カレントディレクトリ}/docs" \
-  --output-dir "{ROOT}/データモデル定義書" \
+  --output-dir "{ROOT}/プロジェクト概要書" \
   --author "{作成者名}"
 ```
 
 完了後、出力パスを表示:
-- `{ROOT}/データモデル定義書/データモデル定義書.pptx`
+- `{ROOT}/プロジェクト概要書/データモデル定義書.pptx`
 
 ---
 

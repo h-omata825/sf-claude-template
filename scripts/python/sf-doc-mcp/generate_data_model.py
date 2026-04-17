@@ -1013,6 +1013,16 @@ def build_json(categories, relations, object_fields, author, company):
         else:
             sup_objs.extend(objs)
 
+    # TX が一件もない場合: _index.md の見出しがカテゴリルールに一致しなかった可能性が高い。
+    # カスタムオブジェクト（__c）を TX 扱いにしてER図が出るようにするフォールバック。
+    if not tx_objs:
+        custom_sup = [o for o in sup_objs if o["api_name"].endswith("__c")]
+        if custom_sup:
+            tx_objs = custom_sup
+            sup_objs = [o for o in sup_objs if not o["api_name"].endswith("__c")]
+            for o in tx_objs:
+                style_by_api[o["api_name"]] = "primary"
+
     cat_map = {}
     label_map = {}
     for cat, objs in categories.items():
