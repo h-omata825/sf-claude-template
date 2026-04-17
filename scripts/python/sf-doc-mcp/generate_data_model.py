@@ -118,7 +118,7 @@ def parse_index(path: Path) -> dict:
         cols = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cols) < 2:
             continue
-        label, api_name = cols[0], cols[1]
+        label, api_name = cols[0], cols[1].strip('`')
         if (not label or label.startswith("---") or label == "オブジェクト"
                 or api_name.startswith("---")
                 or re.match(r'\[.+\]\(.+\)', api_name)):
