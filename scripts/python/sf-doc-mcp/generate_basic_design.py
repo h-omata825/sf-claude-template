@@ -1,14 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-基本設計書.xlsx を1機能グループ分生成する（テンプレートなし・直接生成）。
+基本設計書.xlsx を1機能グループ分生成する（テンプレート読込方式）。
 
-2シート構成:
-  1. 機能概要: グループ概要・業務の流れ・構成コンポーネント・関連オブジェクト・外部連携・前提条件
-  2. 改版履歴: メタ + 履歴テーブル
+  基本設計書テンプレート.xlsx（build_basic_design_template.py で生成した「器」）を
+  コピーしてセル値を流し込む。
+
+4シート構成:
+  1. 改版履歴                   : メタ + 履歴テーブル
+  2. グループ概要               : 業務目的 / 対象ユーザー / 利用シーン / 前提条件
+  3. 業務フロー                 : No / 担当 / 操作・処理内容 / 関連コンポーネント
+  4. コンポーネント・オブジェクト: 構成コンポーネント / 関連オブジェクト / 外部連携
 
 Usage:
   python generate_basic_design.py \\
     --input  basic_design.json \\
+    --template "C:/.../基本設計書テンプレート.xlsx" \\
     --output-dir "C:/.../出力ルート"
 
 出力先: {output-dir}/basic/【GRP-001】機能グループ名.xlsx
@@ -50,76 +56,121 @@ import sys
 from datetime import date as _date
 from pathlib import Path
 
-from openpyxl import Workbook
+from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+import design_revision as dr
+from meta_store import read_meta, write_meta
+from version_manager import increment_version
+
 # ── 色定数 ─────────────────────────────────────────────────────────
-C_TITLE_BG   = "1F3864"   # 表紙タイトル（濃紺）
-C_HDR_BLUE   = "2E75B6"   # セクションヘッダー（青）
-C_BAND_BLUE  = "4472C4"   # テーブルヘッダー（中青）
-C_LABEL_BG   = "D9E1F2"   # ラベル背景（薄青）
-C_META_BG    = "F2F2F2"   # メタ行背景（薄グレー）
-C_STEP_BG    = "E2EFDA"   # 業務フロー行（薄緑）
-C_ALT_BG     = "FAFAFA"   # 交互行背景（ほぼ白）
-C_FONT_D     = "000000"
-C_FONT_W     = "FFFFFF"
-C_FONT_GRAY  = "595959"
+C_HDR_BLUE  = "2E75B6"
+C_BAND_BLUE = "0070C0"
+C_LABEL_BG  = "D9E1F2"
+C_FONT_D    = "000000"
+C_FONT_W    = "FFFFFF"
+C_FONT_GRAY = "595959"
 
 THIN = Side(style="thin",   color="8B9DC3")
 MED  = Side(style="medium", color="1F3864")
 
-# ── 列レイアウト定数 ─────────────────────────────────────────────
-# 全16列（col 2〜17）使用。col 1は左マージン用。
-COL_START   = 2
-COL_END     = 17
-# ラベルエリア（2〜4列）
-LABEL_CS, LABEL_CE = 2, 4
-# コンテンツエリア（5〜17列）
-CONT_CS,  CONT_CE  = 5, 17
-# テーブル列定義（業務の流れ）
-BF_STEP_CS,   BF_STEP_CE   = 2, 2
-BF_ACTOR_CS,  BF_ACTOR_CE  = 3, 4
-BF_ACTION_CS, BF_ACTION_CE = 5, 13
-BF_SYS_CS,    BF_SYS_CE    = 14, 17
-# テーブル列定義（構成コンポーネント）
-CM_TYPE_CS,   CM_TYPE_CE   = 2, 3
-CM_API_CS,    CM_API_CE    = 4, 7
-CM_ROLE_CS,   CM_ROLE_CE   = 8, 17
-# テーブル列定義（関連オブジェクト）
-OB_API_CS,    OB_API_CE    = 2, 4
-OB_LABEL_CS,  OB_LABEL_CE  = 5, 8
-OB_USAGE_CS,  OB_USAGE_CE  = 9, 17
-# テーブル列定義（外部連携）
-EX_TARGET_CS, EX_TARGET_CE = 2, 4
-EX_DIR_CS,    EX_DIR_CE    = 5, 6
-EX_DATA_CS,   EX_DATA_CE   = 7, 12
-EX_TIME_CS,   EX_TIME_CE   = 13, 17
+# ── テンプレートと一致させる定数 ────────────────────────────────────
+# 改版履歴（build_basic_design_template.py と同一定義）
+REV_META_ROW       = 3
+REV_META_PROJECT_V = (6, 18)
+REV_META_DATE_V    = (23, 31)
+REV_DATA_ROW_START = 6
+REV_COLS = {
+    "項番":     (2,  3),
+    "版数":     (4,  5),
+    "変更箇所": (6,  11),
+    "変更内容": (12, 17),
+    "変更理由": (18, 23),
+    "変更日":   (24, 26),
+    "変更者":   (27, 29),
+    "備考":     (30, 31),
+}
 
-META_ROW  = 3   # メタデータ行
+# グループ概要（各ラベルの値セル）
+GRP_META_ROW_1   = 3
+GRP_META_ROW_2   = 4
+GRP_META_1_V = {
+    "project_name": (6,  16),
+    "group_id":     (21, 24),
+    "author":       (28, 29),
+    "version":      (31, 31),
+}
+GRP_META_2_V = {
+    "name_ja": (6,  24),
+    "date":    (28, 31),
+}
+GRP_LABEL_VAL_CS = 7   # ラベル行の値開始列
+GRP_LABEL_VAL_CE = 31
+GRP_SECTION_ROW = {
+    "purpose":      7,
+    "target_users": 8,
+    "usage_scene":  9,
+    "prerequisites": 12,
+    "notes":        13,
+}
+
+# 業務フロー（テンプレート定数と同一）
+BF_DATA_ROW_START = 5
+BF_STEP_CS,  BF_STEP_CE  = 2,  3
+BF_ACTOR_CS, BF_ACTOR_CE = 4,  8
+BF_ACT_CS,   BF_ACT_CE   = 9,  22
+BF_SYS_CS,   BF_SYS_CE   = 23, 31
+
+# コンポーネント・オブジェクト（テンプレート定数と同一）
+CM_DATA_ROW_START = 5
+CM_TYPE_CS, CM_TYPE_CE = 2,  5
+CM_API_CS,  CM_API_CE  = 6,  14
+CM_ROLE_CS, CM_ROLE_CE = 15, 31
+
+OB_SEC_ROW        = 21
+OB_HEAD_ROW       = 22
+OB_DATA_ROW_START = 23
+OB_API_CS,   OB_API_CE   = 2,  7
+OB_LABEL_CS, OB_LABEL_CE = 8,  14
+OB_USE_CS,   OB_USE_CE   = 15, 31
+
+EX_SEC_ROW        = 34
+EX_HEAD_ROW       = 35
+EX_DATA_ROW_START = 36
+EX_TGT_CS,  EX_TGT_CE  = 2,  7
+EX_DIR_CS,  EX_DIR_CE  = 8,  10
+EX_DATA_CS, EX_DATA_CE = 11, 21
+EX_TIME_CS, EX_TIME_CE = 22, 31
+
+GRID_RIGHT = 31
+
+SCALAR_FIELDS  = ["purpose", "target_users", "usage_scene", "prerequisites", "notes"]
+SECTION_SHEETS = {
+    "business_flow":        "業務フロー",
+    "components":           "コンポーネント・オブジェクト",
+    "related_objects":      "コンポーネント・オブジェクト",
+    "external_integrations": "コンポーネント・オブジェクト",
+}
 
 
 # ── スタイルヘルパー ────────────────────────────────────────────────
 def _fill(c): return PatternFill("solid", fgColor=c)
-
-def _fnt(bold=False, color=C_FONT_D, size=10, italic=False):
-    return Font(name="游ゴシック", bold=bold, color=color, size=size, italic=italic)
-
+def _fnt(bold=False, color=C_FONT_D, size=10):
+    return Font(name="游ゴシック", bold=bold, color=color, size=size)
 def _aln(h="left", v="center", wrap=True):
     return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
 
-def _B(): return Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-def _BM(): return Border(left=MED, right=MED, top=MED, bottom=MED)
+def B_all():
+    return Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
 def W(ws, row, col, value="", bold=False, fg=C_FONT_D, bg=None,
-      h="left", v="center", wrap=True, border=None, size=10, italic=False):
+      h="left", v="center", wrap=True, border=None, size=10):
     c = ws.cell(row=row, column=col, value=value)
-    c.font = _fnt(bold=bold, color=fg, size=size, italic=italic)
+    c.font = _fnt(bold=bold, color=fg, size=size)
     c.alignment = _aln(h=h, v=v, wrap=wrap)
-    if bg:
-        c.fill = _fill(bg)
-    if border:
-        c.border = border
+    if bg: c.fill = _fill(bg)
+    if border: c.border = border
     return c
 
 def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
@@ -132,326 +183,252 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
     ws.merge_cells(start_row=row, start_column=cs, end_row=row, end_column=ce)
     return W(ws, row, cs, value, border=border, bg=bg, **kwargs)
 
-def set_h(ws, row, pts):
-    ws.row_dimensions[row].height = pts
+def set_h(ws, row, h):
+    ws.row_dimensions[row].height = h
+
+def _data_row(ws, row, col_groups: list[tuple], row_h=22):
+    """テンプレートに追加データ行が必要な場合に罫線付き空行を挿入する。"""
+    set_h(ws, row, row_h)
+    for cs, ce in col_groups:
+        MW(ws, row, cs, ce, "", border=B_all())
 
 
-# ── 列幅設定 ────────────────────────────────────────────────────────
-def _set_col_widths(ws):
-    widths = {
-        1: 1.5,   # 左マージン
-        2: 5,
-        3: 8,
-        4: 8,
-        5: 12,
-        6: 8, 7: 8, 8: 8, 9: 8, 10: 8,
-        11: 8, 12: 8, 13: 8,
-        14: 8, 15: 8, 16: 8, 17: 8,
-    }
-    for col, w in widths.items():
-        ws.column_dimensions[get_column_letter(col)].width = w
+# ── シート埋め込み ─────────────────────────────────────────────────
+def fill_revision(ws, data: dict, history: list[dict]):
+    vs, _ = REV_META_PROJECT_V
+    ws.cell(row=REV_META_ROW, column=vs, value=data.get("project_name", ""))
+    vs, _ = REV_META_DATE_V
+    ws.cell(row=REV_META_ROW, column=vs, value=data.get("date", ""))
+    dr.fill_revision_table(ws, history, REV_COLS, REV_DATA_ROW_START)
 
 
-# ── セクションヘッダー描画 ──────────────────────────────────────────
-def _section_header(ws, row, text):
-    set_h(ws, row, 22)
-    MW(ws, row, COL_START, COL_END, f"■ {text}",
-       bold=True, fg=C_FONT_W, bg=C_HDR_BLUE, size=11,
-       border=_BM(), h="left", v="center")
-    return row + 1
+def fill_group_overview(ws, data: dict, changed_fields: set):
+    # メタ行1
+    for key, (cs, _) in GRP_META_1_V.items():
+        ws.cell(row=GRP_META_ROW_1, column=cs, value=data.get(key, ""))
+    # メタ行2
+    for key, (cs, _) in GRP_META_2_V.items():
+        ws.cell(row=GRP_META_ROW_2, column=cs, value=data.get(key, ""))
+    # セクション本文（ラベル行の値セル）
+    for key, row in GRP_SECTION_ROW.items():
+        val = data.get(key, "")
+        if val:
+            cell = ws.cell(row=row, column=GRP_LABEL_VAL_CS, value=val)
+            if key in changed_fields:
+                dr.apply_red(cell, size=10)
 
 
-# ── ラベル+値の2列行 ───────────────────────────────────────────────
-def _label_row(ws, row, label, value, min_h=20, value_rows=1):
-    set_h(ws, row, max(min_h, value_rows * 15 + 5))
-    MW(ws, row, LABEL_CS, LABEL_CE, label,
-       bold=True, bg=C_LABEL_BG, border=_B(), v="center")
-    MW(ws, row, CONT_CS, CONT_CE, value,
-       border=_B(), wrap=True, v="top" if value_rows > 1 else "center")
-    return row + 1
-
-
-# ── テーブルヘッダー行 ──────────────────────────────────────────────
-def _table_header(ws, row, cols: list[tuple]):
-    """cols: [(cs, ce, label), ...]"""
-    set_h(ws, row, 22)
-    for cs, ce, label in cols:
-        MW(ws, row, cs, ce, label,
-           bold=True, fg=C_FONT_W, bg=C_BAND_BLUE,
-           border=_B(), h="center")
-    return row + 1
-
-
-# ── 機能概要シート ──────────────────────────────────────────────────
-def fill_overview(ws, data: dict):
-    _set_col_widths(ws)
-
-    # 行1: 空白（上マージン）
-    ws.row_dimensions[1].height = 10
-
-    # 行2: 大タイトル
-    set_h(ws, 2, 36)
-    MW(ws, 2, COL_START, COL_END, "基本設計書",
-       bold=True, fg=C_FONT_W, bg=C_TITLE_BG, size=16,
-       h="center", border=_BM())
-
-    # 行3: メタ（プロジェクト名 / 機能グループ名 / 作成者 / 日付 / 版数）
-    set_h(ws, 3, 20)
-    meta_cols = [
-        (2, 4,   "プロジェクト名"), (5, 8,   data.get("project_name", "")),
-        (9, 10,  "グループ名"),     (11, 14, data.get("name_ja", "")),
-        (15, 15, "作成者"),         (16, 16, data.get("author", "")),
-        (17, 17, "版数"),
-    ]
-    for cs, ce, val in meta_cols:
-        is_label = isinstance(val, str) and val in ("プロジェクト名", "グループ名", "作成者", "版数")
-        MW(ws, 3, cs, ce, val,
-           bold=is_label, bg=C_META_BG if is_label else None,
-           border=_B(), h="center" if is_label else "left")
-    W(ws, 3, 17, data.get("version", "1.0"), border=_B(), h="center")
-
-    # 行4: 空白区切り
-    ws.row_dimensions[4].height = 8
-
-    r = 5
-
-    # ── セクション1: グループ概要 ──
-    r = _section_header(ws, r, "1. グループ概要")
-
-    fields = [
-        ("機能グループ名", data.get("name_ja", "")),
-        ("業務目的",       data.get("purpose", "")),
-        ("対象ユーザー",   data.get("target_users", "")),
-        ("利用シーン",     data.get("usage_scene", "")),
-    ]
-    for label, value in fields:
-        lines = max(1, value.count("\n") + 1, len(value) // 50 + 1) if value else 1
-        r = _label_row(ws, r, label, value, value_rows=lines)
-
-    # 空白区切り
-    ws.row_dimensions[r].height = 8
-    r += 1
-
-    # ── セクション2: 業務の流れ ──
-    r = _section_header(ws, r, "2. 業務の流れ")
-    r = _table_header(ws, r, [
-        (BF_STEP_CS,  BF_STEP_CE,  "No"),
-        (BF_ACTOR_CS, BF_ACTOR_CE, "担当"),
-        (BF_ACTION_CS, BF_ACTION_CE, "操作・処理内容"),
-        (BF_SYS_CS,   BF_SYS_CE,   "関連コンポーネント"),
-    ])
-
+def fill_business_flow(ws, data: dict, changed_step_nos: set):
     flows = data.get("business_flow", [])
-    if not flows:
-        set_h(ws, r, 20)
-        MW(ws, r, COL_START, COL_END, "（業務フロー未定義）",
-           fg=C_FONT_GRAY, italic=True, border=_B(), h="center")
+    r = BF_DATA_ROW_START
+    col_groups = [(BF_STEP_CS, BF_STEP_CE), (BF_ACTOR_CS, BF_ACTOR_CE),
+                  (BF_ACT_CS, BF_ACT_CE), (BF_SYS_CS, BF_SYS_CE)]
+
+    for i, flow in enumerate(flows):
+        step_no = flow.get("step", str(i + 1))
+        is_changed = step_no in changed_step_nos
+        set_h(ws, r, 24)
+        c1 = MW(ws, r, BF_STEP_CS,  BF_STEP_CE,  step_no,
+                border=B_all(), h="center")
+        c2 = MW(ws, r, BF_ACTOR_CS, BF_ACTOR_CE, flow.get("actor", ""),
+                border=B_all(), h="center")
+        c3 = MW(ws, r, BF_ACT_CS,   BF_ACT_CE,   flow.get("action", ""),
+                border=B_all(), wrap=True, v="top")
+        c4 = MW(ws, r, BF_SYS_CS,   BF_SYS_CE,   flow.get("system", ""),
+                border=B_all(), wrap=True, v="top")
+        if is_changed:
+            for c in (c1, c2, c3, c4):
+                dr.apply_red(c)
         r += 1
-    else:
-        for i, flow in enumerate(flows):
-            bg = C_STEP_BG if i % 2 == 0 else None
-            action = flow.get("action", "")
-            lines = max(1, len(action) // 35 + action.count("\n") + 1)
-            set_h(ws, r, max(20, lines * 15 + 5))
-            MW(ws, r, BF_STEP_CS,  BF_STEP_CE,  flow.get("step", str(i + 1)),
-               border=_B(), bg=bg, h="center")
-            MW(ws, r, BF_ACTOR_CS, BF_ACTOR_CE, flow.get("actor", ""),
-               border=_B(), bg=bg, h="center")
-            MW(ws, r, BF_ACTION_CS, BF_ACTION_CE, action,
-               border=_B(), bg=bg, wrap=True, v="top")
-            MW(ws, r, BF_SYS_CS,   BF_SYS_CE,   flow.get("system", ""),
-               border=_B(), bg=bg, wrap=True, v="top")
-            r += 1
 
-    ws.row_dimensions[r].height = 8
-    r += 1
+    # データが15行（テンプレート定数）を超えた場合は追加行を描画
+    template_end = BF_DATA_ROW_START + 14
+    if r > template_end + 1:
+        pass  # 既に書き込み済み（テンプレート行は上書き）
 
-    # ── セクション3: 構成コンポーネント ──
-    r = _section_header(ws, r, "3. 構成コンポーネント")
-    r = _table_header(ws, r, [
-        (CM_TYPE_CS, CM_TYPE_CE, "種別"),
-        (CM_API_CS,  CM_API_CE,  "API名"),
-        (CM_ROLE_CS, CM_ROLE_CE, "役割概要"),
-    ])
 
+def fill_components(ws, data: dict, changed_comp_keys: set, changed_obj_keys: set):
+    # ── 構成コンポーネント ──
     components = data.get("components", [])
-    if not components:
-        set_h(ws, r, 20)
-        MW(ws, r, COL_START, COL_END, "（コンポーネント未定義）",
-           fg=C_FONT_GRAY, italic=True, border=_B(), h="center")
+    r = CM_DATA_ROW_START
+    col_groups_cm = [(CM_TYPE_CS, CM_TYPE_CE), (CM_API_CS, CM_API_CE),
+                     (CM_ROLE_CS, CM_ROLE_CE)]
+    for comp in components:
+        key = comp.get("api_name", "")
+        is_changed = key in changed_comp_keys
+        set_h(ws, r, 22)
+        c1 = MW(ws, r, CM_TYPE_CS, CM_TYPE_CE, comp.get("type", ""),
+                border=B_all(), h="center")
+        c2 = MW(ws, r, CM_API_CS,  CM_API_CE,  key,
+                border=B_all())
+        c3 = MW(ws, r, CM_ROLE_CS, CM_ROLE_CE, comp.get("role", ""),
+                border=B_all(), wrap=True, v="top")
+        if is_changed:
+            for c in (c1, c2, c3):
+                dr.apply_red(c)
         r += 1
-    else:
-        for i, comp in enumerate(components):
-            bg = None if i % 2 == 0 else C_ALT_BG
-            role = comp.get("role", "")
-            lines = max(1, len(role) // 45 + role.count("\n") + 1)
-            set_h(ws, r, max(20, lines * 15 + 5))
-            MW(ws, r, CM_TYPE_CS, CM_TYPE_CE, comp.get("type", ""),
-               border=_B(), bg=bg, h="center")
-            MW(ws, r, CM_API_CS,  CM_API_CE,  comp.get("api_name", ""),
-               border=_B(), bg=bg)
-            MW(ws, r, CM_ROLE_CS, CM_ROLE_CE, role,
-               border=_B(), bg=bg, wrap=True, v="top")
-            r += 1
 
-    ws.row_dimensions[r].height = 8
-    r += 1
-
-    # ── セクション4: 関連オブジェクト ──
-    r = _section_header(ws, r, "4. 関連オブジェクト")
-    r = _table_header(ws, r, [
-        (OB_API_CS,   OB_API_CE,   "API名"),
-        (OB_LABEL_CS, OB_LABEL_CE, "ラベル"),
-        (OB_USAGE_CS, OB_USAGE_CE, "用途"),
-    ])
-
+    # ── 関連オブジェクト ──
     objects = data.get("related_objects", [])
-    if not objects:
-        set_h(ws, r, 20)
-        MW(ws, r, COL_START, COL_END, "（関連オブジェクト未定義）",
-           fg=C_FONT_GRAY, italic=True, border=_B(), h="center")
+    r = OB_DATA_ROW_START
+    for obj in objects:
+        key = obj.get("api_name", "")
+        is_changed = key in changed_obj_keys
+        set_h(ws, r, 22)
+        c1 = MW(ws, r, OB_API_CS,   OB_API_CE,   key,
+                border=B_all())
+        c2 = MW(ws, r, OB_LABEL_CS, OB_LABEL_CE, obj.get("label", ""),
+                border=B_all(), h="center")
+        c3 = MW(ws, r, OB_USE_CS,   OB_USE_CE,   obj.get("usage", ""),
+                border=B_all(), wrap=True)
+        if is_changed:
+            for c in (c1, c2, c3):
+                dr.apply_red(c)
         r += 1
-    else:
-        for i, obj in enumerate(objects):
-            bg = None if i % 2 == 0 else C_ALT_BG
-            set_h(ws, r, 22)
-            MW(ws, r, OB_API_CS,   OB_API_CE,   obj.get("api_name", ""),
-               border=_B(), bg=bg)
-            MW(ws, r, OB_LABEL_CS, OB_LABEL_CE, obj.get("label", ""),
-               border=_B(), bg=bg, h="center")
-            MW(ws, r, OB_USAGE_CS, OB_USAGE_CE, obj.get("usage", ""),
-               border=_B(), bg=bg, wrap=True)
-            r += 1
 
-    ws.row_dimensions[r].height = 8
-    r += 1
-
-    # ── セクション5: 外部連携（データがある場合のみ）──
+    # ── 外部連携 ──
     integrations = data.get("external_integrations", [])
-    if integrations:
-        r = _section_header(ws, r, "5. 外部連携")
-        r = _table_header(ws, r, [
-            (EX_TARGET_CS, EX_TARGET_CE, "連携先"),
-            (EX_DIR_CS,    EX_DIR_CE,    "方向"),
-            (EX_DATA_CS,   EX_DATA_CE,   "データ内容"),
-            (EX_TIME_CS,   EX_TIME_CE,   "タイミング"),
-        ])
-        for i, itg in enumerate(integrations):
-            bg = None if i % 2 == 0 else C_ALT_BG
-            set_h(ws, r, 22)
-            MW(ws, r, EX_TARGET_CS, EX_TARGET_CE, itg.get("target", ""),
-               border=_B(), bg=bg)
-            MW(ws, r, EX_DIR_CS,    EX_DIR_CE,    itg.get("direction", ""),
-               border=_B(), bg=bg, h="center")
-            MW(ws, r, EX_DATA_CS,   EX_DATA_CE,   itg.get("data", ""),
-               border=_B(), bg=bg, wrap=True)
-            MW(ws, r, EX_TIME_CS,   EX_TIME_CE,   itg.get("timing", ""),
-               border=_B(), bg=bg, wrap=True)
-            r += 1
-        ws.row_dimensions[r].height = 8
+    r = EX_DATA_ROW_START
+    for itg in integrations:
+        set_h(ws, r, 22)
+        MW(ws, r, EX_TGT_CS,  EX_TGT_CE,  itg.get("target", ""),    border=B_all())
+        MW(ws, r, EX_DIR_CS,  EX_DIR_CE,  itg.get("direction", ""),  border=B_all(), h="center")
+        MW(ws, r, EX_DATA_CS, EX_DATA_CE, itg.get("data", ""),       border=B_all(), wrap=True)
+        MW(ws, r, EX_TIME_CS, EX_TIME_CE, itg.get("timing", ""),     border=B_all(), wrap=True)
         r += 1
 
-    # ── セクション6: 前提条件・備考 ──
-    r = _section_header(ws, r, "6. 前提条件・備考")
-    prerequisites = data.get("prerequisites", "特になし")
-    notes = data.get("notes", "")
-    pre_lines = max(1, len(prerequisites) // 55 + prerequisites.count("\n") + 1)
-    r = _label_row(ws, r, "前提条件", prerequisites or "特になし", value_rows=pre_lines)
-    if notes:
-        note_lines = max(1, len(notes) // 55 + notes.count("\n") + 1)
-        r = _label_row(ws, r, "備考", notes, value_rows=note_lines)
 
-    # シートの印刷設定
-    ws.page_setup.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.print_area = f"A1:{get_column_letter(COL_END)}{r}"
-
-
-# ── 改版履歴シート ──────────────────────────────────────────────────
-def fill_revision(ws, data: dict):
-    # 列幅
-    col_widths = {1: 1.5, 2: 6, 3: 8, 4: 20, 5: 30, 6: 20, 7: 10, 8: 12, 9: 8}
-    for col, w in col_widths.items():
-        ws.column_dimensions[get_column_letter(col)].width = w
-
-    ws.row_dimensions[1].height = 10
-
-    # タイトル
-    set_h(ws, 2, 28)
-    MW(ws, 2, 2, 9, "改版履歴",
-       bold=True, fg=C_FONT_W, bg=C_TITLE_BG, size=13, h="center", border=_BM())
-
-    # メタ
-    set_h(ws, 3, 20)
-    meta = [
-        (2, 3, "プロジェクト名"), (4, 5, data.get("project_name", "")),
-        (6, 7, "機能グループ"),   (8, 9, data.get("name_ja", "")),
-    ]
-    for cs, ce, val in meta:
-        is_label = val in ("プロジェクト名", "機能グループ")
-        MW(ws, 3, cs, ce, val, bold=is_label,
-           bg=C_META_BG if is_label else None,
-           border=_B(), h="center" if is_label else "left")
-
-    set_h(ws, 4, 8)
-
-    # テーブルヘッダー
-    set_h(ws, 5, 22)
-    hdrs = [(2, "項番"), (3, "版数"), (4, "変更箇所"), (5, "変更内容"),
-            (6, "変更理由"), (7, "変更日"), (8, "変更者"), (9, "備考")]
-    for col, label in hdrs:
-        W(ws, 5, col, label, bold=True, fg=C_FONT_W, bg=C_BAND_BLUE,
-          border=_B(), h="center")
-
-    # 初版行
-    set_h(ws, 6, 20)
-    today = data.get("date", str(_date.today()))
-    row_data = [
-        (2, "1"), (3, "1.0"), (4, "新規作成"), (5, "初版作成"),
-        (6, ""), (7, today), (8, data.get("author", "")), (9, ""),
-    ]
-    for col, val in row_data:
-        W(ws, 6, col, val, border=_B(), h="center" if col in (2, 3, 7) else "left")
+# ── 差分計算 ────────────────────────────────────────────────────────
+def _compute_diffs(prev_data: dict | None, new_data: dict) -> dict:
+    if prev_data is None:
+        return {"scalars": [], "lists": {}}
+    return {
+        "scalars": dr.diff_scalars(prev_data, new_data, SCALAR_FIELDS),
+        "lists": {
+            "business_flow":        dr.diff_list(
+                prev_data.get("business_flow", []),
+                new_data.get("business_flow", []), "step"),
+            "components":           dr.diff_list(
+                prev_data.get("components", []),
+                new_data.get("components", []), "api_name"),
+            "related_objects":      dr.diff_list(
+                prev_data.get("related_objects", []),
+                new_data.get("related_objects", []), "api_name"),
+            "external_integrations": dr.diff_list(
+                prev_data.get("external_integrations", []),
+                new_data.get("external_integrations", []), "target"),
+        },
+    }
 
 
 # ── メイン ──────────────────────────────────────────────────────────
-def generate(data: dict, output_dir: Path) -> Path:
-    group_id = data.get("group_id", "GRP-000")
-    name_ja  = data.get("name_ja", "機能グループ")
-
-    wb = Workbook()
-    # デフォルトシートを「機能概要」として使用
-    ws_ov = wb.active
-    ws_ov.title = "機能概要"
-    fill_overview(ws_ov, data)
-
-    ws_rev = wb.create_sheet("改版履歴")
-    fill_revision(ws_rev, data)
-
-    # 出力先
-    out_dir = output_dir / "basic"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    # ファイル名に使えない文字を除去
-    safe_name = re.sub(r'[\\/:*?"<>|]', "_", name_ja)
-    out_path = out_dir / f"【{group_id}】{safe_name}.xlsx"
-    wb.save(str(out_path))
-    return out_path
-
-
 def main():
     parser = argparse.ArgumentParser(description="基本設計書 Excel 生成")
     parser.add_argument("--input",      required=True, help="基本設計 JSON ファイルパス")
+    parser.add_argument("--template",   required=True, help="基本設計書テンプレート.xlsx パス")
     parser.add_argument("--output-dir", required=True, help="出力先ディレクトリ")
+    parser.add_argument("--source-file", default="",
+                        help="更新時: 既存の基本設計書xlsxパス")
+    parser.add_argument("--version-increment", default="minor",
+                        choices=["minor", "major"])
     args = parser.parse_args()
 
-    input_path = Path(args.input)
-    if not input_path.exists():
-        print(f"ERROR: {input_path} が見つかりません", file=sys.stderr)
-        sys.exit(1)
+    data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    today  = _date.today().strftime("%Y-%m-%d")
+    author = data.get("author", "")
 
-    data = json.loads(input_path.read_text(encoding="utf-8"))
-    out_path = generate(data, Path(args.output_dir))
-    sys.stdout.buffer.write(f"[OK] 基本設計書を生成しました: {out_path}\n".encode("utf-8"))
+    group_id = data.get("group_id", "GRP-000")
+    name_ja  = data.get("name_ja", "機能グループ")
+    safe_name = re.sub(r'[\\/:*?"<>|]', "_", name_ja)
+
+    out_dir = Path(args.output_dir) / "basic"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"【{group_id}】{safe_name}.xlsx"
+
+    # ── バージョン判定 ────────────────────────────────────────────
+    source_file = args.source_file.strip()
+    if not source_file:
+        existing = sorted(out_dir.glob(f"【{group_id}】*.xlsx"),
+                          key=lambda f: f.stat().st_mtime, reverse=True)
+        if existing:
+            source_file = str(existing[0])
+            print(f"  [AUTO] 既存ファイルを検出: {existing[0].name}")
+
+    prev_meta   = read_meta(source_file) if source_file else None
+    prev_data   = prev_meta.get("data") if prev_meta else None
+
+    if prev_meta:
+        current_version = increment_version(
+            prev_meta.get("version", "1.0"), args.version_increment)
+        history    = prev_meta.get("history", [])
+        is_initial = False
+        print(f"更新モード: {prev_meta.get('version', '?')} → {current_version}")
+    else:
+        current_version = data.get("version") or "1.0"
+        history    = []
+        is_initial = True
+        print(f"新規作成モード: v{current_version}")
+
+    data["version"] = current_version
+    if not data.get("date"):
+        data["date"] = today
+
+    diffs = _compute_diffs(prev_data, data)
+    if prev_meta and args.version_increment == "minor" and not dr.has_any_diff(diffs):
+        print("差分なし: 既存ファイルと一致しているため更新をスキップしました")
+        sys.exit(0)
+
+    last_no = max((h["項番"] for h in history
+                   if isinstance(h.get("項番"), int)), default=0)
+    new_entries = dr.build_entries(
+        current_version, diffs, author, today,
+        start_no=last_no + 1,
+        is_major=(args.version_increment == "major"),
+        is_initial=is_initial,
+        section_sheet_map=SECTION_SHEETS,
+        scalar_sheet="グループ概要",
+    )
+    history = history + new_entries
+
+    changed_scalars   = dr.changed_scalar_fields(diffs)
+    changed_flows     = dr.changed_ids(diffs, "business_flow")
+    changed_comps     = dr.changed_ids(diffs, "components")
+    changed_objs      = dr.changed_ids(diffs, "related_objects")
+    is_major          = (args.version_increment == "major")
+
+    # ── テンプレ読込 → セル流し込み ──────────────────────────────
+    wb = load_workbook(args.template)
+    fill_revision(
+        wb["改版履歴"], data, history)
+    fill_group_overview(
+        wb["グループ概要"], data,
+        changed_fields=set() if is_major else changed_scalars)
+    fill_business_flow(
+        wb["業務フロー"], data,
+        changed_step_nos=set() if is_major else changed_flows)
+    fill_components(
+        wb["コンポーネント・オブジェクト"], data,
+        changed_comp_keys=set() if is_major else changed_comps,
+        changed_obj_keys=set() if is_major else changed_objs)
+
+    write_meta(wb, {
+        "version": current_version,
+        "date":    today,
+        "author":  author,
+        "data":    data,
+        "history": history,
+    })
+
+    wb.save(str(out_path))
+    sys.stdout.buffer.write(
+        f"[OK] 基本設計書を生成しました: v{current_version} → {out_path}\n".encode("utf-8"))
+
+    # 同一IDで別名の旧ファイルを削除
+    for old_f in out_dir.glob(f"【{group_id}】*.xlsx"):
+        if old_f.resolve() != out_path.resolve():
+            old_f.unlink()
+            sys.stdout.buffer.write(
+                f"  [CLEANUP] 旧ファイルを削除: {old_f.name}\n".encode("utf-8"))
 
 
 if __name__ == "__main__":
