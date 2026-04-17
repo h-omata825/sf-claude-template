@@ -519,7 +519,7 @@ def main():
         data["output_params"] = params.get("output", [])
 
     # ── 種別ガード：画面系は generate_screen_design.py を使うこと ──
-    _SCREEN_TYPES = {"LWC", "画面フロー", "Screen Flow", "Visualforce"}
+    _SCREEN_TYPES = {"LWC", "画面フロー", "Screen Flow", "Visualforce", "Aura"}
     type_key_raw = data.get("type", "")
     if type_key_raw in _SCREEN_TYPES:
         print(f"[ERROR] type='{type_key_raw}' は generate_screen_design.py で処理してください。")

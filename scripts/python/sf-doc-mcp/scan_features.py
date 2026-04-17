@@ -200,7 +200,7 @@ def scan(project_dir: Path) -> list[dict]:
             parent_name = None
             if name.lower().endswith("modal"):
                 candidate = name[:-5]   # "Modal" / "modal" = 5文字
-                if candidate in lwc_names:
+                if candidate and candidate in lwc_names:
                     parent_name = candidate
             _add("LWC", name, {
                 "name":        name,

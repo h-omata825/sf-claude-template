@@ -5,6 +5,8 @@ description: "LWC・画面フロー・Aura・Visualforce専用の画面設計書
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。
 
+> **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python scripts/...` の相対パスは使わず `python {project_dir}/scripts/...` 形式を使用する。
+
 # sf-screen-writer エージェント
 
 `/sf-doc` コマンドの Step D のうち **LWC・画面フロー・Aura・Visualforce** を担当する専門エージェント。
@@ -31,6 +33,7 @@ description: "LWC・画面フロー・Aura・Visualforce専用の画面設計書
 | `sf_alias` | Salesforce 組織エイリアス |
 | `feature_list` | scan_features.py の出力（LWC・画面フロー・Aura・Visualforce のみ抽出済み） |
 | `target_ids` | 対象機能IDリスト |
+| `version_increment` | `"minor"` または `"major"`（初回生成時は `"minor"`） |
 
 ---
 
@@ -419,6 +422,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --source-file "{output_dir}/{subfolder}/【{id}】{name}.xlsx" \
   --version-increment {version_increment}
 ```
+
+> **`--source-file` 省略可**: スクリプトが `output_dir` 内を `【{id}】*.xlsx` パターンで自動検出するため、`--source-file` は省略しても問題ない。明示指定する場合のみ追加すること。
 
 出力先サブフォルダ（スクリプトが type フィールドに基づいて自動決定）:
 | 種別 | 出力先 | ファイル名 |
