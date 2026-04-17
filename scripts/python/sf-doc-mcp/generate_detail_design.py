@@ -81,6 +81,7 @@ from datetime import date as _date
 from pathlib import Path
 
 from openpyxl import load_workbook
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -276,7 +277,58 @@ def fill_interface_def(ws, data: dict, changed_keys: set):
         r += 1
 
 
-def fill_screen_spec(ws, data: dict):
+def _try_embed_mockup(ws, row_start: int, screen: dict, project_dir, tmp_dir) -> int:
+    """
+    画面コンポーネントのモックアップを生成してシートに埋め込む。
+    使用した行数を返す（モックアップなし=0、あり=確保した行数）。
+    """
+    import generate_screen_mock as gsm
+
+    api_name = screen.get("component", "")
+    if not api_name:
+        return 0
+
+    src = gsm.find_source_file(Path(project_dir), api_name)
+    if not src:
+        return 0
+
+    png_path = Path(tmp_dir) / f"{api_name}_mock.png"
+    try:
+        ok = gsm.generate(src, png_path)
+    except Exception:
+        return 0
+    if not ok or not png_path.exists():
+        return 0
+
+    # 画像サイズを取得してExcel上の行数を計算
+    from PIL import Image as PILImage
+    with PILImage.open(png_path) as im:
+        img_w, img_h = im.size
+
+    # キャンバス幅860pxを対象幅にスケール（Excelのグリッド幅に合わせる）
+    # 1 Excel pt ≈ 1.33 px（96dpi基準）
+    TARGET_W_PX = 800
+    scale = TARGET_W_PX / img_w
+    scaled_h_px = int(img_h * scale)
+    scaled_h_pt = scaled_h_px / 1.333
+
+    # 1行あたり18pt で必要行数を算出（最低3行、最大30行）
+    ROW_H_PT = 18
+    n_rows = max(3, min(30, int(scaled_h_pt / ROW_H_PT) + 1))
+    for r in range(row_start, row_start + n_rows):
+        ws.row_dimensions[r].height = ROW_H_PT
+
+    xl_img = XLImage(str(png_path))
+    xl_img.width = TARGET_W_PX
+    xl_img.height = int(scaled_h_px)
+
+    anchor_cell = f"{get_column_letter(2)}{row_start}"
+    ws.add_image(xl_img, anchor_cell)
+
+    return n_rows
+
+
+def fill_screen_spec(ws, data: dict, project_dir=None, tmp_dir=None):
     """画面ごとにセクション帯+ヘッダ+データ行を積み上げる。"""
     screens = data.get("screens", [])
     if not screens:
@@ -292,6 +344,11 @@ def fill_screen_spec(ws, data: dict):
         MW(ws, r, 2, GRID_RIGHT, f"■ {screen_name}",
            bold=True, fg=C_FONT_W, bg=C_BAND_BLUE, size=11, border=B_all())
         r += 1
+
+        # モックアップ画像の埋め込み（project_dir が指定されている場合のみ）
+        if project_dir:
+            mock_rows = _try_embed_mockup(ws, r, screen, project_dir, tmp_dir)
+            r += mock_rows  # 画像エリアの行数分進める
 
         # テーブルヘッダー
         set_h(ws, r, 26)
@@ -357,6 +414,8 @@ def main():
     parser.add_argument("--output-dir", required=True, help="出力先ディレクトリ")
     parser.add_argument("--source-file", default="",
                         help="更新時: 既存の詳細設計書xlsxパス")
+    parser.add_argument("--project-dir", default="", help="プロジェクトルートパス（省略時はモックアップ生成スキップ）")
+    parser.add_argument("--tmp-dir", default="", help="一時ファイル置き場（省略時は --output-dir/.tmp）")
     parser.add_argument("--version-increment", default="minor",
                         choices=["minor", "major"])
     args = parser.parse_args()
@@ -436,8 +495,13 @@ def main():
     fill_interface_def(
         wb["インターフェース定義"], data,
         changed_keys=set() if is_major else changed_ifaces)
+    project_dir = Path(args.project_dir).resolve() if args.project_dir.strip() else None
+    tmp_dir_path = Path(args.tmp_dir).resolve() if args.tmp_dir.strip() else Path(args.output_dir) / ".tmp"
+    if project_dir:
+        tmp_dir_path.mkdir(parents=True, exist_ok=True)
+
     fill_screen_spec(
-        wb["画面仕様"], data)
+        wb["画面仕様"], data, project_dir=project_dir, tmp_dir=tmp_dir_path)
 
     write_meta(wb, {
         "version": current_version,
