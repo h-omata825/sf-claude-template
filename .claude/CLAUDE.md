@@ -22,10 +22,10 @@
 | 外部API連携 / REST・SOAP / Named Credentials / Platform Events / MuleSoft | `integration-dev` |
 | 一般調査 / メール下書き / 翻訳 / アドホック / その他秘書業務 | `assistant` |
 | `/sf-memory` コマンドから委譲（Salesforce組織情報の収集・`docs/` への保存） | `sf-org-analyst` |
-| `/sf-doc` コマンドから委譲（機能別設計書・Excel生成） | `sf-design-writer` |
+| `/sf-design` コマンドから委譲（プログラム設計書・基本/詳細設計・Excel生成） | `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
-> `sf-org-analyst` / `sf-design-writer` はコマンド専用エージェント。ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる。
+> `sf-org-analyst` / `sf-design-writer` 等はコマンド専用エージェント。ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる。
 
 ---
 

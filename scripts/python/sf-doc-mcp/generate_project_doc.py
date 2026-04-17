@@ -11,7 +11,7 @@
   docs/flow/swimlanes.json                — 業務フロー図（複数UC対応・新フォーマット）
 
 出力:
-  プロジェクト資料.pptx（表紙・目次・プロジェクト概要・システム構成図・業務フロー図群）
+  プロジェクト概要書.pptx（表紙・目次・プロジェクト概要・システム構成図・業務フロー図群）
 
 Usage:
   python generate_project_doc.py \\

@@ -9,7 +9,7 @@ description: "LWC・画面フロー・Aura・Visualforce専用のプログラム
 
 # sf-screen-writer エージェント
 
-`/sf-doc` コマンドの Step D のうち **LWC・画面フロー・Aura・Visualforce** を担当する専門エージェント。
+`/sf-design` コマンドの Step 3 のうち **LWC・画面フロー・Aura・Visualforce** を担当する専門エージェント。
 
 担当する種別のみに絞ることで:
 - `usecases[]` 構造に集中できる（`steps[]` との混同なし）
@@ -21,7 +21,7 @@ description: "LWC・画面フロー・Aura・Visualforce専用のプログラム
 
 ---
 
-## 受け取る情報（sf-doc から渡される）
+## 受け取る情報（sf-design から渡される）
 
 | 項目 | 内容 |
 |---|---|

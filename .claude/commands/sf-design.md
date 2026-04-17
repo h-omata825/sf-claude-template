@@ -105,6 +105,26 @@ print('ROOT:' + str(p))
 
 Other が選ばれた場合はチャットで入力してもらう。「スキップ」が選ばれた場合は空文字として扱う。
 
+### プロジェクト名
+
+`sfdx-project.json` から自動取得を試みる:
+```bash
+python -c "
+import json, pathlib
+p = pathlib.Path(r'{project_dir}') / 'sfdx-project.json'
+if p.exists():
+    d = json.loads(p.read_text(encoding='utf-8'))
+    print('project_name:' + str(d.get('name', '')))
+else:
+    print('project_name:')
+"
+```
+
+`project_name:` に値があればそれを使用する。空の場合はチャットで聞く:
+```
+プロジェクト名を入力してください（設計書の表紙に記載）:
+```
+
 ### 設定の保存
 
 確定した値を保存する（次回のデフォルト値として使用）:
@@ -195,7 +215,7 @@ mkdir -p "{ROOT}/詳細設計書"
 
 `output_dir` = `{ROOT}/詳細設計書`、`tmp_dir` = `{ROOT}/詳細設計書/.tmp`
 
-feature_groups.yml の確認・グループ選択は Step 1 と同じ手順で行う（Step 1 を実行済みの場合はスキップ）。
+feature_groups.yml の確認・グループ選択は Step 1 と同じ手順で行う。ただし `{project_dir}/docs/feature_groups.yml` が存在しかつ対象グループIDが既にセッション内で確定している場合はスキップしてよい。
 
 ### sf-detail-design-writer に委譲
 
@@ -218,7 +238,7 @@ version_increment: minor
 > プログラム設計書と合わせて **機能一覧**（全コンポーネントの索引 Excel）も自動生成される。
 
 ```bash
-mkdir -p "{ROOT}/プログラム設計書"
+mkdir -p "{ROOT}/プログラム設計書" && mkdir -p "{ROOT}/プログラム設計書/.tmp"
 ```
 
 `output_dir` = `{ROOT}/プログラム設計書`、`tmp_dir` = `{ROOT}/プログラム設計書/.tmp`
@@ -261,7 +281,6 @@ output_dir:        {ROOT}/プログラム設計書
 tmp_dir:           {ROOT}/プログラム設計書/.tmp
 author:            {author}
 project_name:      {project_name}
-sf_alias:          {sf_alias}
 feature_list:      {feature_list}（上記で絞り込み済みのリスト）
 target_ids:        {target_ids}
 version_increment: minor
@@ -312,4 +331,3 @@ version_increment: minor
 - 基本設計・詳細設計は **グループ単位**（feature_groups.yml が必要）
 - プログラム設計は **コンポーネント単位**（scan_features.py の出力が必要）
 - 「全て」を選択した場合は **基本設計 → 詳細設計 → プログラム設計** の順で実行する
-- `sf_alias` が不明な場合は `{project_dir}/.sf/config.json` または `sfdx-project.json` から取得する
