@@ -187,6 +187,18 @@ def _safe_unmerge(ws, row, cs, ce):
         ):
             ws.unmerge_cells(str(mr))
 
+def _safe_merge_rows(ws, r1, r2, c1, c2):
+    """r1〜r2 行・c1〜c2 列を縦結合する（既存 merge との衝突を自動解除）。"""
+    if r1 >= r2:
+        return
+    target = {(r, c) for r in range(r1, r2 + 1) for c in range(c1, c2 + 1)}
+    for mr in list(ws.merged_cells.ranges):
+        if any((r, c) in target
+               for r in range(mr.min_row, mr.max_row + 1)
+               for c in range(mr.min_col, mr.max_col + 1)):
+            ws.unmerge_cells(str(mr))
+    ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
+
 def MW(ws, row, cs, ce, value="", border=None, bg=None,
        bold=False, fg=C_FONT_D, h="left", v="center",
        wrap=True, size=10, italic=False):
@@ -451,14 +463,12 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
             MW(ws, r, 5, 31, trigger, border=B_all())
             r += 1
 
-        # 左側テーブルヘッダ
+        # 左側テーブルヘッダ（No | 処理内容 の2列構成）
         table_header_row = r
         set_h(ws, r, 26)
-        MW(ws, r, *LG_LEFT_NO,     "No",
+        MW(ws, r, *LG_LEFT_NO,    "No",
            bold=True, bg=C_HDR_BLUE, fg=C_FONT_W, h="center", border=B_all())
-        MW(ws, r, *LG_LEFT_TITLE,  "ステップ",
-           bold=True, bg=C_HDR_BLUE, fg=C_FONT_W, h="center", border=B_all())
-        MW(ws, r, *LG_LEFT_DETAIL, "処理内容",
+        MW(ws, r, LG_LEFT_TITLE[0], LG_LEFT_END, "処理内容",
            bold=True, bg=C_HDR_BLUE, fg=C_FONT_W, h="center", border=B_all())
         r += 1
 
@@ -469,22 +479,34 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                fg=C_FONT_GRAY, italic=True, border=B_all(), h="center")
             r += 1
         else:
-            TITLE_CPL  = 9
-            DETAIL_CPL = 28
+            TITLE_CPL  = 40
+            DETAIL_CPL = 40
             for i, step in enumerate(steps):
                 st_title    = _step_title(step, i)
                 detail_text = _step_detail_text(step)
-                # タイトルと詳細を同一行に横並び。行高さは両者の最大行数で決定
                 t_lines = max(1, -(-len(st_title) // TITLE_CPL))
                 d_lines = max(1, len(detail_text) // DETAIL_CPL + detail_text.count("\n") + 1) if detail_text else 1
-                set_h(ws, r, max(22, max(t_lines, d_lines) * 18 + 4))
-                MW(ws, r, *LG_LEFT_NO,     step.get("no", str(i + 1)),
-                   bold=True, bg=C_STEP_BG, border=B_all(), h="center")
-                MW(ws, r, *LG_LEFT_TITLE,  st_title,
-                   bold=True, border=B_all(), v="top")
-                MW(ws, r, *LG_LEFT_DETAIL, detail_text,
+
+                # タイトル行（緑背景・全幅）
+                set_h(ws, r, max(20, t_lines * 16 + 4))
+                no_row_start = r
+                MW(ws, r, *LG_LEFT_NO, step.get("no", str(i + 1)),
+                   bold=True, bg=C_STEP_BG, border=B_all(), h="center", v="center")
+                MW(ws, r, LG_LEFT_TITLE[0], LG_LEFT_END, st_title,
+                   bold=True, bg=C_STEP_BG, border=B_all(), v="center")
+                r += 1
+
+                # 詳細行（白背景・全幅）
+                set_h(ws, r, max(22, d_lines * 16 + 4))
+                for _col in range(LG_LEFT_NO[0], LG_LEFT_NO[1] + 1):
+                    ws.cell(row=r, column=_col).border = B_all()
+                    ws.cell(row=r, column=_col).fill = _fill(C_STEP_BG)
+                MW(ws, r, LG_LEFT_TITLE[0], LG_LEFT_END, detail_text,
                    border=B_all(), wrap=True, v="top")
                 r += 1
+
+                # No列縦結合（タイトル行 + 詳細行）
+                _safe_merge_rows(ws, no_row_start, r - 1, LG_LEFT_NO[0], LG_LEFT_NO[1])
 
         # 右側: フロー図（flow_steps 優先、なければ steps から生成）
         flow_steps = uc.get("flow_steps")

@@ -106,10 +106,11 @@ OV_SECTION_DATA_ROW = {
 }
 
 # 処理内容
-PROC_LEFT_NO_CS,     PROC_LEFT_NO_CE     = 2, 3
-PROC_LEFT_TITLE_CS,  PROC_LEFT_TITLE_CE  = 4, 7
-PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE = 8, 16
-PROC_LEFT_END                            = 16
+PROC_LEFT_NO_CS,      PROC_LEFT_NO_CE      = 2, 3   # No列（変更なし）
+PROC_LEFT_CONTENT_CS, PROC_LEFT_CONTENT_CE = 4, 16  # タイトル行・詳細行（全幅）
+PROC_SUB_LABEL_CS,    PROC_SUB_LABEL_CE    = 4, 7   # サブステップ見出し（SOQL/DML/計算等）
+PROC_SUB_DETAIL_CS,   PROC_SUB_DETAIL_CE   = 8, 16  # サブステップ内容
+PROC_LEFT_END                              = 16
 PROC_FLOW_CS, PROC_FLOW_CE = 18, 31
 PROC_DATA_ROW_START = 5
 
@@ -185,9 +186,9 @@ def set_h(ws, row, h):
 def build_apex_table(ws, row, apex):
     """処理内容シートの左半分に APEX 呼び出し表を描画。"""
     set_h(ws, row, 24)
-    MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_TITLE_CE, "■APEX呼び出し先",
+    MW(ws, row, PROC_LEFT_NO_CS, PROC_SUB_LABEL_CE, "■APEX呼び出し先",
        bold=True, bg=C_APEX_HDR, border=B_all())
-    MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, apex.get("name", ""),
+    MW(ws, row, PROC_SUB_DETAIL_CS, PROC_SUB_DETAIL_CE, apex.get("name", ""),
        bold=True, bg=C_APEX_HDR, border=B_all())
     row += 1
 
@@ -198,18 +199,18 @@ def build_apex_table(ws, row, apex):
         row += 1
 
         set_h(ws, row, 20)
-        MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_TITLE_CE, "Key",
+        MW(ws, row, PROC_LEFT_NO_CS, PROC_SUB_LABEL_CE, "Key",
            bold=True, bg=C_LABEL_BG, border=B_all())
-        MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, "Value",
+        MW(ws, row, PROC_SUB_DETAIL_CS, PROC_SUB_DETAIL_CE, "Value",
            bold=True, bg=C_LABEL_BG, border=B_all())
         row += 1
 
         items = apex.get(key, [])
         if not items:
             set_h(ws, row, 22)
-            MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_TITLE_CE, "（なし）",
+            MW(ws, row, PROC_LEFT_NO_CS, PROC_SUB_LABEL_CE, "（なし）",
                fg=C_FONT_GRAY, italic=True, border=B_all())
-            MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, "",
+            MW(ws, row, PROC_SUB_DETAIL_CS, PROC_SUB_DETAIL_CE, "",
                border=B_all())
             row += 1
         else:
@@ -218,9 +219,9 @@ def build_apex_table(ws, row, apex):
                 val_text = it.get("value", "")
                 val_lines = max(1, len(val_text) // 28 + val_text.count("\n") + 1)
                 set_h(ws, row, max(22, val_lines * 16))
-                MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_TITLE_CE, key_text,
+                MW(ws, row, PROC_LEFT_NO_CS, PROC_SUB_LABEL_CE, key_text,
                    border=B_all(), v="top")
-                MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, val_text,
+                MW(ws, row, PROC_SUB_DETAIL_CS, PROC_SUB_DETAIL_CE, val_text,
                    border=B_all(), v="top", wrap=True)
                 row += 1
 
@@ -265,12 +266,14 @@ def _display_len(s: str) -> int:
 def _estimate_content_height_pts(steps: list) -> float:
     """処理内容の行高さ合計をポイント単位で概算する（フロー図の縦幅合わせに使用）。
 
-    タイトルと詳細は横並び（同一行）。sub_steps も含めて全行を計上し、
+    タイトルと詳細は縦並び（別行）。sub_steps も含めて全行を計上し、
     フロー図の矢印長を調整してコンテンツ全体の高さに合わせる。
     日本語（全角）文字は表示幅2として折り返し行数を推定する。
     """
-    TITLE_CPL  = 9
-    DETAIL_CPL = 28
+    TITLE_CPL       = 40   # タイトル行全幅（col4-16, 約40文字/行）
+    DETAIL_CPL      = 40   # 詳細行全幅（同上）
+    SUB_LABEL_CPL   = 9    # サブ見出し（col4-7）
+    SUB_DETAIL_CPL  = 28   # サブ内容（col8-16）
     total = 0.0
     for step in steps:
         title  = step.get("title", "")
@@ -279,14 +282,15 @@ def _estimate_content_height_pts(steps: list) -> float:
             total += 18  # メソッド名ヘッダー行
         t_lines = max(1, -(-_display_len(title)  // TITLE_CPL))
         d_lines = max(1, _display_len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
-        total += max(22, t_lines * 18 + 4)   # メインステップ行（タイトル行数のみで計算）
+        total += max(20, t_lines * 16 + 4)   # タイトル行
+        total += max(22, d_lines * 16 + 4)   # 詳細行（別行）
 
         for sub in step.get("sub_steps", []):
             st = sub.get("title",  "")
             sd = sub.get("detail", "")
-            st_lines = max(1, -(-_display_len(st) // TITLE_CPL))
-            sd_lines = max(1, _display_len(sd) // DETAIL_CPL + sd.count("\n") + 1) if sd else 1
-            total += min(80, max(20, max(st_lines, sd_lines) * 16 + 4))  # サブステップ行（上限80pt）
+            st_lines = max(1, -(-_display_len(st) // SUB_LABEL_CPL))
+            sd_lines = max(1, _display_len(sd) // SUB_DETAIL_CPL + sd.count("\n") + 1) if sd else 1
+            total += min(80, max(20, max(st_lines, sd_lines) * 16 + 4))
 
         total += 24  # ステップ間スペーサー（3行 × 8pt）
     return max(total, 200)
@@ -295,10 +299,12 @@ def _estimate_content_height_pts(steps: list) -> float:
 def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
     changed_step_nos = changed_step_nos or set()
     row = PROC_DATA_ROW_START
-    TITLE_CPL  = 9   # 処理タイトル列幅 (4列 × 約2.3文字/列)
-    DETAIL_CPL = 28  # 処理詳細列幅 (9列 × 約3.1文字/列)
+    TITLE_CPL      = 40
+    DETAIL_CPL     = 40
+    SUB_LABEL_CPL  = 9
+    SUB_DETAIL_CPL = 28
     for i, step in enumerate(data.get("steps", [])):
-        step_no     = str(step.get("no", "") or (i + 1))  # no 未設定時は連番で補完
+        step_no     = str(step.get("no", "") or (i + 1))
         is_changed  = step_no in changed_step_nos
         title_text  = step.get("title", "")
         detail      = step.get("detail", "")
@@ -312,24 +318,29 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
                italic=True, fg=C_FONT_GRAY, size=9)
             row += 1
 
-        # タイトルと詳細を同一行に横並び配置。行高さはタイトルの行数のみで決定
-        # （詳細・SOQL/DMLは文字量が多くなりがちなため、タイトルに合わせる）
-        t_lines = max(1, -(-len(title_text) // TITLE_CPL))
-        d_lines = max(1, len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
-        set_h(ws, row, max(22, t_lines * 18 + 4))
-
-        no_row_start = row  # No列の縦結合開始行
+        # タイトル行（緑背景・全幅）
+        t_lines = max(1, -(-_display_len(title_text) // TITLE_CPL))
+        set_h(ws, row, max(20, t_lines * 16 + 4))
+        no_row_start = row
 
         c_no = MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, step_no,
                   bold=True, border=B_all(), h="center", v="center", bg=C_STEP_BG)
-
-        c_t  = MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, title_text,
-                  bold=True, border=B_all(), bg=C_STEP_BG, v="top")
-        c_d  = MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, detail,
-                  border=B_all(), bg=C_STEP_BG, wrap=True, v="top")
+        c_t  = MW(ws, row, PROC_LEFT_CONTENT_CS, PROC_LEFT_CONTENT_CE, title_text,
+                  bold=True, border=B_all(), bg=C_STEP_BG, v="center")
         if is_changed:
             dr.apply_red(c_no, bold=True)
             dr.apply_red(c_t,  bold=True)
+        row += 1
+
+        # 詳細行（白背景・全幅）
+        d_lines = max(1, _display_len(detail) // DETAIL_CPL + detail.count("\n") + 1) if detail else 1
+        set_h(ws, row, max(22, d_lines * 16 + 4))
+        for _col in range(PROC_LEFT_NO_CS, PROC_LEFT_NO_CE + 1):
+            ws.cell(row=row, column=_col).border = B_all()
+            ws.cell(row=row, column=_col).fill = _fill(C_STEP_BG)
+        c_d = MW(ws, row, PROC_LEFT_CONTENT_CS, PROC_LEFT_CONTENT_CE, detail,
+                 border=B_all(), wrap=True, v="top")
+        if is_changed:
             dr.apply_red(c_d)
         row += 1
 
@@ -339,16 +350,15 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
             sub_title = sub.get("title", "")
             sdetail   = sub.get("detail", "")
             sub_title_display = f"{sub_no} {sub_title}".strip() if sub_no else sub_title
-            st_lines  = max(1, -(-len(sub_title_display) // TITLE_CPL))
-            sd_lines  = max(1, len(sdetail) // DETAIL_CPL + sdetail.count("\n") + 1) if sdetail else 1
+            st_lines  = max(1, -(-_display_len(sub_title_display) // SUB_LABEL_CPL))
+            sd_lines  = max(1, _display_len(sdetail) // SUB_DETAIL_CPL + sdetail.count("\n") + 1) if sdetail else 1
             set_h(ws, row, min(80, max(20, max(st_lines, sd_lines) * 16 + 4)))
 
-            # No列: 罫線・背景のみ（縦結合後は主行の値が表示される）
             MW(ws, row, PROC_LEFT_NO_CS, PROC_LEFT_NO_CE, "",
                border=B_all(), bg=C_STEP_BG)
-            MW(ws, row, PROC_LEFT_TITLE_CS, PROC_LEFT_TITLE_CE, sub_title_display,
+            MW(ws, row, PROC_SUB_LABEL_CS, PROC_SUB_LABEL_CE, sub_title_display,
                bold=True, fg=C_FONT_GRAY, border=B_all(), bg=C_SUB_BG, v="top")
-            MW(ws, row, PROC_LEFT_DETAIL_CS, PROC_LEFT_DETAIL_CE, sdetail,
+            MW(ws, row, PROC_SUB_DETAIL_CS, PROC_SUB_DETAIL_CE, sdetail,
                fg=C_FONT_GRAY, border=B_all(), wrap=True, v="top", bg=C_SUB_BG)
             row += 1
 
