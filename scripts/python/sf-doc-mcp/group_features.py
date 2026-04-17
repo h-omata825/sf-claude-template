@@ -147,10 +147,14 @@ def extract_flow_deps(flow_path: Path, all_api_names: set) -> set:
 def extract_visualforce_deps(page_path: Path, all_api_names: set) -> set:
     """Visualforceページから参照しているApexクラス名を抽出する。
 
-    page-meta.xml 内の controller="..." / extensions="..." 属性を読む。
-    extensions は複数指定可（カンマ区切り）。
+    scan_features.py は source_file を .page-meta.xml で記録するが、
+    controller/extensions 属性は .page ファイル（マークアップ本体）にある。
+    .page-meta.xml → .page に切り替えて読む。
     """
     deps = set()
+    # .page-meta.xml → .page に切り替え
+    if str(page_path).endswith(".page-meta.xml"):
+        page_path = page_path.with_name(page_path.name.replace(".page-meta.xml", ".page"))
     try:
         text = page_path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
@@ -235,6 +239,8 @@ def build_groups(features: list, project_dir: Path) -> list:
             uf.union(members[0], members[i])
 
     # Step 3: コード内依存関係で結合
+    # Apex→Apex 依存は「実装の依存関係」であり業務グループの境界を示さないため除外する。
+    # VF/LWC/Flow/Aura → Apex の依存のみグルーピングに使用する。
     for f in features:
         api_name = f["api_name"]
         ftype = f.get("type", "")
@@ -242,10 +248,7 @@ def build_groups(features: list, project_dir: Path) -> list:
         source_path = Path(source) if source else None
 
         deps: set = set()
-        if ftype in ("Apex", "Batch", "Integration"):
-            if source_path and source_path.exists():
-                deps = extract_apex_deps(source_path, all_api_names)
-        elif ftype == "LWC":
+        if ftype == "LWC":
             if source_path and source_path.is_dir():
                 deps = extract_lwc_deps(source_path, all_api_names)
         elif ftype in ("Flow", "画面フロー"):
@@ -257,6 +260,7 @@ def build_groups(features: list, project_dir: Path) -> list:
         elif ftype == "Aura":
             if source_path and source_path.is_dir():
                 deps = extract_aura_deps(source_path, all_api_names)
+        # Apex/Batch/Integration → Apex 依存は連鎖マージを防ぐため除外
 
         for dep in deps:
             if dep != api_name:
@@ -311,7 +315,7 @@ def build_groups(features: list, project_dir: Path) -> list:
             groups.append({
                 "group_id": f"GRP-{gid:03d}",
                 "name_en": prefix,
-                "name_ja": ja_name,
+                "name_ja": ja_name if ja_name else prefix,  # 日本語名が取れなければ英語プレフィックス
                 "shared": False,
                 "features": _format_members(normal_members + shared_members),
             })
@@ -349,18 +353,45 @@ def _format_members(members: list) -> list:
     )
 
 
+_BOILERPLATE_PREFIXES = (
+    "An apex ", "A apex ", "A page ", "This apex ", "This class ",
+    "Test ", "Mock ", "Helper ", "Utility ",
+)
+
+def _has_japanese(text: str) -> bool:
+    return any("\u3000" <= c <= "\u9fff" or "\uff00" <= c <= "\uffef" for c in text)
+
+
 def _resolve_ja_name(members: list) -> str:
-    """メンバーの overview / name から日本語グループ名を推論する。"""
+    """メンバーの overview / name から日本語グループ名を推論する。
+
+    優先順位:
+    1. 日本語を含む overview（boilerplate・英語は除外）
+    2. 日本語を含む name フィールド
+    3. フォールバック: name_en プレフィックス（英語だが最低限意味がある）
+    """
+    # 1. 日本語 overview を優先
     for f in sorted(members, key=lambda x: len(x.get("overview", "")), reverse=True):
         overview = f.get("overview", "").strip()
-        if overview and len(overview) > 3:
-            # 最初の句読点・改行前を取る
-            name = re.split(r"[。、\n（(]", overview)[0].strip()
-            if name:
-                return name[:30]
-    # overview がなければ name をそのまま（英語になるがフォールバック）
-    names = [f.get("name", f["api_name"]) for f in members]
-    return max(names, key=len) if names else ""
+        if not overview or len(overview) <= 3:
+            continue
+        if not _has_japanese(overview):
+            continue
+        if any(overview.startswith(p) for p in _BOILERPLATE_PREFIXES):
+            continue
+        name = re.split(r"[。、\n（(]", overview)[0].strip()
+        if name:
+            return name[:30]
+
+    # 2. 日本語を含む name フィールド
+    for f in members:
+        name = f.get("name", "").strip()
+        if _has_japanese(name):
+            return name[:30]
+
+    # 3. フォールバック: api_name（英語でも意味はある）
+    # Controllerなどのサフィックスを除いたプレフィックスを返す
+    return ""  # 呼び出し元で name_en を使う
 
 
 # ── CLI ──────────────────────────────────────────────────────────
