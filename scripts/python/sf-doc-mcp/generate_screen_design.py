@@ -6,7 +6,7 @@ LWC / 画面フロー / Visualforce 共用。JSON の構造で UC・パラメー
 
 5シート構成:
   1. 改版履歴       : メタ + 初版自動投入
-  2. 画面概要       : メタ2段 + 目的/概要/主要機能(箇条書)/前提/画面遷移/画面イメージ(簡易WF)
+  2. 画面概要       : メタ2段 + 目的/概要/主要機能(箇条書)/前提/画面遷移
   3. 画面項目定義   : 項目テーブル
   4. 処理詳細       : JSON の usecases[] をUCブロックとして順次描画
   5. パラメーター定義: JSON の param_sections[] をセクションとして順次描画
@@ -36,22 +36,6 @@ from openpyxl.utils.units import pixels_to_EMU
 from meta_store import read_meta, write_meta
 from version_manager import increment_version
 import design_revision as dr
-
-try:
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import matplotlib.font_manager as fm
-    from matplotlib.patches import FancyBboxPatch, Rectangle
-    HAS_MPL = True
-except ImportError:
-    HAS_MPL = False
-
-import os as _os
-_JP_FONT_PATH = "C:/Windows/Fonts/YuGothR.ttc"
-JP_FONT_PROP = None
-if _os.path.exists(_JP_FONT_PATH) and HAS_MPL:
-    JP_FONT_PROP = fm.FontProperties(fname=_JP_FONT_PATH)
 
 from flowchart_utils import generate_flowchart
 
@@ -221,120 +205,6 @@ def set_h(ws, row, h):
     ws.row_dimensions[row].height = h
 
 
-# ── ワイヤーフレーム生成 ──────────────────────────────────────
-def _fpkw():
-    return {"fontproperties": JP_FONT_PROP} if JP_FONT_PROP else {}
-
-def generate_wireframe(screen_name: str, items: list, out_path: str) -> bool:
-    """画面項目定義から簡易ワイヤーフレームPNGを生成する。"""
-    if not HAS_MPL or not items:
-        return False
-
-    # 表示対象: items を UI種別ごとに並べる
-    # UI種別: 表示のみ / テキスト入力 / 選択 / ボタン / チェックボックス / ...
-    item_list = items[:20]  # 最大20項目
-    n = len(item_list)
-
-    fig_w = 5.0
-    fig_h = max(4.0, 1.2 + n * 0.55)
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-    ax.set_xlim(0, fig_w); ax.set_ylim(0, fig_h)
-    ax.axis("off")
-    fig.patch.set_facecolor("white")
-
-    # 外枠（画面風）
-    frame = FancyBboxPatch(
-        (0.15, 0.15), fig_w - 0.3, fig_h - 0.3,
-        boxstyle="round,pad=0.02,rounding_size=0.08",
-        facecolor="#FAFBFD", edgecolor="#444444", linewidth=1.2)
-    ax.add_patch(frame)
-
-    # タイトルバー
-    title_h = 0.45
-    title_bar = Rectangle(
-        (0.2, fig_h - 0.2 - title_h), fig_w - 0.4, title_h,
-        facecolor="#1F3864", edgecolor="#1F3864")
-    ax.add_patch(title_bar)
-    ax.text(fig_w / 2, fig_h - 0.2 - title_h / 2, screen_name,
-            ha="center", va="center", color="white",
-            fontsize=10, weight="bold", **_fpkw())
-
-    # 項目を縦に並べる
-    label_col_x = 0.35
-    field_col_x = fig_w * 0.40
-    row_h = 0.48
-    y = fig_h - 0.25 - title_h - 0.2
-
-    for it in item_list:
-        label = it.get("label", "")
-        ui_type = it.get("ui_type", "")
-        required = it.get("required", False)
-
-        # ラベル
-        mark = "* " if required else "  "
-        ax.text(label_col_x, y - row_h / 2, mark + label,
-                ha="left", va="center", fontsize=8.5,
-                color="#333333", **_fpkw())
-
-        # フィールド枠（UI種別で形を変える）
-        fw = fig_w * 0.52
-        fh = 0.32
-        fx = field_col_x
-        fy = y - row_h / 2 - fh / 2
-
-        if "ボタン" in ui_type or "button" in ui_type.lower():
-            btn_w = 1.2
-            btn = FancyBboxPatch(
-                (fx, fy), btn_w, fh,
-                boxstyle="round,pad=0.01,rounding_size=0.05",
-                facecolor="#0070C0", edgecolor="#004F86")
-            ax.add_patch(btn)
-            ax.text(fx + btn_w / 2, y - row_h / 2, label,
-                    ha="center", va="center", fontsize=8,
-                    color="white", **_fpkw())
-            # ボタンの場合はラベル列は消す（上で描いたものをマスクするため再描画しない）
-            ax.text(label_col_x, y - row_h / 2, "",
-                    ha="left", va="center")
-        elif "選択" in ui_type or "combo" in ui_type.lower() or "picklist" in ui_type.lower():
-            ax.add_patch(Rectangle((fx, fy), fw, fh,
-                        facecolor="white", edgecolor="#888888"))
-            # 右端に▼
-            ax.text(fx + fw - 0.12, y - row_h / 2, "▼",
-                    ha="center", va="center", fontsize=7, color="#555555")
-            ax.text(fx + 0.08, y - row_h / 2, "（選択）",
-                    ha="left", va="center", fontsize=7,
-                    color="#AAAAAA", **_fpkw())
-        elif "ラジオ" in ui_type or "radio" in ui_type.lower():
-            ax.text(fx + 0.08, y - row_h / 2, "○ はい    ○ いいえ",
-                    ha="left", va="center", fontsize=8,
-                    color="#555555", **_fpkw())
-        elif "チェック" in ui_type or "check" in ui_type.lower():
-            ax.add_patch(Rectangle((fx, fy + fh/2 - 0.08), 0.18, 0.18,
-                        facecolor="white", edgecolor="#555555"))
-            ax.text(fx + 0.28, y - row_h / 2, "有効にする",
-                    ha="left", va="center", fontsize=8,
-                    color="#555555", **_fpkw())
-        elif "表示" in ui_type or "display" in ui_type.lower() or "text" in ui_type.lower() and "入力" not in ui_type:
-            ax.text(fx + 0.08, y - row_h / 2, "（表示値）",
-                    ha="left", va="center", fontsize=8,
-                    color="#666666", style="italic", **_fpkw())
-        else:
-            # 入力欄（デフォルト）
-            ax.add_patch(Rectangle((fx, fy), fw, fh,
-                        facecolor="white", edgecolor="#888888"))
-            placeholder = ui_type or "（入力）"
-            ax.text(fx + 0.08, y - row_h / 2, placeholder,
-                    ha="left", va="center", fontsize=7,
-                    color="#AAAAAA", **_fpkw())
-
-        y -= row_h
-        if y < 0.4:
-            break
-
-    plt.tight_layout(pad=0.2)
-    plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
-    plt.close(fig)
-    return True
 
 
 # ── 埋め込み ───────────────────────────────────────────────────
