@@ -61,6 +61,7 @@ C_BAND_BLUE  = "0070C0"
 C_SUB_BAND   = "5B9BD5"
 C_LABEL_BG   = "D9E1F2"
 C_STEP_BG    = "E2EFDA"
+C_SUB_BG     = "F2F2F2"
 C_FONT_D     = "000000"
 C_FONT_GRAY  = "595959"
 C_FONT_W     = "FFFFFF"
@@ -464,8 +465,10 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                fg=C_FONT_GRAY, italic=True, border=B_all(), h="center")
             r += 1
         else:
-            TITLE_CPL  = 40
-            DETAIL_CPL = 40
+            TITLE_CPL     = 40
+            DETAIL_CPL    = 40
+            SUB_LABEL_CPL = 9
+            SUB_DETAIL_CPL = 28
             for i, step in enumerate(steps):
                 st_title    = _step_title(step, i)
                 detail_text = _step_detail_text(step)
@@ -490,7 +493,25 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
                    border=B_all(), wrap=True, v="top")
                 r += 1
 
-                # No列縦結合（タイトル行 + 詳細行）
+                # サブステップ（グレー背景・ラベル列 + 内容列）
+                for sub in step.get("sub_steps", []):
+                    sub_title  = sub.get("title", "")
+                    sub_detail = sub.get("detail", "")
+                    sub_no     = sub.get("no", "")
+                    sub_label  = f"{sub_no} {sub_title}".strip() if sub_no else sub_title
+                    sl_lines = max(1, -(-len(sub_label)  // SUB_LABEL_CPL))
+                    sd_lines = max(1, len(sub_detail) // SUB_DETAIL_CPL + sub_detail.count("\n") + 1) if sub_detail else 1
+                    set_h(ws, r, max(18, max(sl_lines, sd_lines) * 15 + 4))
+                    for _col in range(LG_LEFT_NO[0], LG_LEFT_NO[1] + 1):
+                        ws.cell(row=r, column=_col).border = B_all()
+                        ws.cell(row=r, column=_col).fill = _fill(C_STEP_BG)
+                    MW(ws, r, LG_LEFT_TITLE[0], LG_LEFT_DETAIL[0] - 1, sub_label,
+                       bold=True, fg=C_FONT_GRAY, border=B_all(), bg=C_SUB_BG, v="top")
+                    MW(ws, r, LG_LEFT_DETAIL[0], LG_LEFT_END, sub_detail,
+                       fg=C_FONT_GRAY, border=B_all(), wrap=True, bg=C_SUB_BG, v="top")
+                    r += 1
+
+                # No列縦結合（タイトル行 + 詳細行 + サブステップ行）
                 _safe_merge_rows(ws, no_row_start, r - 1, LG_LEFT_NO[0], LG_LEFT_NO[1])
 
         # 右側: フロー図（flow_steps 優先、なければ steps から生成）
