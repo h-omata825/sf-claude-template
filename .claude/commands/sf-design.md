@@ -23,7 +23,7 @@ Salesforce プロジェクトの設計書を生成します。
 
 AskUserQuestion で生成する設計書を選択する:
 
-- 全て — 基本設計・詳細設計を**並列**で生成し、両方完了後にプログラム設計を生成
+- 全て — 基本設計 → 詳細設計 → プログラム設計の順に生成（各層が前層の JSON を参照して精度を高める）
 - 基本設計 — 業務グループ単位の基本設計書（業務目的・業務フロー・構成コンポーネント）
 - 詳細設計 — 業務グループ単位の詳細設計書（コンポーネント仕様・インターフェース・画面項目）
 - プログラム設計 — コンポーネント単位のプログラム設計書（処理フロー・SOQL・DML）
@@ -184,18 +184,68 @@ for g in groups:
 
 AskUserQuestion で対象を選択する:
 - 全グループ — feature_groups.yml に含まれる全グループを処理
-- 特定のグループのみ — グループIDをカンマ区切りで入力（次の質問で聞く）
+- グループIDを指定 — GRP-XXX をカンマ区切りで入力（次の質問で聞く）
+- コンポーネントを指定 — Apex名・LWC名・F-XXX等で指定してグループに変換する（次の質問で聞く）
 
-「特定のグループのみ」を選択した場合は、チャットでグループIDを聞く:
+「グループIDを指定」を選択した場合は、チャットでグループIDを聞く:
 ```
 対象グループIDをカンマ区切りで入力してください（例: GRP-001,GRP-003）:
 ```
 
-### 委譲（「全て」選択時は Step 2 と並列・単独選択時は単独）
+「コンポーネントを指定」を選択した場合は、チャットでコンポーネント名を聞く:
+```
+対象コンポーネント名または機能IDをカンマ区切りで入力してください（例: QuotationRequestController,F-012）:
+```
 
-> **「全て」を選択した場合**: Step 1（基本設計）と Step 2（詳細設計）は互いに独立しているため、
-> **sf-basic-design-writer と sf-detail-design-writer を同時に起動して並列実行する**。
-> 両エージェントが完了するまで待ってから Step 3（プログラム設計）へ進む。
+入力後、以下のスクリプトで GRP-XXX に変換する:
+```bash
+python -c "
+import yaml, sys, pathlib
+inputs = [x.strip() for x in '{入力値}'.split(',')]
+
+# feature_ids.yml から api_name → F-XXX マッピングを構築
+fids_path = pathlib.Path(r'{project_dir}') / 'docs' / 'feature_ids.yml'
+api_to_fid = {}
+if fids_path.exists():
+    data = yaml.safe_load(fids_path.read_text(encoding='utf-8')) or {}
+    for feat in data.get('features', []):
+        if not feat.get('deprecated', False):
+            api_to_fid[feat['api_name']] = feat['id']
+
+# feature_groups.yml から F-XXX → GRP-XXX マッピングを構築
+with open(r'{project_dir}/docs/feature_groups.yml', encoding='utf-8') as f:
+    groups = yaml.safe_load(f)
+fid_to_group = {}
+for g in groups:
+    for fid in g.get('feature_ids', []):
+        fid_to_group[fid] = g['group_id']
+
+resolved = set()
+errors = []
+for inp in inputs:
+    if inp.startswith('GRP-'):
+        resolved.add(inp)
+        continue
+    fid = inp if inp.startswith('F-') else api_to_fid.get(inp)
+    if fid:
+        grp = fid_to_group.get(fid)
+        if grp:
+            resolved.add(grp)
+        else:
+            errors.append(f'{inp}: feature_groups.yml にグループが見つかりません')
+    else:
+        errors.append(f'{inp}: feature_ids.yml に API 名が見つかりません（scan_features.py を先に実行してください）')
+
+for g in sorted(resolved):
+    print(f'group_id:{g}')
+for e in errors:
+    print(f'error:{e}', file=sys.stderr)
+"
+```
+
+出力の `group_id:` 以降を target_group_ids として使用する。`error:` がある場合はユーザーに確認する。
+
+### 委譲
 
 以下の情報を渡して **sf-basic-design-writer** エージェントを起動する:
 
@@ -219,7 +269,9 @@ mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
 
 `output_dir` = `{ROOT}/詳細設計書`、`tmp_dir` = `{ROOT}/詳細設計書/.tmp`
 
-feature_groups.yml の確認・グループ選択は Step 1 と同じ手順で行う。ただし `{project_dir}/docs/feature_groups.yml` が存在しかつ対象グループIDが既にセッション内で確定している場合はスキップしてよい。
+feature_groups.yml の確認・グループ選択は Step 1 と同じ手順で行う（コンポーネント名指定にも対応）。ただし `{project_dir}/docs/feature_groups.yml` が存在しかつ対象グループIDが既にセッション内で確定している場合はスキップしてよい。
+
+**基本設計 JSON の参照**: Step 1 完了後に `{ROOT}/基本設計書/.tmp/{group_id}_basic.json` が存在する場合は、**sf-detail-design-writer に渡す情報として明示する**（エージェント内で自動参照する）。
 
 ### sf-detail-design-writer に委譲
 
@@ -278,6 +330,8 @@ AskUserQuestion で対象を選択する:
 
 スキャン結果を **Apex/Batch/Flow(非画面)/Integration** と **LWC/画面フロー/Visualforce/Aura** に分類し、それぞれのエージェントに委譲する。
 
+**上位設計 JSON の参照**: `{ROOT}/基本設計書/.tmp/` と `{ROOT}/詳細設計書/.tmp/` に JSON が存在する場合は、その旨を**エージェント起動時に明示する**（エージェント内で自動参照する）。
+
 **Apex・Batch・Flow(非画面)・Integration → sf-design-writer に委譲:**
 ```
 project_dir:       {project_dir}
@@ -288,6 +342,7 @@ project_name:      {project_name}
 feature_list:      {feature_list}（上記で絞り込み済みのリスト）
 target_ids:        {target_ids}
 version_increment: minor
+上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/詳細設計書/.tmp/ に存在する JSON（なければ省略）
 ```
 
 テンプレートパス:
@@ -304,6 +359,7 @@ project_name:      {project_name}
 feature_list:      {feature_list}（画面系のみに絞り込み）
 target_ids:        {target_ids}
 version_increment: minor
+上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/詳細設計書/.tmp/ に存在する JSON（なければ省略）
 ```
 
 ---
@@ -334,4 +390,5 @@ version_increment: minor
 
 - 基本設計・詳細設計は **グループ単位**（feature_groups.yml が必要）
 - プログラム設計は **コンポーネント単位**（scan_features.py の出力が必要）
-- 「全て」を選択した場合は **基本設計・詳細設計を並列委譲 → 両方完了後にプログラム設計** の順で実行する（基本設計と詳細設計は互いに独立しているため並列実行可能）
+- 「全て」を選択した場合は **基本設計 → 詳細設計 → プログラム設計** の順に逐次実行する（各層が前層の JSON を参照して精度を高めるため並列化しない）
+- コンポーネント名（API名・F-XXX）で対象を指定した場合は、スクリプトで対応する GRP-XXX に変換してから処理する

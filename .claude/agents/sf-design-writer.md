@@ -170,6 +170,32 @@ print('テンプレート確認OK: プログラム設計書テンプレート.xl
 
 `docs/design/` 配下の既存設計書 MD を一覧取得しておく（差分更新時の参照用）。
 
+**上位設計 JSON の確認（存在する場合は参照する）**:
+
+基本設計・詳細設計が先に実行されている場合、その JSON を読み込んで設計の文脈として活用する。
+
+```bash
+python -c "
+import pathlib, sys
+root = pathlib.Path(r'{output_dir}').parent
+basic_dir = root / '基本設計書' / '.tmp'
+detail_dir = root / '詳細設計書' / '.tmp'
+for p in sorted(basic_dir.glob('*_basic.json')) if basic_dir.exists() else []:
+    print(f'basic_json:{p}')
+for p in sorted(detail_dir.glob('*_detail.json')) if detail_dir.exists() else []:
+    print(f'detail_json:{p}')
+"
+```
+
+対象コンポーネントが属するグループの JSON が見つかった場合は Read ツールで読む（グループ→コンポーネントの対応は feature_ids.yml で確認）。
+
+読んだ内容は以下の目的で活用する:
+- `purpose` / `overview` の記述: 業務目的との整合性（基本設計の purpose / target_users を参照）
+- `prerequisites`: 前提条件の補完（基本設計の prerequisites / 詳細設計の prerequisites を参照）
+- 呼び出し関係の確認: 詳細設計の `data_flow_overview` でこのコンポーネントの位置づけを確認する
+
+> **注意**: 上位設計 JSON がない場合はこの手順をスキップし、ソースコードのみから生成する。
+
 > **一時ファイルの禁止ルール（厳守）**:
 > - 処理中に作成する全ての一時ファイル（`.json` / `.txt` / `.py` / その他）は **必ず `{tmp_dir}` 配下のみ** に置くこと
 > - スクリプトの実行結果（stdout / stderr）を `.txt` や任意ファイルにリダイレクト保存してはならない。出力は Claude が直接読む

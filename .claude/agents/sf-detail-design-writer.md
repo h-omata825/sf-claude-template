@@ -104,6 +104,34 @@ print(json.dumps(data, ensure_ascii=False, indent=2))
 
 ---
 
+## Phase 0.5: 基本設計 JSON の参照（存在する場合）
+
+基本設計が先に実行されている場合、その出力 JSON を読み込んで設計の文脈として活用する。
+
+```bash
+python -c "
+import pathlib, json, sys
+root = pathlib.Path(r'{output_dir}').parent
+for group_id in {target_group_ids_list}:
+    p = root / '基本設計書' / '.tmp' / f'{group_id}_basic.json'
+    if p.exists():
+        print(f'basic_json_found:{group_id}:{p}')
+    else:
+        print(f'basic_json_not_found:{group_id}')
+"
+```
+
+`basic_json_found` となったグループは、Phase 2 の JSON 生成前に該当ファイルを Read ツールで読む。
+
+読んだ内容（`purpose` / `target_users` / `business_flow` / `related_objects`）を以下の目的で活用する:
+- `processing_purpose`: 業務目的との整合性を確認する（「どんな業務のためにこの処理があるか」）
+- `data_flow_overview`: 業務フローとのマッピングを確認する（どのステップでこのコンポーネントが動くか）
+- `components[].responsibility`: 業務上の役割（基本設計の role）と技術上の責務が一致しているか確認する
+
+> **注意**: 基本設計 JSON がない場合はこのフェーズをスキップし、ソースコードのみから詳細設計を生成する。
+
+---
+
 ## Phase 1: ソース読み込み（グループごとに繰り返す）
 
 ### 1-1. グループのコンポーネント取得

@@ -89,6 +89,24 @@ print('テンプレート確認OK: プログラム設計書（画面）テンプ
 "
 ```
 
+**上位設計 JSON の確認（存在する場合は参照する）**:
+
+```bash
+python -c "
+import pathlib
+root = pathlib.Path(r'{output_dir}').parent
+basic_dir = root / '基本設計書' / '.tmp'
+detail_dir = root / '詳細設計書' / '.tmp'
+for p in sorted(basic_dir.glob('*_basic.json')) if basic_dir.exists() else []:
+    print(f'basic_json:{p}')
+for p in sorted(detail_dir.glob('*_detail.json')) if detail_dir.exists() else []:
+    print(f'detail_json:{p}')
+"
+```
+
+対象コンポーネントが属するグループの JSON が見つかった場合は Read ツールで読む。
+`purpose` / `screens[].items` （詳細設計）を参照して画面項目の業務意味・バリデーション仕様を補完する。
+
 > **一時ファイルの禁止ルール（厳守）**:
 > - 処理中に作成する全ての一時ファイル（`.json` / `.txt` / `.py` / その他）は **必ず `{tmp_dir}` 配下のみ** に置くこと
 > - スクリプトの実行結果（stdout / stderr）を `.txt` や任意ファイルにリダイレクト保存してはならない。出力は Claude が直接読む
