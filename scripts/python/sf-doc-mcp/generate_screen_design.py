@@ -116,7 +116,6 @@ OV_SECTION_DATA_ROW = {
     "transition":    19,
 }
 OV_FEATURES_ROW = 13
-OV_IMG_DATA_START = 22   # 画面イメージ画像貼付行の先頭
 
 # 画面項目定義
 IT_DATA_ROW_START = 5
@@ -347,7 +346,7 @@ def fill_revision(ws, data, history: list[dict]):
     dr.fill_revision_table(ws, history, REV_COLS, REV_DATA_ROW_START)
 
 
-def fill_overview(ws, data, wireframe_path=None, changed_fields: set = None):
+def fill_overview(ws, data, changed_fields: set = None):
     changed_fields = changed_fields or set()
     for key, (cs, ce) in OV_META_1_V.items():
         ws.cell(row=OV_META_ROW_1, column=cs, value=data.get(key, ""))
@@ -367,20 +366,6 @@ def fill_overview(ws, data, wireframe_path=None, changed_fields: set = None):
         cell = ws.cell(row=OV_FEATURES_ROW, column=2, value=bullet_text)
         if "features" in changed_fields:
             dr.apply_red(cell, size=10)
-
-    # 画面イメージ（ワイヤーフレーム）
-    if wireframe_path and Path(wireframe_path).exists():
-        try:
-            img = XLImage(wireframe_path)
-            img.anchor = f"{get_column_letter(GRID_LEFT)}{OV_IMG_DATA_START}"
-            ratio = img.height / img.width if img.width else 1.2
-            img.width = 620
-            img.height = min(int(620 * ratio), 900)
-            ws.add_image(img)
-        except Exception as e:
-            W(ws, OV_IMG_DATA_START, GRID_LEFT,
-              f"[ワイヤーフレーム挿入失敗: {e}]",
-              italic=True, fg="888888")
 
 
 def fill_items(ws, data, changed_item_nos: set = None):
@@ -775,7 +760,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="screen_design_") as tmp_dir:
         wb = load_workbook(args.template)
         fill_revision(wb["改版履歴"],         data, history)
-        fill_overview(wb["画面概要"],         data, wireframe_path=None,
+        fill_overview(wb["画面概要"],         data,
                       changed_fields=set() if is_major else changed_scalars)
         fill_items   (wb["画面項目定義"],     data,
                       changed_item_nos=set() if is_major else changed_items)
