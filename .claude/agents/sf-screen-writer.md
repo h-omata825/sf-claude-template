@@ -62,12 +62,12 @@ mkdir -p "{tmp_dir}"
 ```bash
 python -c "
 import pathlib, sys
-p = pathlib.Path(r'{project_dir}') / 'scripts' / 'python' / 'sf-doc-mcp' / '画面設計書テンプレート.xlsx'
+p = pathlib.Path(r'{project_dir}') / 'scripts' / 'python' / 'sf-doc-mcp' / '画面プログラム設計書テンプレート.xlsx'
 if not p.exists():
-    print(f'ERROR: 画面設計書テンプレート.xlsx が見つかりません: {p}')
+    print(f'ERROR: 画面プログラム設計書テンプレート.xlsx が見つかりません: {p}')
     print('  /upgrade を実行してテンプレートを取得してください。')
     sys.exit(1)
-print('テンプレート確認OK: 画面設計書テンプレート.xlsx')
+print('テンプレート確認OK: 画面プログラム設計書テンプレート.xlsx')
 "
 ```
 
@@ -408,7 +408,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/check_design_json.py \
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
-  --template "{project_dir}/scripts/python/sf-doc-mcp/画面設計書テンプレート.xlsx" \
+  --template "{project_dir}/scripts/python/sf-doc-mcp/画面プログラム設計書テンプレート.xlsx" \
   --output-dir "{output_dir}" \
   --version-increment {version_increment}
 ```
@@ -417,7 +417,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
-  --template "{project_dir}/scripts/python/sf-doc-mcp/画面設計書テンプレート.xlsx" \
+  --template "{project_dir}/scripts/python/sf-doc-mcp/画面プログラム設計書テンプレート.xlsx" \
   --output-dir "{output_dir}" \
   --source-file "{output_dir}/{subfolder}/【{id}】{name}.xlsx" \
   --version-increment {version_increment}
