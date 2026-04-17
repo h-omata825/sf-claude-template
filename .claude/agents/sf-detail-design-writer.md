@@ -104,31 +104,38 @@ print(json.dumps(data, ensure_ascii=False, indent=2))
 
 ---
 
-## Phase 0.5: 基本設計 JSON の参照（存在する場合）
+## Phase 0.5: 他層設計 JSON の参照（存在する場合）
 
-基本設計が先に実行されている場合、その出力 JSON を読み込んで設計の文脈として活用する。
+基本設計・プログラム設計が生成済みの場合（順次実行時も単体実行時も）、その JSON を読み込んで設計の文脈として活用する。
 
 ```bash
 python -c "
-import pathlib, json, sys
+import pathlib
 root = pathlib.Path(r'{output_dir}').parent
+
+# 基本設計 JSON（グループ単位）
+basic_dir = root / '基本設計書' / '.tmp'
 for group_id in {target_group_ids_list}:
-    p = root / '基本設計書' / '.tmp' / f'{group_id}_basic.json'
+    p = basic_dir / f'{group_id}_basic.json'
     if p.exists():
-        print(f'basic_json_found:{group_id}:{p}')
-    else:
-        print(f'basic_json_not_found:{group_id}')
+        print(f'basic_json:{group_id}:{p}')
+
+# プログラム設計 JSON（コンポーネント単位）
+prog_dir = root / 'プログラム設計書' / '.tmp'
+if prog_dir.exists():
+    for p in sorted(prog_dir.glob('*_design.json')):
+        print(f'prog_json:{p.stem.replace(\"_design\", \"\")}:{p}')
 "
 ```
 
-`basic_json_found` となったグループは、Phase 2 の JSON 生成前に該当ファイルを Read ツールで読む。
+見つかった JSON は Read ツールで読み、以下の目的で活用する:
 
-読んだ内容（`purpose` / `target_users` / `business_flow` / `related_objects`）を以下の目的で活用する:
-- `processing_purpose`: 業務目的との整合性を確認する（「どんな業務のためにこの処理があるか」）
-- `data_flow_overview`: 業務フローとのマッピングを確認する（どのステップでこのコンポーネントが動くか）
-- `components[].responsibility`: 業務上の役割（基本設計の role）と技術上の責務が一致しているか確認する
+| 参照元 | 参照するフィールド | 活用目的 |
+|---|---|---|
+| 基本設計 JSON | `purpose` / `target_users` / `business_flow` / `related_objects` | 業務目的との整合確認。`processing_purpose` / `data_flow_overview` の記述精度を高める |
+| プログラム設計 JSON | `overview` / `steps` / `input_params` / `output_params` | インターフェース定義（`interfaces[]`）の実装詳細との整合確認。`screens[].items` のバリデーション補完 |
 
-> **注意**: 基本設計 JSON がない場合はこのフェーズをスキップし、ソースコードのみから詳細設計を生成する。
+> **注意**: JSON がない場合はスキップする。参照できる情報はあくまで補完材料。ソースコードと既存資料を一次情報として扱う。
 
 ---
 

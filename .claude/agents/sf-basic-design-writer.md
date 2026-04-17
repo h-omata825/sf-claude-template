@@ -100,6 +100,41 @@ print(json.dumps(data, ensure_ascii=False, indent=2))
 
 ---
 
+## Phase 0.5: 他層設計 JSON の参照（存在する場合）
+
+詳細設計・プログラム設計が先に（または別セッションで）生成されている場合、その JSON を読み込んで設計の文脈として活用する。
+
+```bash
+python -c "
+import pathlib
+root = pathlib.Path(r'{output_dir}').parent
+
+# 詳細設計 JSON（グループ単位）
+detail_dir = root / '詳細設計書' / '.tmp'
+for group_id in {target_group_ids_list}:
+    p = detail_dir / f'{group_id}_detail.json'
+    if p.exists():
+        print(f'detail_json:{group_id}:{p}')
+
+# プログラム設計 JSON（コンポーネント単位）
+prog_dir = root / 'プログラム設計書' / '.tmp'
+if prog_dir.exists():
+    for p in sorted(prog_dir.glob('*_design.json')):
+        print(f'prog_json:{p.stem.replace(\"_design\", \"\")}:{p}')
+"
+```
+
+見つかった JSON は Read ツールで読み、以下の目的で活用する:
+
+| 参照元 | 参照するフィールド | 活用目的 |
+|---|---|---|
+| 詳細設計 JSON | `processing_purpose` / `data_flow_overview` / `components[].responsibility` | コンポーネントの技術的責務を業務フローの記述に反映する |
+| プログラム設計 JSON | `overview` / `trigger` / `prerequisites` | 実際の処理起動タイミング・前提条件を purpose/business_flow に正確に記述する |
+
+> **注意**: JSON がない場合はスキップする。参照できる情報はあくまで補完材料。ソースコードと既存資料を一次情報として扱う。
+
+---
+
 ## Phase 1: ソース読み込み（グループごとに繰り返す）
 
 ### 1-1. グループのコンポーネント一覧を取得
