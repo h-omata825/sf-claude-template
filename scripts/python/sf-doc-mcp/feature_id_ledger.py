@@ -57,6 +57,11 @@ def save_ledger(ledger_path: Path, ledger: dict) -> None:
     ledger_path.write_text(LEDGER_HEADER + body, encoding="utf-8")
 
 
+# classes/ 配下の .cls ファイルから生成される型グループ。
+# 同一 api_name は同一コンポーネントのリクラシフィケーションとみなし、ID を再利用する。
+_APEX_GROUP = {"Apex", "Batch", "Integration"}
+
+
 def _index_by_key(ledger: dict) -> dict[str, dict]:
     return {_make_key(f["type"], f["api_name"]): f for f in ledger["features"]}
 
@@ -64,6 +69,9 @@ def _index_by_key(ledger: dict) -> dict[str, dict]:
 def resolve_id(ledger: dict, ftype: str, api_name: str) -> str:
     """type + api_name に対応するIDを取得。無ければ新規採番。
     採番した場合は ledger を更新する（呼び出し側で save_ledger 必須）。
+
+    Apex グループ（Apex / Batch / Integration）内での型変更は同一コンポーネントの
+    リクラシフィケーションとみなし、既存エントリの type を更新して同一IDを返す。
     """
     idx = _index_by_key(ledger)
     key = _make_key(ftype, api_name)
@@ -73,6 +81,17 @@ def resolve_id(ledger: dict, ftype: str, api_name: str) -> str:
         if entry.get("deprecated"):
             entry["deprecated"] = False
         return entry["id"]
+
+    # Apex グループ内でのリクラシフィケーション検出
+    # 例: Apex → Integration へ型変更された場合、別IDを振らずに既存エントリを更新する
+    if ftype in _APEX_GROUP:
+        for entry in ledger["features"]:
+            if (entry["api_name"] == api_name
+                    and entry["type"] in _APEX_GROUP
+                    and entry["type"] != ftype
+                    and not entry.get("deprecated")):
+                entry["type"] = ftype
+                return entry["id"]
 
     new_id = f"F-{ledger['next_id']:03d}"
     ledger["features"].append({
