@@ -32,7 +32,40 @@ AskUserQuestion で生成する設計書を選択する:
 
 ## Step 0-2: 共通情報の取得
 
-**管理フォルダ**: チャットで直接聞く:
+### 前回設定の読み込み
+
+```bash
+python -c "
+import pathlib
+try:
+    import yaml
+    p = pathlib.Path(r'{project_dir}') / 'docs' / 'sf_design_config.yml'
+    if p.exists():
+        d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
+        print('author:' + str(d.get('author', '')))
+        print('output_dir:' + str(d.get('output_dir', '')))
+    else:
+        print('author:')
+        print('output_dir:')
+except Exception:
+    print('author:')
+    print('output_dir:')
+"
+```
+
+出力から `author`（前回の作成者名）と `output_dir`（前回の管理フォルダ）を控える。
+
+### 管理フォルダ
+
+**前回値がある場合:** AskUserQuestion で提示（1択+Other自動）:
+- label: "前回: {last_output_dir}"、description: "前回と同じ管理フォルダを使用"
+
+Other が選ばれた場合はチャットで入力:
+```
+資料の管理フォルダパスを入力してください:
+```
+
+**前回値がない場合:** チャットで直接聞く:
 ```
 資料の管理フォルダパスを入力してください:
 ```
@@ -52,11 +85,39 @@ print('ROOT:' + str(p))
 ```
 出力の `ROOT:` 以降を `ROOT` として控える。
 
-**作成者名**: チャットで直接聞く。
+### 作成者名
 
-**プロジェクトディレクトリ**: チャットで直接聞く（force-app/ があるフォルダ）:
+**前回値がある場合:** AskUserQuestion で提示（2択+Other自動）:
+- label: "前回: {last_author}"、description: "前回と同じ作成者名を使用"
+- label: "スキップ"、description: "作成者名なし"
+
+**前回値がない場合:** AskUserQuestion で提示（1択+Other自動）:
+- label: "スキップ"、description: "作成者名なし"
+
+Other が選ばれた場合はチャットで入力してもらう。「スキップ」が選ばれた場合は空文字として扱う。
+
+### プロジェクトディレクトリ
+
+チャットで直接聞く（force-app/ があるフォルダ）:
 ```
 プロジェクトルートのパスを入力してください（force-app/ があるフォルダ）:
+```
+
+### 設定の保存
+
+確定した値を保存する（次回のデフォルト値として使用）:
+```bash
+python -c "
+import pathlib
+try:
+    import yaml
+    p = pathlib.Path(r'{project_dir}') / 'docs' / 'sf_design_config.yml'
+    p.parent.mkdir(parents=True, exist_ok=True)
+    data = {'author': r'{author}', 'output_dir': r'{ROOT}'}
+    p.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding='utf-8')
+except Exception as e:
+    print('設定の保存に失敗:', e)
+"
 ```
 
 ---
@@ -151,6 +212,8 @@ version_increment: minor
 ---
 
 ## Step 3: プログラム設計（選択した場合）
+
+> プログラム設計書と合わせて **機能一覧**（全コンポーネントの索引 Excel）も自動生成される。
 
 ```bash
 mkdir -p "{ROOT}/プログラム設計書"

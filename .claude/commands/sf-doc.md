@@ -29,33 +29,60 @@ Salesforceプロジェクト資料を会話形式で作成します。
 
 AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）:
 
-| # | 資料 | 出力 | 分岐 |
-|---|---|---|---|
-| 0 | 全て                       | 全資料を順番に生成（A→B→C→D）                                  | Step A〜D |
-| 1 | プロジェクト概要書          | PPTX 2ファイル（業務フロー図 + データモデル定義書）            | Step A→B |
-| 2 | オブジェクト定義書          | Excel（オブジェクト項目定義書）                                 | Step C |
-| 3 | プログラム設計書                | Excel（機能一覧＋機能別設計書）                                 | Step D |
+AskUserQuestion のツールを使い、以下の **3つ** を choices に含めて提示する:
 
-AskUserQuestion のツールを使い、以下の **4つ** を choices に含めて提示する:
-
-- 全て — 全資料を順番に生成（A→B→C→D）
+- 全て — プロジェクト概要書 + オブジェクト定義書 を順番に生成（A→B→C の順）
 - プロジェクト概要書 — 業務フロー図 + データモデル定義書（ER図）→ PPTX 2ファイル（Step A→B の順）
 - オブジェクト定義書 — オブジェクト・項目定義書 → Excel
-- プログラム設計書 — 機能一覧 & 機能別設計書 → Excel
 
 **「全て」選択時の実行順序（この順番に従うこと）:**
 
 ```
-Step A（業務フロー図 PPTX）→ Step B（データモデル定義書 PPTX）→ Step C（オブジェクト定義書 Excel）→ Step D（プログラム設計書 Excel）
+Step A（業務フロー図 PPTX）→ Step B（データモデル定義書 PPTX）→ Step C（オブジェクト定義書 Excel）
 ```
 
 「プロジェクト概要書」→ Step A 完了後そのまま Step B を実行する。
+
+> 設計書（基本設計・詳細設計・プログラム設計・機能一覧）の生成は `/sf-design` を使用すること。
 
 ### Step 0-2: 共通情報の取得（資料種別選択後に一度だけ聞く）
 
 > **テキスト入力の必須ルール**: チャットでの入力を求めたら、ユーザーが返答するまで次の処理・質問には進まない。
 
-**管理フォルダ**: チャットで直接聞く。AskUserQuestion は使わず、選択肢・例も表示しない:
+#### 前回設定の読み込み
+
+```bash
+python -c "
+import pathlib
+try:
+    import yaml
+    p = pathlib.Path('docs/sf_doc_config.yml')
+    if p.exists():
+        d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
+        print('author:' + str(d.get('author', '')))
+        print('output_dir:' + str(d.get('output_dir', '')))
+    else:
+        print('author:')
+        print('output_dir:')
+except Exception:
+    print('author:')
+    print('output_dir:')
+"
+```
+
+出力から `author`（前回の作成者名）と `output_dir`（前回の管理フォルダ）を控える。
+
+#### 管理フォルダ
+
+**前回値がある場合:** AskUserQuestion で提示（1択+Other自動）:
+- label: "前回: {last_output_dir}"、description: "前回と同じ管理フォルダを使用"
+
+Other が選ばれた場合はチャットで入力:
+```
+資料の管理フォルダパスを入力してください:
+```
+
+**前回値がない場合:** チャットで直接聞く:
 ```
 資料の管理フォルダパスを入力してください:
 ```
@@ -65,8 +92,7 @@ Step A（業務フロー図 PPTX）→ Step B（データモデル定義書 PPTX
 python -c "
 import pathlib, sys
 p = pathlib.Path(r'{入力値}')
-known = ['プロジェクト概要書', 'オブジェクト定義書', 'プログラム設計書']
-# パス内のどこかに既知のサブフォルダ名があれば、その親を ROOT とする
+known = ['プロジェクト概要書', 'オブジェクト定義書']
 for part in [p] + list(p.parents):
     if part.name in known:
         print('ROOT:' + str(part.parent))
@@ -77,34 +103,35 @@ print('ROOT:' + str(p))
 出力の `ROOT:` 以降を `ROOT` として控える。  
 指定値が調整された場合は「{調整後パス} を管理フォルダとして使用します」と伝える。
 
-**作成者名**: チャットで直接聞く。AskUserQuestion は使わない:
-```
-作成者名を入力してください（スキップする場合は Enter または「スキップ」と入力）:
-```
-入力されなかった場合・「スキップ」と入力された場合は空文字として扱う。
+#### 作成者名
 
-**プロジェクト名**（プログラム設計書 / 全て を選択した場合のみ）:
+**前回値がある場合:** AskUserQuestion で提示（2択+Other自動）:
+- label: "前回: {last_author}"、description: "前回と同じ作成者名を使用"
+- label: "スキップ"、description: "作成者名なし"
 
-`docs/overview/org-profile.md` から組織名を取得する:
+**前回値がない場合:** AskUserQuestion で提示（1択+Other自動）:
+- label: "スキップ"、description: "作成者名なし"
+
+Other が選ばれた場合はチャットで入力してもらう。「スキップ」が選ばれた場合は空文字として扱う。
+
+#### 設定の保存
+
+確定した値を保存する（次回のデフォルト値として使用）:
 ```bash
 python -c "
-import re, pathlib, sys
-sys.stdout.reconfigure(encoding='utf-8')
-p = pathlib.Path('docs/overview/org-profile.md')
-if p.exists():
-    text = p.read_text(encoding='utf-8')
-    for pat in [r'\|\s*組織名\s*\|\s*(.+?)\s*\|', r'システム名[^\n:：]*[:：]\s*(.+)', r'プロジェクト名[^\n:：]*[:：]\s*(.+)']:
-        m = re.search(pat, text)
-        if m:
-            print(m.group(1).strip())
-            break
+import pathlib
+try:
+    import yaml
+    p = pathlib.Path('docs/sf_doc_config.yml')
+    p.parent.mkdir(parents=True, exist_ok=True)
+    data = {'author': r'{author}', 'output_dir': r'{ROOT}'}
+    p.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding='utf-8')
+except Exception as e:
+    print('設定の保存に失敗:', e)
 "
 ```
-AskUserQuestion で提示（1択＋Other自動）:
-- 取得できた場合: label: "{name}"、description: "org-profile.md の組織名を使用する"
-- 取得できなかった場合: label: "スキップ"、description: "プロジェクト名なし"
 
-> 以降の各Stepでは管理フォルダ・作成者名・プロジェクト名を再度聞かない。
+> 以降の各Stepでは管理フォルダ・作成者名を再度聞かない。
 
 ---
 
@@ -429,117 +456,23 @@ python scripts/python/sf-doc-mcp/generate.py \
 
 ---
 
-## Step D: プログラム設計書（機能一覧 ＋ プログラム設計書）
+## 完了報告
 
-**【使用する情報源】**
-- `force-app/` — Apex/Flow/LWC を直接スキャン（docs は使わない）
-- `docs/design/` — 既存設計書があれば参照（任意）
+各 Step の完了報告をまとめて表示する。
 
-AskUserQuestion で確認:
-- label: "最新化済み・このまま続ける"、description: "force-app/ と docs/design/ が最新の状態で進める"
-- label: "先に最新化する"、description: "/sf-retrieve → /sf-memory Cat.4 を実行してからそのまま生成に進む"
-
-「先に最新化する」が選ばれた場合: 以下をユーザーに案内して終了する（別コマンドのためセッションが変わる）。
 ```
-最新化の手順:
-1. /sf-retrieve を実行（standard または all を選択）
-   ※ force-app/ が更新される。新規追加・削除されたコンポーネントの正確な検出に必須。
-2. /sf-memory を実行（カテゴリ4「設計・機能仕様」を選択）
-   ※ docs/design/ の既存設計書 MD を更新し、差分検出に使う参照情報を最新化する。
+✅ 資料生成完了
 
-完了後、再度 /sf-doc を実行し「最新化済み・このまま続ける」を選んでください。
+【プロジェクト概要書】（生成した場合）
+  生成先: {ROOT}/プロジェクト概要書/
+  - プロジェクト概要書.pptx
+  - 業務フロー図.pptx（swimlanes.json がある場合のみ）
+
+【オブジェクト定義書】（生成した場合）
+  生成先: {ROOT}/オブジェクト定義書/
+  - オブジェクト項目定義書_v{version}.xlsx
+
+⚠️ 要確認: ...
 ```
 
-### D-1: 出力フォルダの準備
-
-```bash
-mkdir -p "{ROOT}/プログラム設計書"
-```
-
-`output_dir` = `{ROOT}/プログラム設計書`、`tmp_dir` = `{ROOT}/プログラム設計書/.tmp` として以降の処理に使用する。
-
-### D-2: force-app/ をスキャンして対象を確定
-
-```bash
-python scripts/python/sf-doc-mcp/scan_features.py \
-  --project-dir "{カレントディレクトリ}" \
-  --output "{tmp_dir}/feature_list.json"
-```
-
-> **ソースについて**: スキャン対象は `force-app/` ディレクトリ。docs ではなくメタデータを直接読むため、最終 `/sf-retrieve` 時点の内容が対象になる。新規作成したコンポーネントは `/sf-retrieve` を再実行してから本コマンドを実行すること。
-> 更新時も同様に force-app/ を再スキャンするため、追加・削除されたコンポーネントは自動検出される。
-
-スクリプト完了後、以下を実施する:
-1. `{tmp_dir}/feature_list.json` を Read して種別別件数を整形してユーザーに提示する（例: `Apex: 5件 / Flow: 3件 / LWC: 8件 — 計 16件`）
-2. stderr に出力された警告行（削除検知「[情報] 削除検知: N件」等）があれば合わせて提示する
-
-その上で AskUserQuestion で対象を選択:
-- label: "全て（{n}件）"、description: "スキャンで検出された全コンポーネントの設計書を生成"
-- label: "対象を絞り込む"、description: "API名・機能IDをテキストで指定する"
-
-「対象を絞り込む」が選ばれた場合はチャットで入力してもらい、対象を絞り込む。
-区切り文字は何でもOK（スペース・カンマ・改行・全角スペース等）。API名・機能ID（F-001等）どちらでも受け付ける。
-
-**対象が確定したら** AskUserQuestion で最終確認:
-
-**質問**: 「設計書を生成します（対象: {n}件）。よろしいですか？」
-
-- label: "生成開始"、description: "{n}件の設計書を生成する"
-- label: "キャンセル"、description: "中止する"
-
-「キャンセル」が選ばれた場合は終了。「生成開始」が選ばれたら D-3 へ進む。
-
-**バージョンインクリメントの確認**（D-3 委譲前に一度だけ実施）:
-
-`{output_dir}/` 配下に既存の xlsx があるか確認する:
-```bash
-python -c "
-import pathlib, sys
-xlsxs = list(pathlib.Path(r'{output_dir}').rglob('*.xlsx'))
-print('exists' if xlsxs else 'new')
-"
-```
-
-- 既存 xlsx がある場合のみ AskUserQuestion で選択:
-  - label: "マイナー更新（変更箇所を赤字表示）"
-  - label: "メジャー更新（赤字をリセット・黒字化）"
-- 既存 xlsx がない場合（初回生成）: `version_increment = "minor"` として固定（スクリプト側が自動で v1.0 から開始する）
-
-### D-3: エージェントへ委譲
-
-feature_list のコンポーネント種別に応じて、以下の順序でエージェントに委譲する。
-
-**共通で渡す情報**:
-- `project_dir`: カレントディレクトリのフルパス
-- `output_dir`: `{ROOT}/プログラム設計書`
-- `tmp_dir`: `{ROOT}/プログラム設計書/.tmp`
-- `author`: 作成者名
-- `project_name`: プロジェクト名
-- `version_increment`: 上記で確定した値（`minor` または `major`）
-- `sf_alias`: Step C で使用した SF エイリアス（Step C をスキップした場合は `.sf/config.json` から取得）。将来の組織直接接続機能（メタデータ取得等）のために渡す。現在のスクリプト（generate_feature_design.py 等）では未使用
-- `target_ids`: 対象の機能ID・API名リスト
-- `feature_list`: `{tmp_dir}/feature_list.json` の内容（JSON オブジェクト。D-2 で生成済み）。エージェントが Apex 有無・吸収コンポーネント（absorb_into）判定に使用する
-
-**D-3a: LWC・画面フロー・Aura・Visualforce が含まれる場合 → `sf-screen-writer` を先に呼ぶ**
-
-feature_list のうち `type` が `LWC` / `画面フロー` / `Aura` / `Visualforce` のもののみを抽出して渡す。
-sf-screen-writer は Phase 2（Excel生成）まで実行して完了報告を返す（機能一覧・クリーンアップは行わない）。
-
-sf-screen-writer が失敗または部分完了で返った場合:
-- 完了報告で「未完了: {n}件（{コンポーネント名リスト}）」を明示する
-- D-3b へ進む前にユーザーに確認を取る（「一部未完了のまま続けるか、中止するか」）
-- ユーザーが続行を選んだ場合のみ D-3b へ進む
-
-**D-3b: `sf-design-writer` を呼ぶ（常に実行）**
-
-feature_list のうち `type` が `Apex` / `Batch` / `Flow` / `Integration` / `Trigger` のものを渡す（LWC/画面フロー/Aura/Visualforceは除外）。
-sf-design-writer は以下を実行して完了報告を返す:
-- Apex/Batch/Flow/Integration/Trigger の設計 JSON 生成と Excel 生成
-- Phase 3: tmp_dir 内の全 design JSON（sf-screen-writer 分も含む）から機能一覧 Excel を生成
-- Phase 4: tmp_dir クリーンアップ
-
-> LWC/画面フローのみのプロジェクトで Apex が存在しない場合も、sf-design-writer を呼んで Phase 3（機能一覧生成）と Phase 4（クリーンアップ）を実行させること。
-
-### D-4: 完了報告の表示
-
-各エージェントからの完了報告をまとめて表示する。
+> 設計書（プログラム設計・基本設計・詳細設計・機能一覧）の生成は `/sf-design` を使用すること。
