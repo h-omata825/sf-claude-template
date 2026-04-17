@@ -1,6 +1,6 @@
 ---
 name: sf-screen-writer
-description: "LWC・画面フロー・Aura・Visualforce専用の画面設計書（Excel）生成エージェント。sf-doc コマンドの Step D から委譲されて実行する。usecases[] 構造の画面設計書 JSON を生成し generate_screen_design.py で Excel に変換する。Apex・Flow（非画面）・Batch は対象外（sf-design-writer が担当）。"
+description: "LWC・画面フロー・Aura・Visualforce専用のプログラム設計書（画面）（Excel）生成エージェント。sf-design コマンドの Step 3 から委譲されて実行する。usecases[] 構造の画面設計書 JSON を生成し generate_screen_design.py で Excel に変換する。Apex・Flow（非画面）・Batch は対象外（sf-design-writer が担当）。"
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。
@@ -80,12 +80,12 @@ mkdir -p "{tmp_dir}"
 ```bash
 python -c "
 import pathlib, sys
-p = pathlib.Path(r'{project_dir}') / 'scripts' / 'python' / 'sf-doc-mcp' / '画面プログラム設計書テンプレート.xlsx'
+p = pathlib.Path(r'{project_dir}') / 'scripts' / 'python' / 'sf-doc-mcp' / 'プログラム設計書（画面）テンプレート.xlsx'
 if not p.exists():
-    print(f'ERROR: 画面プログラム設計書テンプレート.xlsx が見つかりません: {p}')
+    print(f'ERROR: プログラム設計書（画面）テンプレート.xlsx が見つかりません: {p}')
     print('  /upgrade を実行してテンプレートを取得してください。')
     sys.exit(1)
-print('テンプレート確認OK: 画面プログラム設計書テンプレート.xlsx')
+print('テンプレート確認OK: プログラム設計書（画面）テンプレート.xlsx')
 "
 ```
 
@@ -426,7 +426,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/check_design_json.py \
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
-  --template "{project_dir}/scripts/python/sf-doc-mcp/画面プログラム設計書テンプレート.xlsx" \
+  --template "{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書（画面）テンプレート.xlsx" \
   --output-dir "{output_dir}" \
   --version-increment {version_increment}
 ```
@@ -435,7 +435,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
-  --template "{project_dir}/scripts/python/sf-doc-mcp/画面プログラム設計書テンプレート.xlsx" \
+  --template "{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書（画面）テンプレート.xlsx" \
   --output-dir "{output_dir}" \
   --source-file "{output_dir}/{subfolder}/【{id}】{name}.xlsx" \
   --version-increment {version_increment}

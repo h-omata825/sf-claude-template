@@ -282,6 +282,8 @@ def _try_embed_mockup(ws, row_start: int, screen: dict, project_dir, tmp_dir) ->
     画面コンポーネントのモックアップを生成してシートに埋め込む。
     使用した行数を返す（モックアップなし=0、あり=確保した行数）。
     """
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent))
     import generate_screen_mock as gsm
 
     api_name = screen.get("component", "")

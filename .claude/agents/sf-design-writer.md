@@ -1,6 +1,6 @@
 ---
 name: sf-design-writer
-description: "プログラム設計書（Excel）と機能一覧（Excel）を生成する専門エージェント。sf-doc コマンドの Step D から委譲されて実行する。force-app/ と docs/ を徹底的に読み込み、高品質な設計内容 JSON を生成してから Python スクリプトで Excel に変換する。"
+description: "プログラム設計書（Excel）と機能一覧（Excel）を生成する専門エージェント。sf-design コマンドの Step 3 から委譲されて実行する。force-app/ と docs/ を徹底的に読み込み、高品質な設計内容 JSON を生成してから Python スクリプトで Excel に変換する。"
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。
@@ -148,7 +148,7 @@ mkdir -p "{tmp_dir}"
 設計書テンプレートはプロジェクトの scripts フォルダに配置済み（毎回生成不要）:
 ```
 {project_dir}\scripts\python\sf-doc-mcp\プログラム設計書テンプレート.xlsx    ← Apex / Flow / Batch / Integration 用
-{project_dir}\scripts\python\sf-doc-mcp\画面プログラム設計書テンプレート.xlsx ← LWC / 画面フロー 用
+{project_dir}\scripts\python\sf-doc-mcp\プログラム設計書（画面）テンプレート.xlsx ← LWC / 画面フロー 用
 ```
 
 両方が存在することを確認する（どちらかがなければエラー）:
@@ -157,7 +157,7 @@ python -c "
 import pathlib, sys
 base = pathlib.Path(r'{project_dir}') / 'scripts' / 'python' / 'sf-doc-mcp'
 missing = []
-for name in ['プログラム設計書テンプレート.xlsx', '画面プログラム設計書テンプレート.xlsx']:
+for name in ['プログラム設計書テンプレート.xlsx', 'プログラム設計書（画面）テンプレート.xlsx']:
     if not (base / name).exists():
         missing.append(name)
 if missing:
@@ -165,7 +165,7 @@ if missing:
         print(f'ERROR: {m} が見つかりません。')
     print('  /upgrade を実行してテンプレートを取得してください。')
     sys.exit(1)
-print('テンプレート確認OK: プログラム設計書テンプレート.xlsx / 画面プログラム設計書テンプレート.xlsx')
+print('テンプレート確認OK: プログラム設計書テンプレート.xlsx / プログラム設計書（画面）テンプレート.xlsx')
 "
 ```
 
