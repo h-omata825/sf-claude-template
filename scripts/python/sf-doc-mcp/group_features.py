@@ -144,6 +144,55 @@ def extract_flow_deps(flow_path: Path, all_api_names: set) -> set:
     return deps
 
 
+def extract_visualforce_deps(page_path: Path, all_api_names: set) -> set:
+    """Visualforceページから参照しているApexクラス名を抽出する。
+
+    page-meta.xml 内の controller="..." / extensions="..." 属性を読む。
+    extensions は複数指定可（カンマ区切り）。
+    """
+    deps = set()
+    try:
+        text = page_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return deps
+
+    # controller="ClassName"
+    for m in re.finditer(r'\bcontroller\s*=\s*["\']([A-Za-z0-9_]+)["\']', text):
+        if m.group(1) in all_api_names:
+            deps.add(m.group(1))
+
+    # extensions="ClassA,ClassB"
+    for m in re.finditer(r'\bextensions\s*=\s*["\']([^"\']+)["\']', text):
+        for cls in m.group(1).split(","):
+            cls = cls.strip()
+            if cls in all_api_names:
+                deps.add(cls)
+
+    return deps
+
+
+def extract_aura_deps(comp_dir: Path, all_api_names: set) -> set:
+    """Auraコンポーネントから参照しているApexクラス名を抽出する。
+
+    {name}.cmp の <aura:component controller="ClassName"> を読む。
+    """
+    deps = set()
+    cmp_file = comp_dir / f"{comp_dir.name}.cmp"
+    if not cmp_file.exists():
+        return deps
+    try:
+        text = cmp_file.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return deps
+
+    # <aura:component controller="ClassName">
+    for m in re.finditer(r'\bcontroller\s*=\s*["\']([A-Za-z0-9_]+)["\']', text):
+        if m.group(1) in all_api_names:
+            deps.add(m.group(1))
+
+    return deps
+
+
 # ── Union-Find ────────────────────────────────────────────────────
 
 class _UnionFind:
@@ -202,6 +251,12 @@ def build_groups(features: list, project_dir: Path) -> list:
         elif ftype in ("Flow", "画面フロー"):
             if source_path and source_path.exists():
                 deps = extract_flow_deps(source_path, all_api_names)
+        elif ftype == "Visualforce":
+            if source_path and source_path.exists():
+                deps = extract_visualforce_deps(source_path, all_api_names)
+        elif ftype == "Aura":
+            if source_path and source_path.is_dir():
+                deps = extract_aura_deps(source_path, all_api_names)
 
         for dep in deps:
             if dep != api_name:
@@ -228,6 +283,10 @@ def build_groups(features: list, project_dir: Path) -> list:
             deps = extract_lwc_deps(source_path, all_api_names)
         elif ftype in ("Flow", "画面フロー") and source_path and source_path.exists():
             deps = extract_flow_deps(source_path, all_api_names)
+        elif ftype == "Visualforce" and source_path and source_path.exists():
+            deps = extract_visualforce_deps(source_path, all_api_names)
+        elif ftype == "Aura" and source_path and source_path.is_dir():
+            deps = extract_aura_deps(source_path, all_api_names)
         for dep in deps:
             ref_count[dep].add(group_roots[api_name])
 
