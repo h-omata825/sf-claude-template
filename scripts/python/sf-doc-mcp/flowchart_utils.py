@@ -37,15 +37,20 @@ def auto_enrich_steps(steps: list) -> None:
 
     補完内容:
     1. branch が設定されているステップの node_type を "decision" に強制
-    2. SOQL サブステップの FROM 句からオブジェクト名を抽出して object_ref を補完
-    3. DML サブステップの「対象: ObjectName」パターンから object_ref を補完
+    2. title に「〇〇を呼び出す」パターンがある場合に calls を自動補完
+    3. SOQL サブステップの FROM 句からオブジェクト名を抽出して object_ref を補完
+    4. DML サブステップの「対象: ObjectName」パターンから object_ref を補完
 
-    エージェントが node_type や object_ref を省略しても最低限の図形分類が保証される。
+    エージェントが node_type / calls / object_ref を省略しても最低限の図形分類が保証される。
     """
     import re as _re
     _FROM    = _re.compile(r'\bFROM\s+(\w+)', _re.IGNORECASE)
     _TARGET  = _re.compile(r'対象[：:]\s*(\w+)')
     _SF_NAME = _re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
+    # 「XxxController/Service/Handler/Flow を呼び出す」パターン（英語識別子）
+    _CALL_EN  = _re.compile(r'^([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)?)\s*を呼び出す')
+    # 「サブフロー / フロー を呼び出す」パターン（日本語）
+    _CALL_SUB = _re.compile(r'サブフロー.*を呼び出す|フローを呼び出す')
 
     _EXCEPTION_LABELS = {"catch", "throw", "finally", "error"}
 
@@ -58,7 +63,16 @@ def auto_enrich_steps(steps: list) -> None:
             if br_label not in _EXCEPTION_LABELS:
                 step["node_type"] = "decision"
 
-        # 2-3. object_ref の自動補完（calls/branch/object_ref が既に設定済みなら不要）
+        # 2. calls の自動補完（title に「を呼び出す」が含まれる場合）
+        if not step.get("calls"):
+            title = step.get("title", "") or step.get("text", "")
+            m = _CALL_EN.match(title)
+            if m:
+                step["calls"] = {"text": m.group(1)}
+            elif _CALL_SUB.search(title):
+                step["calls"] = {"text": "サブフロー"}
+
+        # 3-4. object_ref の自動補完（calls/branch/object_ref が既に設定済みなら不要）
         if step.get("object_ref") or step.get("calls") or step.get("branch"):
             continue
         for sub in step.get("sub_steps", []):
@@ -207,6 +221,7 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
             "branch": step.get("branch"),
             "main_label": step.get("main_label"),
             "object_ref": step.get("object_ref"),
+            "calls": step.get("calls"),
         })
     if add_start_end:
         nodes.append({"type": "end", "text": "終了"})
