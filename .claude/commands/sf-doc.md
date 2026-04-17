@@ -167,14 +167,29 @@ for k, p in paths.items():
 出力先サブフォルダを作成してから実行:
 ```bash
 mkdir -p "{ROOT}/プロジェクト概要書"
+```
+
+**① プロジェクト概要書**（表紙・概要・システム構成図を含む PPTX）:
+```bash
 python scripts/python/sf-doc-mcp/generate_project_doc.py \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{ROOT}/プロジェクト概要書" \
   --author "{作成者名}"
 ```
 
+**② 業務フロー図**（Mermaid ベース・フロー別スライド PPTX）:
+```bash
+python scripts/python/sf-doc-mcp/generate_flow_pptx.py \
+  --docs-dir "{カレントディレクトリ}/docs" \
+  --output-dir "{ROOT}/プロジェクト概要書" \
+  --author "{作成者名}"
+```
+
+`swimlanes.json` が存在しない場合は ② をスキップし、その旨をユーザーに伝える。
+
 完了後、出力パスを表示:
-- `{ROOT}/プロジェクト概要書/業務フロー図.pptx`
+- `{ROOT}/プロジェクト概要書/プロジェクト概要書.pptx`
+- `{ROOT}/プロジェクト概要書/業務フロー図.pptx`（`swimlanes.json` が存在する場合のみ）
 
 ---
 
