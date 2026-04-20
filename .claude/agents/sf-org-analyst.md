@@ -660,7 +660,7 @@ docs/design/{種別フォルダ}/【{機能ID}】{機能名-kebab-case}.md
 
 **設計書テンプレート（基本構造）**:
 
-```markdown
+````markdown
 # {機能名}
 
 ## 概要
@@ -676,69 +676,27 @@ docs/design/{種別フォルダ}/【{機能ID}】{機能名-kebab-case}.md
 
 ## スコープ・ユーザーストーリー
 
-（「As a {役割}, I want {目的}, so that {理由}」形式で記述。
-  要件定義書にFRが存在すればそれを引用。なければコードから推定し `**[推定]**` を付ける）
-
-### 関連要件
-
-| 要件番号 | 要件名 | 関係 |
-|---|---|---|
-| FR-XXX | ... | 主要件 / 関連 / 非機能要件 |
-
-### 関連設計書
-
-| 設計書 | パス | 関係 |
-|---|---|---|
-
 ## 実現方式
-
-### 方式選定
-
-| 選択肢 | 方式 | メリット | デメリット | 判定 |
-|---|---|---|---|---|
-| A | ... | | | **採用** |
-| B | ... | | | 非採用 |
-
-（既存実装の逆引きの場合は「採用済み」として記述。なぜこの方式になっているかをコードから推定する）
 
 ### 処理フロー
 
 ```mermaid
 flowchart TD
     A[開始] --> B[...]
-    B --> C{条件分岐}
-    C -->|Yes| D[...]
-    C -->|No| E[...]
 ```
 
-（複数の処理経路がある場合は経路ごとにフロー図を分ける）
-
 ## メソッド一覧 / コンポーネントプロパティ
-
-（Apex: 全メソッドを記述 / LWC: @api/@track プロパティ・公開メソッド・イベント / Flow: 入力変数・出力変数）
 
 | メソッド名 / プロパティ名 | 種別 | 引数 / 型 | 戻り値 | 概要 |
 |---|---|---|---|---|
 
 ## データ設計（入出力・項目マッピング）
 
-（SOQLクエリ対象・DML操作・パラメーターマッピング・項目順序を含む）
-
 ## ロジック設計（分岐・条件・計算式）
-
-（主要な条件分岐・ビジネスルール・計算式を記述。コードから逐語的に抽出する）
 
 ## バリデーション・エラー処理
 
 ## 権限設計
-
-（with/without sharing・プロファイル・権限セット・ゲストユーザー考慮）
-
-## 外部連携（該当する場合）
-
-## ガバナ制限・パフォーマンス考慮
-
-（SOQL件数・DML件数・HTTPコールアウト回数を定量的に記述）
 
 ## 影響範囲・依存関係
 
@@ -747,11 +705,7 @@ flowchart TD
 ## 未解決事項・要確認
 
 - [ ] ...
-
-## 受入基準
-
-- ...
-```
+````
 
 **実装種別ごとの追加指示**:
 
@@ -767,7 +721,6 @@ flowchart TD
 - `js` ファイルを全文読み込み、**全 `@api` / `@track` プロパティ・公開メソッド・発火イベント**をリストアップする
 - 「用途・表示場所」テーブルを必ず含める（どのページに配置されているか）
 - コンポーネントの**親子関係（子コンポーネント・使用先LWC）**を依存関係に明記する
-- 処理フロー図は「ユーザーアクション → LWCイベント → Apex呼び出し → 結果反映」の流れで図示する
 
 ### Flow（Screen Flow / AutoLaunched Flow）
 
@@ -784,9 +737,112 @@ flowchart TD
 
 ---
 
+## カテゴリ 5: 機能グループ定義
+
+### 生成ファイル
+
+```
+docs/_src/
+└── feature_groups.yml    # 業務機能グループ定義（詳細設計の生成単位）
+```
+
+### 目的
+
+Apex命名規則・Flow・LWC・既存docs/を横断的に読み込み、**業務機能グループ（FG）** を推論してYAML形式で保存する。
+FGは `sf-design [1] 詳細設計` の1ファイル生成単位となる（1FG = 1詳細設計.xlsx）。
+
+### スキーマ
+
+```yaml
+feature_groups:
+  - id: "FG-001"            # FG-001〜 で採番
+    name: "商談受注後処理"   # 業務担当者が呼ぶ名前（Apex名ではなく業務名）
+    description: "商談がクローズ受注になった際に後続処理（契約作成・通知等）を実行する機能群"
+    trigger: "商談ステージが「受注」に変更された時"
+    components:             # 関連するコンポーネントのAPI名
+      - "OpportunityTrigger"
+      - "OpportunityTriggerHandler"
+      - "ContractCreationFlow"
+    related_objects:        # 主に操作するSalesforceオブジェクト
+      - "Opportunity"
+      - "Contract__c"
+      - "Account"
+```
+
+### Phase 0: 実行モード判定
+
+`docs/_src/feature_groups.yml` が存在するか確認する。
+
+**存在しない → 初回生成モード**: Phase 1 から全量生成する。
+**存在する → 差分更新モード**: 既存YAMLを読み込み、新規コンポーネントの追加・既存FGへの割り当てのみ行う。手動修正は保持する。
+
+### Phase 1: コンポーネント一覧の収集
+
+```bash
+# Apexクラス一覧（テストクラス除外）
+sf data query -q "SELECT Name FROM ApexClass WHERE NamespacePrefix = null AND Name NOT LIKE '%Test%' ORDER BY Name" --json
+
+# Apexトリガー一覧
+sf data query -q "SELECT Name, TableEnumOrId FROM ApexTrigger WHERE NamespacePrefix = null" --json
+
+# フロー一覧
+sf data query -q "SELECT ApiName, ProcessType, Label FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json
+
+# LWC一覧
+sf data query -q "SELECT DeveloperName FROM LightningComponentBundle WHERE NamespacePrefix = null ORDER BY DeveloperName" --json
+```
+
+force-app/ 配下のApexクラスの命名規則（プレフィックス・サフィックス・ハンドラ対応関係）も確認する:
+```bash
+ls force-app/main/default/classes/ 2>/dev/null || dir force-app\\main\\default\\classes
+```
+
+### Phase 2: 業務機能グループの推論
+
+以下の情報を総合してFGを特定する:
+
+**推論ソース（優先順位順）**:
+1. `docs/overview/org-profile.md` / `docs/requirements/requirements.md` — 業務用語・UC名
+2. `docs/flow/usecases.md` — 業務ユースケース一覧
+3. `docs/design/` 配下の既存設計書 — コンポーネントの業務目的
+4. Apexクラス名のプレフィックス/サフィックスパターン（例: `Opportunity*`, `Contract*`）
+5. フロー名・LWC名の命名パターン / Apexトリガーの対象オブジェクト
+
+**推論ルール**:
+- 同一オブジェクトを中心に動くコンポーネント群は同一FGにまとめる候補
+- ハンドラパターン（`*Trigger` + `*TriggerHandler` + `*Service`）は1FGとしてグループ化
+- 機能的に独立した処理（認証・通知・バッチ等）は個別FGとして分離
+- 目安: 1プロジェクトあたり5〜20 FG
+
+### Phase 3: YAMLの生成
+
+`docs/_src/` フォルダが存在しない場合は作成してからYAMLを書き込む。
+
+```yaml
+# docs/_src/feature_groups.yml
+# sf-memoryカテゴリ5が生成。sf-design[1]詳細設計の生成単位。
+# 手動追記・修正可（次回実行時に保持される）
+generated_at: "YYYY-MM-DD"
+feature_groups:
+  - id: "FG-001"
+    name: "<業務名>"
+    description: "<業務観点の説明>"
+    trigger: "<いつ・何をきっかけに動くか>"
+    components:
+      - "<コンポーネントAPI名>"
+    related_objects:
+      - "<オブジェクトAPI名>"
+```
+
+### Phase 4: 変更履歴の記録
+
+`docs/logs/changelog.md` にカテゴリ5実行履歴を追記する。
+
+---
+
 ## 全て選択時: 2周目（横断的補完）
 
-全4カテゴリの1周目完了後に実行する。
+全5カテゴリの1周目完了後に実行する。
 
 1. 生成した全 docs/ ファイルを読み込む（`docs/architecture/system.json` と `docs/flow/swimlanes.json` / `docs/flow/usecases.md` も含む）
 2. 以下を検出して修正・補完する:
@@ -794,8 +850,8 @@ flowchart TD
    - **矛盾の解消**: org-profile の用語集とカタログの項目名が一致していない等
    - **情報の補完**: 1つのカテゴリで「要確認」だった事項を他カテゴリの情報で埋められる場合
    - **関連付けの強化**: 設計書 ↔ カタログ ↔ 要件定義書 ↔ usecases.md ↔ swimlanes.json の相互参照を補完
-   - **フロー ↔ 設計書の対応付け**: swimlanes.json のステップが、どのApex/Flow/LWC設計書と対応するかを確認
-   - **system.json ↔ Integration設計書の整合**: 外部連携先の名前・方式・頻度が一致しているか
+   - **フロー ↔ feature_groups の対応付け**: swimlanes.json のステップが、どのFGと対応するかを確認。FGに紐づくコンポーネントが漏れていれば補完する
+   - **system.json ↔ feature_groups の整合**: 外部連携コンポーネントが適切なFGに割り当てられているか確認
 3. 修正・補完した内容を各ファイルに反映する
 
 ---
