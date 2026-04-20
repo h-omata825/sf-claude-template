@@ -131,52 +131,48 @@ except Exception as e:
 
 ---
 
-## Step 1: 基本設計（選択した場合）
+## Step 0-3: 事前確認（「全て」選択時のみ・ここで全質問を終わらせる）
 
-```bash
-mkdir -p "{ROOT}/基本設計書" && mkdir -p "{ROOT}/基本設計書/.tmp"
-```
-
-`output_dir` = `{ROOT}/基本設計書`、`tmp_dir` = `{ROOT}/基本設計書/.tmp`
+> **「全て」を選択した場合はこのセクションを実行する。** 基本・詳細・プログラム設計で必要な対象グループを一括で決定し、以降の Step では一切ユーザーへの確認を行わない。
 
 ### feature_groups.yml の生成
 
-毎回再生成する（force-app/ の最新状態を反映するため）:
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
   --project-dir "{project_dir}" \
   --output "{project_dir}/docs/.sf/feature_groups.yml"
 ```
 
-### 対象グループの選択
-
-feature_groups.yml の内容を表示して確認してもらう:
+グループ一覧を表示:
 ```bash
 python -c "
-import yaml, json
+import yaml
 with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
     groups = yaml.safe_load(f)
 for g in groups:
     print(f\"{g['group_id']}: {g['name_ja']} ({len(g.get('feature_ids', []))}コンポーネント)\")
+print(f'合計: {len(groups)} グループ')
 "
 ```
 
-AskUserQuestion で対象を選択する:
-- 全グループ — feature_groups.yml に含まれる全グループを処理
-- グループIDを指定 — GRP-XXX をカンマ区切りで入力（次の質問で聞く）
-- コンポーネントを指定 — Apex名・LWC名・F-XXX等で指定してグループに変換する（次の質問で聞く）
+### 対象グループの選択（基本・詳細・プログラム共通）
 
-「グループIDを指定」を選択した場合は、チャットでグループIDを聞く:
+AskUserQuestion で選択する:
+- 全グループ — 全グループを対象（基本・詳細・プログラム全て）
+- グループIDを指定 — GRP-XXX をカンマ区切りで入力（次の質問で聞く）
+- コンポーネントを指定 — Apex名・LWC名・F-XXX等で指定（次の質問で聞く）
+
+「グループIDを指定」の場合:
 ```
 対象グループIDをカンマ区切りで入力してください（例: GRP-001,GRP-003）:
 ```
 
-「コンポーネントを指定」を選択した場合は、チャットでコンポーネント名を聞く:
+「コンポーネントを指定」の場合:
 ```
 対象コンポーネント名または機能IDをカンマ区切りで入力してください（例: QuotationRequestController,F-012）:
 ```
 
-入力後、以下のスクリプトで GRP-XXX に変換する:
+入力後、以下のスクリプトで GRP-XXX に変換する（グループ解決スクリプト）:
 ```bash
 python -c "
 import yaml, sys, pathlib
@@ -222,7 +218,64 @@ for e in errors:
 "
 ```
 
-出力の `group_id:` 以降を `target_group_ids_1` として保存する。`error:` がある場合はユーザーに確認する。
+出力の `group_id:` 以降を **`target_group_ids`** として保存する（基本・詳細・プログラム設計で共通使用）。`error:` がある場合はユーザーに確認する。
+
+確定後、ユーザーに伝える:
+```
+確認完了。基本設計 → 詳細設計 → プログラム設計の順に自動生成を開始します。以降は完了まで待機してください。
+```
+
+---
+
+## Step 1: 基本設計（選択した場合）
+
+```bash
+mkdir -p "{ROOT}/基本設計書" && mkdir -p "{ROOT}/基本設計書/.tmp"
+```
+
+`output_dir` = `{ROOT}/基本設計書`、`tmp_dir` = `{ROOT}/基本設計書/.tmp`
+
+**「全て」モードの場合**: feature_groups.yml は Step 0-3 で生成済み。`target_group_ids_1 = target_group_ids`（Step 0-3 で確定済み）。グループ選択をスキップして委譲へ進む。
+
+**単独実行の場合**: 以下を実行する。
+
+### feature_groups.yml の生成（単独実行時のみ）
+
+```bash
+python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
+  --project-dir "{project_dir}" \
+  --output "{project_dir}/docs/.sf/feature_groups.yml"
+```
+
+### 対象グループの選択（単独実行時のみ）
+
+feature_groups.yml の内容を表示:
+```bash
+python -c "
+import yaml
+with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
+    groups = yaml.safe_load(f)
+for g in groups:
+    print(f\"{g['group_id']}: {g['name_ja']} ({len(g.get('feature_ids', []))}コンポーネント)\")
+"
+```
+
+AskUserQuestion で対象を選択する:
+- 全グループ — feature_groups.yml に含まれる全グループを処理
+- グループIDを指定 — GRP-XXX をカンマ区切りで入力（次の質問で聞く）
+- コンポーネントを指定 — Apex名・LWC名・F-XXX等で指定してグループに変換する（次の質問で聞く）
+
+「グループIDを指定」の場合:
+```
+対象グループIDをカンマ区切りで入力してください（例: GRP-001,GRP-003）:
+```
+
+「コンポーネントを指定」の場合:
+```
+対象コンポーネント名または機能IDをカンマ区切りで入力してください（例: QuotationRequestController,F-012）:
+```
+
+グループ解決スクリプト（Step 0-3 と同じスクリプト）を実行し、結果を `target_group_ids_1` として保存する。
 
 ### 委譲
 
@@ -250,16 +303,13 @@ mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
 
 ### 対象グループの選択
 
-**Step 1（基本設計）を実行した場合**: AskUserQuestion で対象を選択する:
-- 全グループ — feature_groups.yml に含まれる全グループを処理
-- 基本設計と同じ（`{target_group_ids_1}`）— Step 1 で選択したグループをそのまま使用（**デフォルト**）
-- その他指定 — グループIDまたはコンポーネント名をカンマ区切りで入力（次の質問で聞く）
+**「全て」モードの場合**: `target_group_ids_2 = target_group_ids`（Step 0-3 確定済み）。選択をスキップして委譲へ進む。
 
-**Step 1 を実行していない場合（詳細設計のみ選択した場合）**: 「基本設計と同じ」の選択肢は表示しない。代わりに Step 1 の「対象グループの選択」と同じ手順（feature_groups.yml 読み込み → AskUserQuestion）で `target_group_ids_2` を決定する。
+**単独実行の場合**:
+- Step 1 を実行した場合: AskUserQuestion で選択する（全グループ / 基本設計と同じ / その他指定）
+- Step 1 を実行していない場合: 「基本設計と同じ」の選択肢は表示しない。feature_groups.yml 読み込み → AskUserQuestion で決定する
 
-「全グループ」を選択した場合は `target_group_ids_2 = []`。
-「基本設計と同じ」を選択した場合は `target_group_ids_2 = target_group_ids_1`。
-「その他指定」を選択した場合は、チャットでグループIDまたはコンポーネント名を聞き、Step 1 と同様のスクリプトで GRP-XXX に変換して `target_group_ids_2` とする。
+「その他指定」を選択した場合は Step 1 と同様のグループ解決スクリプトで GRP-XXX に変換して `target_group_ids_2` とする。
 
 **基本設計 JSON の参照**: Step 1 完了後は `basic_design_json_dir = "{ROOT}/基本設計書/.tmp"` を変数として保持する。sf-detail-design-writer はこのディレクトリから `{group_id}_basic.json` を自動参照する。
 
@@ -313,19 +363,13 @@ for t, n in sorted(cnt.items()): print(f'  {t}: {n}件')
 
 ### 対象機能の選択
 
-AskUserQuestion で対象を選択する:
-- 全機能 — スキャンで検出した全コンポーネントを処理
-- 詳細設計と同じグループのコンポーネント（`{target_group_ids_2}` に属する機能）— **デフォルト**
-- その他指定 — 機能IDをカンマ区切りで入力（次の質問で聞く）
-
-「全機能」を選択した場合は `target_ids = []`（全件処理）。
-「詳細設計と同じグループ」を選択した場合は、feature_groups.yml と feature_ids.yml を参照して `target_group_ids_2` に属する機能IDを抽出する:
+**「全て」モードの場合**: Step 0-3 で確定した `target_group_ids` に属する機能IDを自動抽出する。AskUserQuestion は出さない。
 ```bash
 python -c "
-import yaml, json, pathlib
+import yaml, pathlib
 with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
     groups = yaml.safe_load(f)
-target_groups = {r'{target_group_ids_2}'.replace(\"'\", '').split(',')} if r'{target_group_ids_2}' else set()
+target_groups = set(r'{target_group_ids}'.split(',')) if r'{target_group_ids}'.strip() else set()
 fids = []
 for g in groups:
     if not target_groups or g['group_id'] in target_groups:
@@ -335,14 +379,13 @@ for fid in fids:
 print(f'total:{len(fids)}件')
 "
 ```
-出力の `feature_id:` 以降を `target_ids` として使用する。`target_group_ids_2` が空（全グループ）の場合は `target_ids = []`。
+出力の `feature_id:` 以降を `target_ids` として使用する。`target_group_ids` が空（全グループ）の場合は `target_ids = []`。
 
-「その他指定」を選択した場合は、チャットで機能IDを聞く:
-```
-対象の機能IDをカンマ区切りで入力してください（例: F-001,F-003）:
-```
+**単独実行の場合**: AskUserQuestion で対象を選択する:
+- 全機能 — スキャンで検出した全コンポーネントを処理
+- その他指定 — 機能IDをカンマ区切りで入力（次の質問で聞く）
 
-> Step 2 を実行していない場合（プログラム設計のみ選択した場合）は「全機能」か「その他指定」の2択で聞く。
+> Step 2 を実行していない場合（プログラム設計のみ選択した場合）も同様に「全機能」か「その他指定」の2択。
 
 ### feature_list の読み込み
 
