@@ -940,7 +940,7 @@ def generate_flowchart(
     """処理フローチャートを生成する（詳細設計書 処理概要用）。
 
     process_steps: [{"step": 1, "title": "処理名", "description": "説明",
-                     "branch": null, "soql": "...", "dml": "...",
+                     "component": "ControllerName", "branch": null,
                      "next": [{"condition": null, "to": 2}]}]
     """
     if not HAS_MPL or not process_steps:
@@ -949,7 +949,7 @@ def generate_flowchart(
     from matplotlib.patches import Polygon
 
     n_steps = len(process_steps)
-    y_gap = 2.2
+    y_gap = 2.0
     fig_h = max(6, n_steps * y_gap + 1.5)
     center_x = fig_w / 2
 
@@ -962,8 +962,8 @@ def generate_flowchart(
     # ステップ位置
     step_positions: dict[int, tuple[float, float]] = {}
     step_is_branch: dict[int, bool] = {}
-    box_w, box_h = 4.0, 1.2
-    diamond_w, diamond_h = 3.0, 1.2
+    box_w, box_h = 3.5, 1.0
+    diamond_w, diamond_h = 3.5, 1.2
 
     for idx, ps in enumerate(process_steps):
         step_no = ps.get("step", idx + 1)
@@ -975,14 +975,14 @@ def generate_flowchart(
     for idx, ps in enumerate(process_steps):
         step_no = ps.get("step", idx + 1)
         title = ps.get("title", "")
-        desc = ps.get("description", "")
+        component = ps.get("component", "")
         is_branch = bool(ps.get("branch"))
         cx, cy = step_positions[step_no]
 
-        label_text = f"{step_no}. {title}"
-        if desc:
-            short_desc = desc[:40] + "..." if len(desc) > 40 else desc
-            label_text += f"\n{short_desc}"
+        # ボックス表示: [step] title + component
+        label_text = f"[{step_no}] {title}"
+        if component:
+            label_text += f"\n{component}"
 
         if is_branch:
             # 菱形（ダイヤモンド）
@@ -997,8 +997,8 @@ def generate_flowchart(
                               linewidth=1.5, zorder=2)
             ax.add_patch(diamond)
             ax.text(cx, cy, _dom_wrap(label_text, 16),
-                    ha="center", va="center", fontsize=7,
-                    color="#1F3864", **_fpkw(7.0, bold=True), zorder=3)
+                    ha="center", va="center", fontsize=8,
+                    color="#1F3864", **_fpkw(8.0, bold=True), zorder=3)
         else:
             # 長方形Box
             ax.add_patch(FancyBboxPatch(
@@ -1008,8 +1008,8 @@ def generate_flowchart(
                 zorder=2,
             ))
             ax.text(cx, cy, _dom_wrap(label_text, 22),
-                    ha="center", va="center", fontsize=7,
-                    color="#1F3864", **_fpkw(7.0), zorder=3)
+                    ha="center", va="center", fontsize=8,
+                    color="#1F3864", **_fpkw(8.0), zorder=3)
 
     # 矢印
     for ps in process_steps:
@@ -1028,9 +1028,8 @@ def generate_flowchart(
             cx1, cy1 = step_positions[to_step]
 
             if is_branch and len(nexts) > 1:
-                # 分岐矢印: 1本目は真下、2本目は右にオフセット
                 if ni == 0:
-                    # 真下（通常矢印と同じ）
+                    # 1件目: 真下に矢印、conditionラベルを左に表示
                     y_from = cy0 + diamond_h / 2 + 0.05
                     y_to = cy1 - box_h / 2 - 0.05
                     ax.annotate(
@@ -1042,15 +1041,15 @@ def generate_flowchart(
                     if condition:
                         my = (y_from + y_to) / 2
                         ax.text(cx0 - 0.3, my, condition,
-                                ha="right", va="center", fontsize=6.5,
-                                color="#C55A11", **_fpkw(6.5, bold=True),
-                                bbox=dict(boxstyle="round,pad=0.12", facecolor="#FFF2CC",
-                                          edgecolor="#C55A11", linewidth=0.6, alpha=0.9))
+                                ha="right", va="center", fontsize=8,
+                                color="#333333",
+                                bbox=dict(boxstyle="round,pad=0.2",
+                                          fc="white", ec="none"))
                 else:
-                    # 右にオフセットして下の行へ
-                    mid_x = cx0 + diamond_w / 2 + 3.5
-                    y_from = cy0
-                    y_to = cy1
+                    # 2件目: 菱形の右端→右→下→左 の折れ線矢印
+                    # conditionラベルを右に表示
+                    offset_x = 1.5 + ni * 0.3  # 複数の折れ線が重ならないようオフセット
+                    mid_x = cx0 + diamond_w / 2 + offset_x
                     pts_line = [
                         (cx0 + diamond_w / 2, cy0),
                         (mid_x, cy0),
@@ -1067,17 +1066,17 @@ def generate_flowchart(
                         zorder=4,
                     )
                     if condition:
-                        lx = (pts_line[0][0] + pts_line[1][0]) / 2
-                        ly = pts_line[0][1] - 0.2
+                        lx = mid_x + 0.15
+                        ly = (cy0 + cy1) / 2
                         ax.text(lx, ly, condition,
-                                ha="center", va="bottom", fontsize=6.5,
-                                color="#C55A11", **_fpkw(6.5, bold=True),
-                                bbox=dict(boxstyle="round,pad=0.12", facecolor="#FFF2CC",
-                                          edgecolor="#C55A11", linewidth=0.6, alpha=0.9))
+                                ha="left", va="center", fontsize=8,
+                                color="#333333",
+                                bbox=dict(boxstyle="round,pad=0.2",
+                                          fc="white", ec="none"))
             else:
                 # 通常の下向き矢印
                 y_from = cy0 + (diamond_h / 2 if is_branch else box_h / 2) + 0.05
-                y_to = cy1 - box_h / 2 - 0.05
+                y_to = cy1 - (diamond_h / 2 if step_is_branch.get(to_step) else box_h / 2) - 0.05
                 ax.annotate(
                     "", xy=(cx1, y_to), xytext=(cx0, y_from),
                     arrowprops=dict(arrowstyle="-|>", color="#1F3864",
@@ -1087,11 +1086,13 @@ def generate_flowchart(
                 if condition:
                     my = (y_from + y_to) / 2
                     ax.text(cx0 + 0.3, my, condition,
-                            ha="left", va="center", fontsize=6.5,
-                            color="#C55A11", **_fpkw(6.5, bold=True))
+                            ha="left", va="center", fontsize=8,
+                            color="#333333",
+                            bbox=dict(boxstyle="round,pad=0.2",
+                                      fc="white", ec="none"))
 
     plt.tight_layout(pad=0.3)
-    plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
+    plt.savefig(out_path, dpi=96, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return True
 

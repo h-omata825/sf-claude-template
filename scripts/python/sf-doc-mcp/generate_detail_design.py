@@ -11,7 +11,7 @@
   2. 概要               : 機能名 / 機能概要 / 目的 / 利用者 / 起点画面 / 操作トリガー
   3. 業務フロー         : スイムレーン図PNG + フロー表(No/アクター/処理内容/分岐条件)
   4. 対象オブジェクト   : ER図PNG + 項目表(オブジェクト名/項目API名/項目ラベル/読み書き区分/備考)
-  5. 処理概要           : フローチャートPNG + 処理表(ステップNo/処理内容/条件分岐/SOQL概要/DML操作)
+  5. 処理概要           : フローチャートPNG + 処理表(No/処理内容/コンポーネント/分岐条件)
   6. 関連コンポーネント : コンポーネント図PNG + 一覧表(コンポーネント名/種別/役割/依存方向)
   7. 影響範囲           : 5セクション(更新/参照オブジェクト、関連Apex等、外部連携、他機能依存)
 
@@ -106,10 +106,9 @@ OBJ_NOTE_CS,  OBJ_NOTE_CE  = 24, 31
 PROC_IMG_ANCHOR     = "B27"
 PROC_DATA_ROW_START = 5
 PROC_STEP_CS, PROC_STEP_CE = 2,  3
-PROC_DESC_CS, PROC_DESC_CE = 4,  13
-PROC_COND_CS, PROC_COND_CE = 14, 19
-PROC_SOQL_CS, PROC_SOQL_CE = 20, 25
-PROC_DML_CS,  PROC_DML_CE  = 26, 31
+PROC_DESC_CS, PROC_DESC_CE = 4,  15
+PROC_COMP_CS, PROC_COMP_CE = 16, 22
+PROC_COND_CS, PROC_COND_CE = 23, 31
 
 # 関連コンポーネント: 表上・図下レイアウト
 # テーブル: row3=バンド, row4=ヘッダ, row5〜19=データ(15行)
@@ -292,20 +291,19 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
         set_h(ws, r, 30)
 
         desc_text = f"{ps.get('title', '')}\n{ps.get('description', '')}".strip()
+        component = ps.get("component") or ""
         branch = ps.get("branch") or ""
 
         c1 = MW(ws, r, PROC_STEP_CS, PROC_STEP_CE, step_no,
                 border=B_all(), h="center")
         c2 = MW(ws, r, PROC_DESC_CS, PROC_DESC_CE, desc_text,
                 border=B_all(), wrap=True, v="top")
-        c3 = MW(ws, r, PROC_COND_CS, PROC_COND_CE, branch,
+        c3 = MW(ws, r, PROC_COMP_CS, PROC_COMP_CE, component,
                 border=B_all(), wrap=True, v="top")
-        c4 = MW(ws, r, PROC_SOQL_CS, PROC_SOQL_CE, ps.get("soql") or "",
-                border=B_all(), wrap=True, v="top")
-        c5 = MW(ws, r, PROC_DML_CS,  PROC_DML_CE,  ps.get("dml") or "",
+        c4 = MW(ws, r, PROC_COND_CS, PROC_COND_CE, branch,
                 border=B_all(), wrap=True, v="top")
         if is_changed:
-            for c in (c1, c2, c3, c4, c5):
+            for c in (c1, c2, c3, c4):
                 dr.apply_red(c)
         r += 1
 
@@ -341,34 +339,64 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
         r += 1
 
 
-def fill_impact_scope(ws, data: dict):
-    """影響範囲シート: 5セクションに値を書き込む。"""
-    impact = data.get("impact", {})
+def _build_obj_field_map(data: dict) -> dict[str, dict[str, list[str]]]:
+    """related_objects から {obj_api: {"W": [field_names], "R": [field_names]}} を構築する。
 
-    def _fill_simple_list(items: list, start_row: int, name_cs: int, name_ce: int):
-        """1列だけのシンプルなリスト書き込み。"""
-        r = start_row
-        for item in items:
-            set_h(ws, r, 22)
-            MW(ws, r, name_cs, name_ce, item, border=B_all())
-            r += 1
+    access が "W" → W のみ, "R" → R のみ, "RW" → 両方に含める。
+    """
+    result: dict[str, dict[str, list[str]]] = {}
+    for obj in data.get("related_objects", []):
+        api = obj.get("api_name", "")
+        w_fields: list[str] = []
+        r_fields: list[str] = []
+        for f in obj.get("fields", []):
+            access = f.get("access", "")
+            fname = f.get("label") or f.get("api_name", "")
+            if access in ("W", "RW"):
+                w_fields.append(fname)
+            if access in ("R", "RW"):
+                r_fields.append(fname)
+        result[api] = {"W": w_fields, "R": r_fields}
+    return result
+
+
+def _build_comp_role_map(data: dict) -> dict[str, str]:
+    """components から {api_name: role} マップを構築する。"""
+    return {c.get("api_name", ""): c.get("role", "") for c in data.get("components", [])}
+
+
+def fill_impact_scope(ws, data: dict):
+    """影響範囲シート: 5セクションに値を書き込む。
+
+    related_objects の fields 情報から更新項目・参照項目を導出する。
+    components から関連Apex/Flow/LWC の関連内容(role)を導出する。
+    """
+    impact = data.get("impact", {})
+    obj_field_map = _build_obj_field_map(data)
+    comp_role_map = _build_comp_role_map(data)
 
     # 更新オブジェクト: col 2-9=名前, 10-20=更新項目, 21-31=更新条件
     r = IMPACT_UPDATE_OBJ_START
     for obj_name in impact.get("update_objects", []):
         set_h(ws, r, 22)
-        MW(ws, r, 2,  9,  obj_name, border=B_all())
-        MW(ws, r, 10, 20, "",       border=B_all())
-        MW(ws, r, 21, 31, "",       border=B_all())
+        # 更新項目を related_objects から導出
+        w_fields = obj_field_map.get(obj_name, {}).get("W", [])
+        update_fields_text = ", ".join(w_fields) if w_fields else ""
+        MW(ws, r, 2,  9,  obj_name,           border=B_all())
+        MW(ws, r, 10, 20, update_fields_text,  border=B_all(), wrap=True)
+        MW(ws, r, 21, 31, "",                  border=B_all())
         r += 1
 
     # 参照オブジェクト: col 2-9=名前, 10-20=参照項目, 21-31=参照目的
     r = IMPACT_REF_OBJ_START
     for obj_name in impact.get("reference_objects", []):
         set_h(ws, r, 22)
-        MW(ws, r, 2,  9,  obj_name, border=B_all())
-        MW(ws, r, 10, 20, "",       border=B_all())
-        MW(ws, r, 21, 31, "",       border=B_all())
+        # 参照項目を related_objects から導出
+        r_fields = obj_field_map.get(obj_name, {}).get("R", [])
+        ref_fields_text = ", ".join(r_fields) if r_fields else ""
+        MW(ws, r, 2,  9,  obj_name,          border=B_all())
+        MW(ws, r, 10, 20, ref_fields_text,   border=B_all(), wrap=True)
+        MW(ws, r, 21, 31, "",                border=B_all())
         r += 1
 
     # 関連Apex/Flow/LWC: col 2-9=名称, 10-13=種別, 14-31=関連内容
@@ -377,22 +405,25 @@ def fill_impact_scope(ws, data: dict):
     flow_items = impact.get("related_flow", [])
     lwc_items  = impact.get("related_lwc", [])
     for name in apex_items:
+        role = comp_role_map.get(name, "")
         set_h(ws, r, 22)
         MW(ws, r, 2,  9,  name,   border=B_all())
         MW(ws, r, 10, 13, "Apex", border=B_all(), h="center")
-        MW(ws, r, 14, 31, "",     border=B_all())
+        MW(ws, r, 14, 31, role,   border=B_all(), wrap=True)
         r += 1
     for name in flow_items:
+        role = comp_role_map.get(name, "")
         set_h(ws, r, 22)
         MW(ws, r, 2,  9,  name,   border=B_all())
         MW(ws, r, 10, 13, "Flow", border=B_all(), h="center")
-        MW(ws, r, 14, 31, "",     border=B_all())
+        MW(ws, r, 14, 31, role,   border=B_all(), wrap=True)
         r += 1
     for name in lwc_items:
+        role = comp_role_map.get(name, "")
         set_h(ws, r, 22)
         MW(ws, r, 2,  9,  name,  border=B_all())
         MW(ws, r, 10, 13, "LWC", border=B_all(), h="center")
-        MW(ws, r, 14, 31, "",    border=B_all())
+        MW(ws, r, 14, 31, role,  border=B_all(), wrap=True)
         r += 1
 
     # 外部連携影響: col 2-9=連携先, 10-31=影響内容
@@ -458,13 +489,19 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
         except Exception as e:
             print(f"  [WARN] スイムレーン図: {e}")
 
-    # 2. ER図（対象オブジェクト）
+    # 2. ER図（対象オブジェクト）— er_utils の matplotlib 版を使用
     objects = data.get("related_objects", [])
     if objects:
         try:
+            from er_utils import generate_er_image
             er_path = str(Path(tmp_dir) / "er.png")
-            obj_list, rels = _related_objects_to_er(objects)
-            dg.render_er_diagram(obj_list, rels, er_path)
+            boxes, arrows = _related_objects_to_er_boxes(objects)
+            n_obj = len(boxes)
+            er_w = min(14, max(8, n_obj * 3.0))
+            er_h = min(10, max(6, n_obj * 2.0))
+            generate_er_image(boxes, arrows, er_path,
+                              title="オブジェクト関連図",
+                              slide_w=er_w, slide_h=er_h)
             paths["er"] = er_path
             print("  [OK] ER図")
         except Exception as e:
@@ -542,6 +579,84 @@ def _related_objects_to_er(objects: list[dict]) -> tuple[list, list]:
     return obj_list, rels
 
 
+def _related_objects_to_er_boxes(objects: list[dict]) -> tuple[list, list]:
+    """related_objects を er_utils.generate_er_image 用の (boxes, arrows) に変換する。
+
+    自動グリッドレイアウト: オブジェクトを横に並べ、収まらなければ折り返す。
+    """
+    import math
+
+    n = len(objects)
+    cols = min(n, 3)
+    rows = math.ceil(n / cols)
+
+    # レイアウト定数
+    box_w = 3.0
+    box_h_base = 1.2
+    field_h = 0.32
+    x_gap = 1.0
+    y_gap = 1.0
+    x_start = 1.0
+    y_start = 1.5  # タイトルバー分
+
+    boxes = []
+    obj_id_map: dict[str, str] = {}  # api_name -> box id
+
+    for i, obj in enumerate(objects):
+        api = obj.get("api_name", "")
+        label = obj.get("label", "")
+        fk_fields = [f for f in obj.get("fields", []) if f.get("access") in ("RW", "W")]
+        n_fields = min(len(fk_fields), 4)  # 表示上限4フィールド
+        h = box_h_base + n_fields * field_h
+
+        col_idx = i % cols
+        row_idx = i // cols
+        x = x_start + col_idx * (box_w + x_gap)
+        y = y_start + row_idx * (box_h_base + 4 * field_h + y_gap)
+
+        style = "primary" if "__c" in api else "secondary"
+        box_id = api.replace("__c", "_c").replace("__", "_")
+        obj_id_map[api] = box_id
+
+        box_fields = []
+        for fi, f in enumerate(fk_fields[:4]):
+            box_fields.append({
+                "name": f.get("api_name", ""),
+                "label": f.get("label", ""),
+                "is_fk": any(
+                    r.get("to") == f.get("api_name", "")
+                    or r.get("field", "") == f.get("api_name", "")
+                    for r in obj.get("relations", [])
+                ),
+            })
+
+        boxes.append({
+            "id": box_id,
+            "api": api,
+            "label": label,
+            "x": x, "y": y, "w": box_w, "h": h,
+            "style": style,
+            "fields": box_fields,
+        })
+
+    arrows = []
+    for obj in objects:
+        src_api = obj.get("api_name", "")
+        src_id = obj_id_map.get(src_api, "")
+        for rel in obj.get("relations", []):
+            to_api = rel.get("to", "")
+            dst_id = obj_id_map.get(to_api, "")
+            if not dst_id:
+                continue
+            rel_type = rel.get("type", "lookup").lower()
+            arrows.append({
+                "from": src_id,
+                "to": dst_id,
+                "rel": rel_type,
+                "field": rel.get("field", rel.get("label", "")),
+            })
+
+    return boxes, arrows
 
 
 # ── メイン ──────────────────────────────────────────────────────────

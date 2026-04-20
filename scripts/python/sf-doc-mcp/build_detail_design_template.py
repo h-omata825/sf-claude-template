@@ -6,7 +6,7 @@
   2. 概要               : 機能名 / 機能概要 / 目的 / 利用者 / 起点画面 / 操作トリガー
   3. 業務フロー         : No / アクター / 処理内容 / 分岐条件
   4. 対象オブジェクト   : オブジェクト名 / 項目API名 / 項目ラベル / 読み書き区分 / 備考
-  5. 処理概要           : ステップNo / 処理内容 / 条件分岐 / SOQL概要 / DML操作
+  5. 処理概要           : No / 処理内容 / コンポーネント / 分岐条件
   6. 関連コンポーネント : コンポーネント名 / 種別 / 役割 / 依存方向
   7. 影響範囲           : 5セクション（更新/参照オブジェクト、関連Apex等、外部連携、他機能依存）
 
@@ -123,15 +123,9 @@ def diagram_area(ws, start_row, title, section_no=2, height_rows=30):
     section_band(ws, start_row, f"\u25a0 {section_no}. {title}")
     r = start_row + 1
 
-    # 図エリア: 先にスタイルを全セルに設定してからマージ
-    fill_gray = _fill("F2F2F2")
-    border = B_all()
+    # 図エリア: 白背景・罫線なし（画像を配置するため装飾不要）
     for row in range(r, r + height_rows):
         set_h(ws, row, 20)
-        for col in range(GRID_LEFT, GRID_RIGHT + 1):
-            cell = ws.cell(row=row, column=col)
-            cell.fill = fill_gray
-            cell.border = border
     ws.merge_cells(start_row=r, start_column=GRID_LEFT,
                    end_row=r + height_rows - 1, end_column=GRID_RIGHT)
 
@@ -261,11 +255,10 @@ def build_target_objects(wb):
 # Sheet 5: 処理概要
 # =====================================================================
 PROC_COLS = [
-    (2,  3,  "ステップNo"),
-    (4,  13, "処理内容"),
-    (14, 19, "条件分岐"),
-    (20, 25, "SOQL概要"),
-    (26, 31, "DML操作"),
+    (2,  3,  "No"),
+    (4,  15, "処理内容"),
+    (16, 22, "コンポーネント"),
+    (23, 31, "分岐条件"),
 ]
 
 def build_process_overview(wb):
