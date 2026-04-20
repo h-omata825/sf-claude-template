@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 import tempfile
@@ -263,7 +264,7 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
 
 def fill_screens(ws, data: dict, changed_screen_keys: set,
                  sc_png_path: str | None,
-                 wireframe_paths: list[tuple[str, str | None]] | None = None):
+                 wireframe_paths: list[tuple[str, str | None, int]] | None = None):
     # 画面一覧テーブル
     screens = data.get("screens", [])
     r = SC_DATA_ROW_START
@@ -291,23 +292,28 @@ def fill_screens(ws, data: dict, changed_screen_keys: set,
     # ── 画面ワイヤーフレーム埋め込み ──────────────────────────────
     if wireframe_paths:
         r = SC_WF_DATA_ROW_START
-        for screen_name, wf_path in wireframe_paths:
+        for screen_name, wf_path, img_h_px in wireframe_paths:
             # タイトル行（画面名）
             set_h(ws, r, 26)
             MW(ws, r, 2, 31, screen_name, bold=True,
                bg=C_LABEL_BG, border=B_all())
             r += 1
-            # 画像エリア（SC_WF_ROWS_PER_IMG 行分確保）
-            for rr in range(r, r + SC_WF_ROWS_PER_IMG):
-                set_h(ws, rr, 18)
+            # 画像の縦サイズから必要行数を計算（1行 ≒ 18px）
+            if img_h_px and img_h_px > 0:
+                rows_for_img = max(10, math.ceil(img_h_px / 18))
+            else:
+                rows_for_img = SC_WF_ROWS_PER_IMG
+            # 画像エリア（rows_for_img 行分確保）
+            for rr in range(r, r + rows_for_img):
+                set_h(ws, rr, 20)
                 for col in range(2, GRID_RIGHT + 1):
                     ws.cell(row=rr, column=col).fill = _fill("F2F2F2")
                     ws.cell(row=rr, column=col).border = B_all()
             ws.merge_cells(start_row=r, start_column=2,
-                           end_row=r + SC_WF_ROWS_PER_IMG - 1, end_column=GRID_RIGHT)
+                           end_row=r + rows_for_img - 1, end_column=GRID_RIGHT)
             if wf_path and Path(wf_path).exists():
                 _embed_image(ws, wf_path, f"B{r}", img_w=840, img_h=None)
-            r += SC_WF_ROWS_PER_IMG + 1  # +1 スペーサー
+            r += rows_for_img + 1  # +1 スペーサー
 
 
 def fill_components(ws, data: dict, changed_comp_keys: set,
@@ -450,8 +456,8 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
 
 
 def _generate_wireframes(data: dict, tmp_dir: str,
-                          project_dir: str | None) -> list[tuple[str, str | None]]:
-    """各画面のワイヤーフレームPNGを生成。(screen_name, png_path|None) のリストを返す。"""
+                          project_dir: str | None) -> list[tuple[str, str | None, int]]:
+    """各画面のワイヤーフレームPNGを生成。(screen_name, png_path|None, img_h_px) のリストを返す。"""
     if not project_dir:
         return []
     try:
@@ -470,21 +476,21 @@ def _generate_wireframes(data: dict, tmp_dir: str,
         print("  [WARN] diagram_utils をインポートできません。ワイヤーフレーム生成をスキップします。")
         return []
 
-    results: list[tuple[str, str | None]] = []
+    results: list[tuple[str, str | None, int]] = []
     pd_root = Path(project_dir)
 
     for scr in data.get("screens", []):
         name = scr.get("name", "")
         comp = scr.get("component", "")
         if not comp:
-            results.append((name, None))
+            results.append((name, None, 0))
             continue
 
         html_path = (pd_root / "force-app" / "main" / "default"
                      / "lwc" / comp / f"{comp}.html")
         if not html_path.exists():
             print(f"  [WARN] LWC HTML が見つかりません: {html_path}")
-            results.append((name, None))
+            results.append((name, None, 0))
             continue
 
         try:
@@ -492,24 +498,26 @@ def _generate_wireframes(data: dict, tmp_dir: str,
             safe = re.sub(r'[\\/:*?"<>|]', "_", name or comp)
             wf_path = str(Path(tmp_dir) / f"wireframe_{safe}.png")
             wf_ok = False
+            img_h_px = 0
 
             # Playwright 優先
             if has_playwright_fn:
-                wf_ok = generate_screen_wireframe_playwright(name or comp, html_content, wf_path)
+                wf_ok, img_h_px = generate_screen_wireframe_playwright(name or comp, html_content, wf_path)
 
             # matplotlib fallback
             if not wf_ok and has_mpl:
                 elements = extract_lwc_ui_elements(html_content)
                 wf_ok = generate_screen_wireframe(name or comp, elements, wf_path)
+                img_h_px = 0  # matplotlib fallback では画像サイズ不明
 
             if wf_ok:
                 print(f"  [OK] ワイヤーフレーム生成: {name}")
-                results.append((name, wf_path))
+                results.append((name, wf_path, img_h_px))
             else:
-                results.append((name, None))
+                results.append((name, None, 0))
         except Exception as e:
             print(f"  [WARN] ワイヤーフレーム生成失敗({name}): {e}")
-            results.append((name, None))
+            results.append((name, None, 0))
 
     return results
 

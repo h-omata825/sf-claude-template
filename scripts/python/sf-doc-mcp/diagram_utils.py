@@ -797,6 +797,13 @@ import re
 
 # ── LWC HTML → SLDS 静的 HTML 変換 + Playwright ワイヤーフレーム ───────────────
 
+def _template_to_div(attrs: str) -> str:
+    """lwc:if/else 分岐に応じて div を生成する。else 系は非表示にする。"""
+    if re.search(r'\blwc:elseif\b', attrs) or re.search(r'\blwc:else\b', attrs):
+        return '<div style="display:none">'
+    return '<div>'
+
+
 def _lwc_html_to_slds(html_content: str) -> tuple[str, bool]:
     """LWC HTML を SLDS スタイルの静的 HTML に変換する。返り値は (body_html, is_modal)。"""
     html = html_content
@@ -804,9 +811,9 @@ def _lwc_html_to_slds(html_content: str) -> tuple[str, bool]:
     # 1. モーダル判定
     is_modal = bool(re.search(r'<lightning-modal-header', html, re.I))
 
-    # 2. <template> タグを除去
-    html = re.sub(r'<template\b[^>]*>', '', html, flags=re.DOTALL)
-    html = re.sub(r'</template>', '', html)
+    # 2. <template> タグを <div> に変換（条件分岐は先頭のみ表示）
+    html = re.sub(r'<template\b([^>]*)>', lambda m: _template_to_div(m.group(1)), html, flags=re.DOTALL)
+    html = re.sub(r'</template>', '</div>', html)
 
     # 3. LWC属性を除去
     html = re.sub(r'\s+lwc:[a-zA-Z:]+(?:=[^\s>]*)?', '', html)
@@ -966,19 +973,22 @@ def generate_screen_wireframe_playwright(
     html_content: str,
     out_path: str,
     viewport_width: int = 820,
-) -> bool:
-    """Playwright で SLDS スタイルのワイヤーフレームを生成する。"""
+) -> tuple[bool, int]:
+    """Playwright で SLDS スタイルのワイヤーフレームを生成する。
+
+    Returns:
+        (success, image_height_px)
+        image_height_px は成功時の画像縦ピクセル数、失敗時は 0
+    """
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        return False
+        return False, 0
 
     body_html, is_modal = _lwc_html_to_slds(html_content)
 
     if is_modal:
-        content = (f'<div class="slds-backdrop slds-backdrop_open"></div>\n'
-                   f'<div class="slds-modal slds-fade-in-open">'
-                   f'<div class="slds-modal__container">{body_html}</div></div>')
+        content = f'<div class="wf-modal-box">{body_html}</div>'
     else:
         content = body_html
 
@@ -1015,12 +1025,10 @@ body { font-family: 'Salesforce Sans', Arial, sans-serif; font-size: 13px; backg
 .slds-table th, .slds-table td { border: 1px solid #dddbda; padding: 5px 8px; text-align: left; }
 .slds-table th { background: #f3f2f2; font-weight: 700; }
 label[style*="font-size"] { display: flex; align-items: center; font-size: 12px !important; font-weight: 600; color: #3e3e3c; }
-.slds-modal { position: fixed; z-index: 9000; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; }
-.slds-modal__container { background: white; border-radius: 4px; box-shadow: 0 8px 30px rgba(0,0,0,.35); width: 560px; max-width: 90%; display: flex; flex-direction: column; }
-.slds-modal__header { padding: 14px 16px; border-bottom: 1px solid #dddbda; background: #f3f2f2; border-radius: 4px 4px 0 0; }
-.slds-modal__content { padding: 16px; overflow: auto; }
-.slds-modal__footer { padding: 10px 16px; border-top: 1px solid #dddbda; display: flex; justify-content: flex-end; gap: 8px; background: #f3f2f2; border-radius: 0 0 4px 4px; }
-.slds-backdrop_open { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 8000; }
+.wf-modal-box { background: white; border-radius: 4px; box-shadow: 0 8px 30px rgba(0,0,0,.25); max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; }
+.slds-modal__header { padding: 14px 16px; border-bottom: 1px solid #dddbda; background: #f3f2f2; }
+.slds-modal__content { padding: 16px; }
+.slds-modal__footer { padding: 10px 16px; border-top: 1px solid #dddbda; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; background: #f3f2f2; }
 """
 
     html_doc = f"""<!DOCTYPE html>
@@ -1050,10 +1058,18 @@ label[style*="font-size"] { display: flex; align-items: center; font-size: 12px 
                 page.wait_for_timeout(300)
                 page.screenshot(path=out_path, full_page=True)
             browser.close()
-        return True
+        # 画像の縦サイズを取得
+        img_h_px = 0
+        try:
+            from PIL import Image as PilImage
+            with PilImage.open(out_path) as im:
+                img_h_px = im.size[1]
+        except Exception:
+            img_h_px = 0
+        return True, img_h_px
     except Exception as e:
         print(f"  [WARN] Playwright wireframe失敗({title}): {e}")
-        return False
+        return False, 0
     finally:
         try:
             os.unlink(tmp_html)
