@@ -99,16 +99,17 @@ BF_COL_GROUPS = [
 ]
 
 # 対象オブジェクト: 表上・図下レイアウト（動的行）
+# ※ 項目ラベルが左（8-14）、API名が右（15-20）の順
 OBJ_DATA_ROW_START = 5
 OBJ_NAME_CS,  OBJ_NAME_CE  = 2,  7
-OBJ_FAPI_CS,  OBJ_FAPI_CE  = 8,  14
-OBJ_FLBL_CS,  OBJ_FLBL_CE  = 15, 20
+OBJ_FLBL_CS,  OBJ_FLBL_CE  = 8,  14   # 項目ラベル（左）
+OBJ_FAPI_CS,  OBJ_FAPI_CE  = 15, 20   # 項目API名（右）
 OBJ_ACC_CS,   OBJ_ACC_CE   = 21, 23
 OBJ_NOTE_CS,  OBJ_NOTE_CE  = 24, 31
 OBJ_COL_GROUPS = [
     (OBJ_NAME_CS, OBJ_NAME_CE),
-    (OBJ_FAPI_CS, OBJ_FAPI_CE),
     (OBJ_FLBL_CS, OBJ_FLBL_CE),
+    (OBJ_FAPI_CS, OBJ_FAPI_CE),
     (OBJ_ACC_CS,  OBJ_ACC_CE),
     (OBJ_NOTE_CS, OBJ_NOTE_CE),
 ]
@@ -272,11 +273,16 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
 
 
 def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
-    """object_access + process_steps から備考テキストを生成する。
+    """object_access + process_steps から項目ごとの備考テキストを生成する。
 
-    例: 「コンサルテーション依頼時に更新・登録。見積作成時に参照。」
+    フィールドの読み書き区分に応じて関連するアクセスのみ抽出する。
+    例（読み取り専用項目）: 「プリチェック判定時に参照。」
+    例（書き込み項目）: 「コンサルテーション依頼時に更新・登録。見積作成時に新規作成。」
     """
     _OP_JA = {"R": "参照", "W": "更新・登録", "RW": "参照・更新", "INSERT": "新規作成"}
+    _WRITE_OPS = {"W", "RW", "INSERT"}
+    _READ_OPS  = {"R", "RW"}
+
     object_access = data.get("object_access", [])
     process_steps = data.get("process_steps", [])
 
@@ -288,14 +294,24 @@ def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
 
     accesses = [a for a in object_access if a.get("object") == obj_api]
     if not accesses:
-        if field_access in ("W", "RW"):
+        if field_access in ("W", "RW", "INSERT"):
             return "更新・登録対象。"
         if field_access == "R":
             return "参照のみ。"
         return ""
 
+    # フィールドの読み書き区分に応じて関連するアクセスのみ抽出
+    relevant = [
+        a for a in accesses
+        if (field_access == "R" and a.get("operation", "") in _READ_OPS)
+        or (field_access in ("W", "INSERT") and a.get("operation", "") in _WRITE_OPS)
+        or field_access == "RW"
+    ]
+    if not relevant:
+        relevant = accesses  # フォールバック
+
     parts = []
-    for acc in accesses:
+    for acc in relevant:
         op_ja = _OP_JA.get(acc.get("operation", ""), acc.get("operation", ""))
         step_title = comp_to_step.get(acc.get("component", ""), "")
         if step_title:
@@ -307,46 +323,73 @@ def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
 
 def fill_target_objects(ws, data: dict, changed_obj_keys: set,
                         png_path: str | None):
-    """対象オブジェクトシート: 項目テーブル(動的行) + ER図。"""
-    impact = data.get("impact", {})
+    """対象オブジェクトシート: 項目テーブル(動的行・縦結合) + 図。
+
+    列順: オブジェクト名(縦結合) | 項目ラベル | 項目API名 | 読み書き区分(日本語) | 備考
+    """
+    _ACCESS_JA = {
+        "R": "参照", "W": "更新", "RW": "参照・更新", "INSERT": "新規作成",
+    }
     objects = data.get("related_objects", [])
 
-    # フィールド数を合計してデータ行数を確定
-    n_data = sum(len(obj.get("fields", [])) for obj in objects)
-    total_rows = n_data + DYNAMIC_EMPTY_ROWS
-
-    # データ行 + 空行の枠を作成
     r = OBJ_DATA_ROW_START
-    data_rows(ws, r, r + total_rows - 1, OBJ_COL_GROUPS, row_h=22)
 
     for obj in objects:
-        obj_name = f"{obj.get('label', '')} ({obj.get('api_name', '')})"
-        obj_api = obj.get("api_name", "")
+        obj_api   = obj.get("api_name", "")
+        obj_label = f"{obj.get('label', '')} ({obj_api})"
         is_changed = obj_api in changed_obj_keys
-        for field in obj.get("fields", []):
+        fields = obj.get("fields", [])
+        if not fields:
+            continue
+        n_fields      = len(fields)
+        obj_start_row = r
+
+        for fi, field in enumerate(fields):
             set_h(ws, r, 22)
-            access = field.get("access", "")
-            note = field.get("note", "")
+            access    = field.get("access", "")
+            access_ja = _ACCESS_JA.get(access, access)
+            note      = field.get("note", "")
             if not note:
                 note = _compute_obj_note(obj_api, access, data)
 
-            c1 = MW(ws, r, OBJ_NAME_CS,  OBJ_NAME_CE,  obj_name,
+            # オブジェクト名列: 全行書くが後で縦結合する
+            MW(ws, r, OBJ_NAME_CS, OBJ_NAME_CE,
+               obj_label if fi == 0 else "", border=B_all())
+
+            c2 = MW(ws, r, OBJ_FLBL_CS, OBJ_FLBL_CE, field.get("label", ""),
                     border=B_all())
-            c2 = MW(ws, r, OBJ_FAPI_CS,  OBJ_FAPI_CE,  field.get("api_name", ""),
+            c3 = MW(ws, r, OBJ_FAPI_CS, OBJ_FAPI_CE, field.get("api_name", ""),
                     border=B_all())
-            c3 = MW(ws, r, OBJ_FLBL_CS,  OBJ_FLBL_CE,  field.get("label", ""),
-                    border=B_all())
-            c4 = MW(ws, r, OBJ_ACC_CS,   OBJ_ACC_CE,   access,
+            c4 = MW(ws, r, OBJ_ACC_CS,  OBJ_ACC_CE,  access_ja,
                     border=B_all(), h="center")
-            c5 = MW(ws, r, OBJ_NOTE_CS,  OBJ_NOTE_CE,  note,
-                    border=B_all(), wrap=True)
+            c5 = MW(ws, r, OBJ_NOTE_CS, OBJ_NOTE_CE, note,
+                    border=B_all(), wrap=True, v="top")
             if is_changed:
-                for c in (c1, c2, c3, c4, c5):
+                for c in (c2, c3, c4, c5):
                     dr.apply_red(c)
             r += 1
 
-    # スペーサー + 図エリア
-    spacer_row = OBJ_DATA_ROW_START + total_rows
+        # オブジェクト名列を縦結合（フィールドが複数ある場合）
+        if n_fields > 1:
+            # 個別行の横結合を解除してから縦結合
+            for ri in range(obj_start_row, r):
+                try:
+                    ws.unmerge_cells(start_row=ri, start_column=OBJ_NAME_CS,
+                                     end_row=ri, end_column=OBJ_NAME_CE)
+                except Exception:
+                    pass
+            ws.merge_cells(start_row=obj_start_row, start_column=OBJ_NAME_CS,
+                           end_row=r - 1, end_column=OBJ_NAME_CE)
+            mc = ws.cell(row=obj_start_row, column=OBJ_NAME_CS)
+            mc.value     = obj_label
+            mc.font      = _fnt()
+            mc.alignment = _aln(v="center", wrap=True)
+            mc.border    = B_all()
+            if is_changed:
+                dr.apply_red(mc)
+
+    # スペーサー + 図エリア（動的位置）
+    spacer_row = r
     set_h(ws, spacer_row, 8)
     diagram_start = spacer_row + 1
     diagram_area(ws, diagram_start, "オブジェクト関連図（自動生成）", section_no=2)
