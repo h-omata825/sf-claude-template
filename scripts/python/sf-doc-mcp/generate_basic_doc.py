@@ -6,12 +6,13 @@
 入力 (docs/ 配下):
   docs/overview/org-profile.md         — 組織・プロジェクト基本情報
   docs/requirements/requirements.md    — 目的・背景
-  docs/architecture/system.json        — SF組織情報・外部連携
-  docs/flow/usecases.md                — ユースケース一覧
-  docs/catalog/_index.md               — オブジェクト一覧（カタログ）
+  docs/architecture/system.json        — 外部連携先情報
+  docs/catalog/_data-model.md          — オブジェクト関連情報（ER図用）
+  docs/flow/usecases.md                — 用語集・UC情報
 
 出力:
-  プロジェクト概要書.xlsx（5シート）
+  プロジェクト概要書.xlsx（5シート: 表紙/システム概要/業務フロー図/ER図/用語集）
+  ※ 図エリアは手動貼り付け用プレースホルダー。テキスト情報のみ自動入力。
 
 Usage:
   python generate_basic_doc.py \\
@@ -145,79 +146,66 @@ def parse_system_json(path: Path) -> dict:
     }
 
 
-def parse_usecases(path: Path) -> list[dict]:
+
+def parse_data_model(path: Path) -> list[dict]:
+    """_data-model.md からオブジェクト関連（ER図用）を抽出"""
     if not path.exists():
         return []
     text = path.read_text(encoding="utf-8")
-    ucs = []
-    for m in re.finditer(
-        r'^##\s+(UC-\d+)[:：\s]*(.+)$((?:.*\n)*?)(?=^##\s|\Z)',
-        text, re.MULTILINE,
-    ):
-        uc_id, title, body = m.group(1), m.group(2).strip(), m.group(3)
-        trigger = ""
-        freq = ""
-        objs = ""
-        for b in re.finditer(r'^-\s+([^:：]+)[:：]\s*(.+)$', body, re.MULTILINE):
-            k, v = b.group(1).strip(), b.group(2).strip()
-            if "トリガー" in k or "契機" in k:
-                trigger = v[:50]
-            elif "頻度" in k:
-                freq = v[:20]
-            elif "オブジェクト" in k or "主要" in k:
-                objs = v[:40]
-        ucs.append({"id": uc_id, "name": title, "trigger": trigger, "freq": freq, "objects": objs})
-    return ucs[:15]
-
-
-def parse_catalog(catalog_dir: Path) -> list[dict]:
-    index_path = catalog_dir / "_index.md"
-    if not index_path.exists():
-        return []
-    text = index_path.read_text(encoding="utf-8")
-    objs = []
+    rels = []
     for line in text.splitlines():
         if not line.strip().startswith("|"):
             continue
         cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 2 and cols[0] and cols[0] not in ("API名", "---", "オブジェクト"):
-            api = cols[0]
-            label = cols[1] if len(cols) > 1 else ""
-            kind = cols[2] if len(cols) > 2 else ""
-            count = cols[3] if len(cols) > 3 else ""
-            overview = cols[4] if len(cols) > 4 else ""
-            objs.append({"api": api, "label": label, "type": kind, "count": count, "overview": overview})
-    return objs[:20]
+        if len(cols) >= 3 and cols[0] and cols[0] not in ("親オブジェクト", "---"):
+            rels.append({
+                "parent":  cols[0],
+                "rel":     cols[1] if len(cols) > 1 else "",
+                "child":   cols[2] if len(cols) > 2 else "",
+                "field":   cols[3] if len(cols) > 3 else "",
+                "note":    cols[4] if len(cols) > 4 else "",
+            })
+    return rels[:15]
+
+
+def parse_glossary(org_profile_path: Path) -> list[dict]:
+    """org-profile.md の用語集セクションから用語を抽出"""
+    if not org_profile_path.exists():
+        return []
+    text = org_profile_path.read_text(encoding="utf-8")
+    sec = _section(text, "用語集") or _section(text, "Glossary")
+    terms = []
+    for line in sec.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        cols = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cols) >= 2 and cols[0] and cols[0] not in ("業務用語", "---", "用語"):
+            terms.append({
+                "biz_term": cols[0],
+                "sf_term":  cols[1] if len(cols) > 1 else "",
+                "desc":     cols[2] if len(cols) > 2 else "",
+            })
+    return terms[:30]
 
 
 # ── シート書き込み ────────────────────────────────────────────────
+# 新テンプレート: 表紙 / システム概要 / 業務フロー図 / ER図 / 用語集
+# 図エリアはプレースホルダーのため書き込み不要。テキスト情報のみ自動入力。
 
-# シート1の各メタ行（build_basic_doc_template.py の build_revision_sheet と同順）
-# 行番号: margin(1), margin(2), title(3), margin(4),
-#         プロジェクト名(5), 作成日(6), 最終更新日(7), バージョン(8), 作成者(9)
-_SH1_META = [5, 6, 7, 8, 9]
-_META_VAL_COL = 9  # col_label_end+1 = 8+1
-
-def fill_revision(ws, project_name: str, author: str):
-    today = date.today().strftime("%Y-%m-%d")
-    _set(ws, 5, _META_VAL_COL, project_name)
-    _set(ws, 6, _META_VAL_COL, today)
-    _set(ws, 7, _META_VAL_COL, today)
-    _set(ws, 8, _META_VAL_COL, "1.0")
-    _set(ws, 9, _META_VAL_COL, author)
+_META_VAL_COL = 9  # meta_row: col_label_end+1 = 8+1
 
 
-def fill_overview(ws, org: dict, req: dict):
-    # Sheet2 build_overview_sheet:
-    # margin(1), margin(2), title(3), margin(4), section(5),
-    # システム名(6), プロジェクト名(7), 目的・背景(8), 対象業務(9),
-    # Edition(10), 開始日(11), 終了予定日(12), 本番公開日(13)
+def fill_cover(ws, org: dict, req: dict, author: str):
+    # build_cover_sheet:
+    # margin(1),margin(2),title(3),margin(4),section(5)
+    # プロジェクト名(6),システム名(7),目的・背景(8),スコープ対象(9),スコープ対象外(10)
+    # 開始日(11),終了予定日(12),本番公開日(13)
     vals = [
-        org.get("system_name", ""),
         org.get("project_name", ""),
+        org.get("system_name", ""),
         req.get("purpose", ""),
-        org.get("target_biz", ""),
-        org.get("sf_edition", ""),
+        "",  # スコープ（対象）
+        "",  # スコープ（対象外）
         org.get("start_date", ""),
         org.get("end_date", ""),
         org.get("go_live_date", ""),
@@ -225,81 +213,59 @@ def fill_overview(ws, org: dict, req: dict):
     for i, val in enumerate(vals):
         _set(ws, 6 + i, _META_VAL_COL, val)
 
-    # 利用ユーザーテーブル:
-    # section(15), header(16), data rows 17..
-    # cols: (2,8) ユーザー区分 / (9,16) プロファイル / (17,22) 想定人数 / (23,31) 主な利用機能
-    user_cols = [(2, 8), (9, 16), (17, 22), (23, 31)]
-    for i, u in enumerate(org.get("users", [])):
-        r = 17 + i
-        _set_row(ws, r, 0, user_cols, [u["category"], u["profile"], u["count"], u["main_feature"]])
-
-    # 関係者テーブル:
-    # 利用ユーザー8行後 + margin + section + header = row 17+8+2+2 = 29
-    # section(26), header(27), data rows 28..
-    # cols: (2,8) 役割 / (9,18) 氏名 / (19,31) 備考
-    stake_cols = [(2, 8), (9, 18), (19, 31)]
+    # 体制テーブル: section(15), header(16), data rows 17..22
+    # cols: (2,6) 役割 / (7,16) 氏名 / (17,22) 担当領域 / (23,31) 備考
+    stake_cols = [(2, 6), (7, 16), (17, 22), (23, 31)]
     for i, s in enumerate(org.get("stakeholders", [])):
-        r = 29 + i
-        _set_row(ws, r, 0, stake_cols, [s["role"], s["name"], s["note"]])
+        r = 17 + i
+        _set_row(ws, r, 0, stake_cols, [s["role"], s["name"], s.get("domain", ""), s.get("note", "")])
 
 
-def fill_system(ws, sys_info: dict):
-    # Sheet3 build_system_sheet:
-    # margin(1), margin(2), title(3), margin(4), section(5),
-    # 組織ID(6), インスタンスURL(7), Edition(8), APIバージョン(9), 接続ユーザー(10)
-    vals = [
-        sys_info.get("org_id", ""),
-        sys_info.get("instance_url", ""),
-        sys_info.get("edition", ""),
-        sys_info.get("api_version", ""),
-        sys_info.get("login_user", ""),
-    ]
-    for i, val in enumerate(vals):
-        _set(ws, 6 + i, _META_VAL_COL, val)
+def fill_system_overview(ws, sys_info: dict, req: dict):
+    # build_system_overview_sheet:
+    # margin(1),margin(2),title(3),margin(4),section(5)
+    # 導入背景テキストエリア: rows 6..13（結合済み）→ row6 のみ書き込む
+    # 外部連携一覧: section(固定offset後), header, data rows
+    _set(ws, 6, GRID_LEFT, req.get("purpose", ""))
 
-    # 外部連携一覧: section(12), header(13), data rows 14..23
-    # cols: (2,8) 連携先 / (9,14) 方向 / (15,20) 方式 / (21,24) 頻度 / (25,31) 目的
-    ext_cols = [(2, 8), (9, 14), (15, 20), (21, 24), (25, 31)]
-    for i, ex in enumerate(sys_info.get("externals", [])[:10]):
-        r = 14 + i
-        name = ex.get("name", "")
-        direction = ex.get("direction", "")
-        protocol = ex.get("protocol", "")
-        frequency = ex.get("frequency", "")
-        purpose = ex.get("purpose", "")
-        _set_row(ws, r, 0, ext_cols, [name, direction, protocol, frequency, purpose])
-
-    # エンドポイント: section(25), header(26), data rows 27..32
-    # cols: (2,10) DeveloperName / (11,31) Endpoint URL
-    nc_cols = [(2, 10), (11, 31)]
-    for i, nc in enumerate(sys_info.get("named_creds", [])[:6]):
-        r = 27 + i
-        dev_name = nc.get("developer_name", nc.get("DeveloperName", ""))
-        endpoint = nc.get("endpoint", nc.get("Endpoint", ""))
-        _set_row(ws, r, 0, nc_cols, [dev_name, endpoint])
+    # 外部連携一覧の開始行は:
+    # margin(1)+margin(2)+title(3)+margin(4)+section(5)+textarea8行(6-13)+margin(14)+
+    # section(15)+diagram19行(16-34)+margin(35)+section(36)+header(37)+data38..
+    ext_cols = [(2, 8), (9, 12), (13, 18), (19, 22), (23, 31)]
+    for i, ex in enumerate(sys_info.get("externals", [])[:8]):
+        r = 38 + i
+        _set_row(ws, r, 0, ext_cols, [
+            ex.get("name", ""), ex.get("direction", ""),
+            ex.get("protocol", ""), ex.get("frequency", ""),
+            ex.get("purpose", ""),
+        ])
 
 
-def fill_objects(ws, objects: list[dict]):
-    # Sheet4 build_object_sheet:
-    # margin(1), margin(2), title(3), margin(4), section(5), header(6), data 7..26
-    # cols: (2,6) API名 / (7,14) オブジェクト名 / (15,18) 種別 / (19,23) 件数 / (24,31) 概要
-    obj_cols = [(2, 6), (7, 14), (15, 18), (19, 23), (24, 31)]
-    for i, o in enumerate(objects[:20]):
+def fill_er(ws, rels: list[dict]):
+    # build_er_sheet:
+    # margin(1)+margin(2)+title(3)+margin(4)+section(5)+diagram29行(6-34)+margin(35)
+    # +section(36)+header(37)+data rows 38..
+    rel_cols = [(2, 8), (9, 10), (11, 17), (18, 23), (24, 31)]
+    for i, rel in enumerate(rels[:15]):
+        r = 38 + i
+        _set_row(ws, r, 0, rel_cols, [
+            rel["parent"], rel["rel"], rel["child"], rel["field"], rel["note"],
+        ])
+
+
+def fill_glossary(ws, terms: list[dict]):
+    # build_glossary_sheet:
+    # margin(1)+margin(2)+title(3)+margin(4)+section(5)+header(6)+data rows 7..
+    term_cols = [(2, 3), (4, 10), (11, 18), (19, 31)]
+    for i, t in enumerate(terms[:30]):
         r = 7 + i
-        _set_row(ws, r, 0, obj_cols, [o["api"], o["label"], o["type"], o["count"], o["overview"]])
-
-
-def fill_flow(ws, usecases: list[dict]):
-    # Sheet5 build_flow_sheet:
-    # margin(1), margin(2), title(3), margin(4), section(5), header(6), data 7..21
-    # cols: (2,5) UC番号 / (6,14) UC名 / (15,19) トリガー / (20,23) 頻度 / (24,31) 主要オブジェクト
-    uc_cols = [(2, 5), (6, 14), (15, 19), (20, 23), (24, 31)]
-    for i, uc in enumerate(usecases[:15]):
-        r = 7 + i
-        _set_row(ws, r, 0, uc_cols, [uc["id"], uc["name"], uc["trigger"], uc["freq"], uc["objects"]])
+        _set_row(ws, r, 0, term_cols, [str(i + 1), t["biz_term"], t["sf_term"], t["desc"]])
 
 
 # ── メイン ────────────────────────────────────────────────────────
+
+GRID_LEFT = 2
+
 
 def generate(docs_dir: Path, output: Path, author: str, project_name: str,
              template: Path = DEFAULT_TEMPLATE):
@@ -311,22 +277,22 @@ def generate(docs_dir: Path, output: Path, author: str, project_name: str,
         )
         sys.exit(1)
 
-    org  = parse_org_profile(docs_dir / "overview" / "org-profile.md")
-    req  = parse_requirements(docs_dir / "requirements" / "requirements.md")
+    org      = parse_org_profile(docs_dir / "overview" / "org-profile.md")
+    req      = parse_requirements(docs_dir / "requirements" / "requirements.md")
     sys_info = parse_system_json(docs_dir / "architecture" / "system.json")
-    ucs  = parse_usecases(docs_dir / "flow" / "usecases.md")
-    objs = parse_catalog(docs_dir / "catalog")
+    rels     = parse_data_model(docs_dir / "catalog" / "_data-model.md")
+    terms    = parse_glossary(docs_dir / "overview" / "org-profile.md")
 
     if project_name:
         org["project_name"] = project_name
 
     wb = load_workbook(str(template))
 
-    fill_revision(wb["改版履歴"],       org.get("project_name", ""), author)
-    fill_overview(wb["プロジェクト概要"], org, req)
-    fill_system(wb["システム構成"],      sys_info)
-    fill_objects(wb["オブジェクト構成"], objs)
-    fill_flow(wb["業務フロー概要"],      ucs)
+    fill_cover(wb["表紙"],               org, req, author)
+    fill_system_overview(wb["システム概要"], sys_info, req)
+    # 業務フロー図・ER図は図エリアが主体のため、テキスト補足のみ
+    fill_er(wb["ER図"],                  rels)
+    fill_glossary(wb["用語集"],           terms)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     wb.save(str(output))
