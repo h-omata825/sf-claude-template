@@ -271,21 +271,38 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
         _embed_image(ws, png_path, img_anchor, img_w=880)
 
 
-def _compute_obj_note(obj_api: str, access: str, impact: dict) -> str:
-    """対象オブジェクトの備考テキストを計算する。
+def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
+    """object_access + process_steps から備考テキストを生成する。
 
-    - access が W/RW で impact.update_objects に含まれる → 「更新対象」
-    - access が R のみ → 「参照のみ」
-    - それ以外 → 空文字
+    例: 「コンサルテーション依頼時に更新・登録。見積作成時に参照。」
     """
-    update_objects = set(impact.get("update_objects", []))
-    if access in ("W", "RW") and obj_api in update_objects:
-        return "更新対象"
-    if access == "R":
-        return "参照のみ"
-    if access in ("W", "RW"):
-        return "更新対象"
-    return ""
+    _OP_JA = {"R": "参照", "W": "更新・登録", "RW": "参照・更新", "INSERT": "新規作成"}
+    object_access = data.get("object_access", [])
+    process_steps = data.get("process_steps", [])
+
+    comp_to_step: dict[str, str] = {}
+    for ps in process_steps:
+        comp = ps.get("component", "")
+        if comp and comp not in comp_to_step:
+            comp_to_step[comp] = ps.get("title", "")
+
+    accesses = [a for a in object_access if a.get("object") == obj_api]
+    if not accesses:
+        if field_access in ("W", "RW"):
+            return "更新・登録対象。"
+        if field_access == "R":
+            return "参照のみ。"
+        return ""
+
+    parts = []
+    for acc in accesses:
+        op_ja = _OP_JA.get(acc.get("operation", ""), acc.get("operation", ""))
+        step_title = comp_to_step.get(acc.get("component", ""), "")
+        if step_title:
+            parts.append(f"{step_title}時に{op_ja}")
+        else:
+            parts.append(op_ja)
+    return "。".join(parts) + "。" if parts else ""
 
 
 def fill_target_objects(ws, data: dict, changed_obj_keys: set,
@@ -311,7 +328,7 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
             access = field.get("access", "")
             note = field.get("note", "")
             if not note:
-                note = _compute_obj_note(obj_api, access, impact)
+                note = _compute_obj_note(obj_api, access, data)
 
             c1 = MW(ws, r, OBJ_NAME_CS,  OBJ_NAME_CE,  obj_name,
                     border=B_all())
@@ -476,7 +493,8 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
         try:
             er_path = str(Path(tmp_dir) / "er.png")
             if object_access:
-                dg.render_object_access_matrix(
+                from diagram_utils import generate_object_component_matrix
+                generate_object_component_matrix(
                     object_access, components, objects, er_path)
             else:
                 # object_access がない場合は従来のER図にフォールバック
@@ -532,7 +550,7 @@ def _business_flow_to_swimlane(flows: list[dict]) -> dict:
         src = str(f.get("step", i + 1))
         if nexts:
             for n in nexts:
-                dst_step = n.get("step") or (flows[i + 1].get("step", i + 2) if i + 1 < len(flows) else None)
+                dst_step = n.get("to") or (flows[i + 1].get("step", i + 2) if i + 1 < len(flows) else None)
                 if dst_step:
                     transitions.append({"from": src, "to": str(dst_step),
                                         "condition": n.get("condition", "")})

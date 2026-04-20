@@ -407,7 +407,7 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "nodesep": "0.8",
             "ranksep": "0.8",
             "fontname": FONT_JP,
-            "pad": "1.5",  # 余白を大きくして画像幅をスイムレーンと揃える
+            "pad": "3.5",  # 余白を大きくして画像幅をスイムレーンと揃える
             "dpi": str(DPI),
         },
     )

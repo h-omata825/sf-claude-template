@@ -1774,3 +1774,119 @@ def generate_screen_wireframe(
     plt.savefig(out_path, dpi=180, bbox_inches="tight", facecolor=_SLDS_GRAY)
     plt.close(fig)
     return True
+
+
+# ================================================================
+# 6. コンポーネント×オブジェクト参照マトリクス（詳細設計書 — 対象オブジェクト用）
+# ================================================================
+def generate_object_component_matrix(
+    object_access: list[dict],
+    components: list[dict],
+    related_objects: list[dict],
+    out_path: str,
+) -> bool:
+    """コンポーネント×オブジェクト参照マトリクスをmatplotlibで生成する。
+
+    object_access: [{"component": "X", "object": "Y", "operation": "R|W|RW|INSERT"}]
+    """
+    if not HAS_MPL:
+        return False
+
+    _OP_JA = {"R": "参照", "W": "更新", "RW": "参照\n更新", "INSERT": "新規\n作成"}
+    _OP_COLOR = {
+        "参照":    "#D9E1F2",
+        "更新":    "#FFC7CE",
+        "参照\n更新": "#FFEB9C",
+        "新規\n作成": "#C6EFCE",
+    }
+    HDR_BG, HDR_FG = "#1F3864", "white"
+    OBJ_BG         = "#F2F2F2"
+
+    apex_comps = [c for c in components if c.get("type") == "Apex"]
+    if not apex_comps:
+        apex_comps = components
+    comp_names = [c.get("api_name", "") for c in apex_comps]
+
+    obj_names  = [o.get("api_name", "") for o in related_objects]
+    obj_labels = {o.get("api_name", ""): o.get("label", o.get("api_name", ""))
+                  for o in related_objects}
+
+    # マトリクス構築
+    matrix: dict[str, dict[str, str]] = {o: {c: "" for c in comp_names} for o in obj_names}
+    for entry in object_access:
+        obj  = entry.get("object", "")
+        comp = entry.get("component", "")
+        op   = _OP_JA.get(entry.get("operation", ""), entry.get("operation", ""))
+        if obj in matrix and comp in matrix[obj]:
+            matrix[obj][comp] = op
+
+    n_rows = len(obj_names)
+    n_cols = len(comp_names)
+
+    lbl_w  = 2.8   # オブジェクト名列の幅（inch）
+    cell_w = 1.8   # 各コンポーネント列の幅
+    cell_h = 0.7   # 各行の高さ
+    hdr_h  = 1.0   # ヘッダ行の高さ
+    margin = 0.3
+
+    fig_w = margin * 2 + lbl_w + cell_w * n_cols
+    fig_h = margin * 2 + hdr_h + cell_h * n_rows
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=96)
+    ax.set_xlim(0, fig_w)
+    ax.set_ylim(0, fig_h)
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    def _rect(x, y, w, h, fc, ec="#CCCCCC", lw=0.8):
+        ax.add_patch(mpatches.Rectangle((x, y), w, h, fc=fc, ec=ec, lw=lw))
+
+    # ヘッダ：オブジェクト列
+    hdr_y = fig_h - margin - hdr_h
+    _rect(margin, hdr_y, lbl_w, hdr_h, HDR_BG, ec=HDR_BG)
+    ax.text(margin + lbl_w / 2, hdr_y + hdr_h / 2, "オブジェクト",
+            ha="center", va="center", color=HDR_FG, **_fpkw(9, bold=True))
+
+    # ヘッダ：コンポーネント列
+    for ci, comp in enumerate(comp_names):
+        x = margin + lbl_w + ci * cell_w
+        _rect(x, hdr_y, cell_w, hdr_h, HDR_BG, ec=HDR_BG)
+        ax.text(x + cell_w / 2, hdr_y + hdr_h / 2, comp,
+                ha="center", va="center", color=HDR_FG, **_fpkw(7.5, bold=True))
+
+    # 凡例
+    legend_items = [("参照", _OP_COLOR["参照"]),
+                    ("更新", _OP_COLOR["更新"]),
+                    ("新規作成", _OP_COLOR["新規\n作成"])]
+    lx = margin
+    ly = margin * 0.3
+    for label, color in legend_items:
+        _rect(lx, ly, 0.4, 0.3, color, ec="#888888", lw=0.6)
+        ax.text(lx + 0.5, ly + 0.15, label, va="center", **_fpkw(7))
+        lx += 1.4
+
+    # データ行
+    for ri, obj in enumerate(obj_names):
+        row_y = fig_h - margin - hdr_h - (ri + 1) * cell_h
+        lbl = obj_labels.get(obj, obj)
+
+        _rect(margin, row_y, lbl_w, cell_h, OBJ_BG)
+        ax.text(margin + 0.15, row_y + cell_h / 2, lbl,
+                ha="left", va="center", **_fpkw(8.5))
+
+        for ci, comp in enumerate(comp_names):
+            x = margin + lbl_w + ci * cell_w
+            op = matrix[obj][comp]
+            bg = _OP_COLOR.get(op, "white")
+            _rect(x, row_y, cell_w, cell_h, bg)
+            if op:
+                ax.text(x + cell_w / 2, row_y + cell_h / 2, op,
+                        ha="center", va="center", **_fpkw(8.5, bold=True))
+            else:
+                ax.text(x + cell_w / 2, row_y + cell_h / 2, "－",
+                        ha="center", va="center", color="#AAAAAA", **_fpkw(8.5))
+
+    plt.tight_layout(pad=0.1)
+    plt.savefig(out_path, dpi=96, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True

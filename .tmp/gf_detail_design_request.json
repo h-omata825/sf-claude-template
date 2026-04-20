@@ -113,7 +113,7 @@
     {
       "step": 1,
       "title": "マスタデータ取得",
-      "description": "PreCheckController.getInitData でサービス種別マスタを取得",
+      "description": "ビザ種別・サービス区分などのマスタデータを取得し、入力フォームを初期化する",
       "component": "PreCheckController",
       "branch": null,
       "next": [{"to": 2}]
@@ -132,7 +132,7 @@
     {
       "step": 3,
       "title": "コンサルテーション依頼",
-      "description": "委託担当者候補を取得し、依頼内容をBusinessTraveler__cに保存する",
+      "description": "委託担当者候補を取得し、お客様が入力したコンサルテーション依頼内容を申請者レコードに保存する",
       "component": "ConsultationController",
       "branch": null,
       "next": [{"to": 4}]
@@ -140,7 +140,7 @@
     {
       "step": 4,
       "title": "見積作成",
-      "description": "Quote__c / QuoteDetail__cをINSERTし、GF社へ通知メールを送信する",
+      "description": "見積レコードおよび見積明細レコードを新規作成し、GF社担当者へ依頼受付の通知メールを送信する",
       "component": "RequestController",
       "branch": null,
       "next": []
