@@ -743,7 +743,7 @@ flowchart TD
 ### 生成ファイル
 
 ```
-docs/_src/
+docs/.sf/
 └── feature_groups.yml    # 業務機能グループ定義（詳細設計の生成単位）
 ```
 
@@ -772,7 +772,7 @@ feature_groups:
 
 ### Phase 0: 実行モード判定
 
-`docs/_src/feature_groups.yml` が存在するか確認する。
+`docs/.sf/feature_groups.yml` が存在するか確認する。
 
 **存在しない → 初回生成モード**: Phase 1 から全量生成する。
 **存在する → 差分更新モード**: 既存YAMLを読み込み、新規コンポーネントの追加・既存FGへの割り当てのみ行う。手動修正は保持する。
@@ -866,10 +866,10 @@ UCごとに1つのFGを作成する。以下の基準でマージ・分割を行
 
 ### Phase 3: YAMLの生成
 
-`docs/_src/` フォルダが存在しない場合は作成してからYAMLを書き込む。
+`docs/.sf/` フォルダが存在しない場合は作成してからYAMLを書き込む。
 
 ```yaml
-# docs/_src/feature_groups.yml
+# docs/.sf/feature_groups.yml
 # sf-memoryカテゴリ5が生成。sf-design[1]詳細設計の生成単位。
 # 手動追記・修正可（次回実行時に保持される）
 generated_at: "YYYY-MM-DD"

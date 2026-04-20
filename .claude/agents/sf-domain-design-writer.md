@@ -1,6 +1,14 @@
 ---
 name: sf-domain-design-writer
 description: "ドメイン設計書（Excel）を業務ドメイン単位で生成する専門エージェント。プロジェクトのドキュメント・コード・feature_groups.yml を読み込み、ドメイン視点の業務フロー・画面構成・コンポーネント構成を含む設計書を生成する。"
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+  - TodoWrite
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。

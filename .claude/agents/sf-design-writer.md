@@ -1,6 +1,14 @@
 ---
 name: sf-design-writer
 description: "プログラム設計書（Excel）と機能一覧（Excel）を生成する専門エージェント。sf-design コマンドの Step 3 から委譲されて実行する。force-app/ と docs/ を徹底的に読み込み、高品質な設計内容 JSON を生成してから Python スクリプトで Excel に変換する。"
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+  - TodoWrite
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。

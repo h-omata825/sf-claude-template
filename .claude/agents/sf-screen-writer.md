@@ -1,6 +1,14 @@
 ---
 name: sf-screen-writer
 description: "LWC・画面フロー・Aura・Visualforce専用のプログラム設計書（画面）（Excel）生成エージェント。sf-design コマンドの Step 3 から委譲されて実行する。usecases[] 構造の画面設計書 JSON を生成し generate_screen_design.py で Excel に変換する。Apex・Flow（非画面）・Batch は対象外（sf-design-writer が担当）。"
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+  - TodoWrite
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。

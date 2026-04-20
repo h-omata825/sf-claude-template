@@ -22,7 +22,7 @@
 | 外部API連携 / REST・SOAP / Named Credentials / Platform Events / MuleSoft | `integration-dev` |
 | 一般調査 / メール下書き / 翻訳 / アドホック / その他秘書業務 | `assistant` |
 | `/sf-memory` コマンドから委譲（Salesforce組織情報の収集・`docs/` への保存） | `sf-org-analyst` |
-| `/sf-design` コマンドから委譲（プログラム設計書・基本/詳細設計・Excel生成） | `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` |
+| `/sf-design` コマンドから委譲（プログラム設計書・基本/詳細設計・Excel生成） | `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
 > `sf-org-analyst` / `sf-design-writer` 等はコマンド専用エージェント。ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる。
@@ -61,18 +61,19 @@
 
 | ブロック対象 | 理由 | 状態 |
 |---|---|---|
-| `.claude/` 配下の編集・書き込み | テンプレート保護（管理者以外の変更を防止） | **常時有効** |
+| `.claude/` 配下の編集・書き込み | テンプレート保護（管理者以外の変更を防止） | **行動指示のみ**（技術的ブロックは未設定） |
 | `rm -rf` / `rm -r .claude` | テンプレート・プロジェクト資材の誤削除防止 | **常時有効** |
 | 本番環境へのデプロイ | 本番操作は必ず人間が確認 | **常時有効** |
 | `git push origin main/develop` / `git reset --hard` 等 | PR経由運用の強制・破壊的操作の防止 | **チーム利用開始時に有効化**（`__pending`） |
 
 ### テンプレート保護（.claude/ 配下）
 
-`.claude/` 配下のファイルは `settings.json` で **Edit/Write がブロック**されている。
+`.claude/` 配下のファイルの保護は**行動指示（Claude への禁止ルール）** によって実現している。`settings.json` に技術的な Edit/Write deny ルールは設定されていない。
 
 - エージェント定義・コマンド定義・共通ルール・settings.json 自体が保護対象
 - テンプレートの更新は `/upgrade` コマンド経由で行う（管理者がテンプレートリポジトリを更新 → メンバーが `/upgrade` で取得）
 - **管理者がテンプレートを編集する場合**: テンプレートリポジトリ側で直接編集し、プロジェクト側には `/upgrade` で配布する
+- **技術的ブロックを追加したい場合**: `settings.json` の `permissions.deny` に `Edit(.claude/**)` と `Write(.claude/**)` を追加する
 
 ### 本番組織接続時の絶対ルール
 

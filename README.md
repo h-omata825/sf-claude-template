@@ -24,4 +24,4 @@ curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/s
 pip install -r scripts/python/sf-doc-mcp/requirements.txt
 ```
 
-詳細は `docs/template-guide.md` を参照。
+詳細は `.claude/CLAUDE.md` を参照。

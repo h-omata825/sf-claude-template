@@ -1,8 +1,3 @@
----
-name: sf-design-writer-reference
-description: "sf-design-writer のスケルトンモード詳細仕様リファレンス。extract_apex_skeleton.py 経由でスケルトン JSON を受け取ったときの動作・禁止事項・手順を定義する。"
----
-
 # スケルトンモード詳細仕様（sf-design-writer 参照用）
 
 `extract_apex_skeleton.py` が生成したスケルトン JSON を受け取った場合のモード。

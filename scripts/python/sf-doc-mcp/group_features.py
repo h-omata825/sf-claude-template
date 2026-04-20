@@ -400,7 +400,7 @@ def main():
     parser = argparse.ArgumentParser(description="機能グループ推論スクリプト")
     parser.add_argument("--project-dir", required=True, help="プロジェクトルートパス")
     parser.add_argument("--feature-list", help="scan_features.py 出力 JSON（省略時は自動スキャン）")
-    parser.add_argument("--output", help="出力 YAML パス（省略時は docs/feature_groups.yml）")
+    parser.add_argument("--output", help="出力 YAML パス（省略時は docs/.sf/feature_groups.yml）")
     args = parser.parse_args()
 
     project_dir = Path(args.project_dir).resolve()
@@ -431,7 +431,7 @@ def main():
 
     output_path = (
         Path(args.output) if args.output
-        else project_dir / "docs" / "feature_groups.yml"
+        else project_dir / "docs" / ".sf" / "feature_groups.yml"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
