@@ -2,3 +2,10 @@ simple-salesforce>=1.12.5
 openpyxl>=3.1.2
 python-pptx>=1.0.0
 pyyaml>=6.0
+# 高品質図生成（graphviz + drawsvg + svglib）
+# graphviz バイナリ別途要: https://graphviz.org/download/ または winget install graphviz.graphviz
+graphviz>=0.20
+drawsvg>=2.0
+svglib>=1.5
+reportlab>=4.0
+Pillow>=9.0
