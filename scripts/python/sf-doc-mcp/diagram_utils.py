@@ -689,13 +689,23 @@ _SLDS_GRAY   = "#F3F2F2"
 _SLDS_BORDER = "#DDDBDA"
 
 # タグ名 → (type, 抽出する属性リスト)
+# c-lightning-* は lightning-* のカスタムラッパーとして同一マッピング
 _LWC_TAG_MAP: dict[str, tuple[str, list[str]]] = {
-    "lightning-input":       ("input",       ["label", "type", "required"]),
-    "lightning-combobox":    ("picklist",    ["label", "required"]),
-    "lightning-textarea":    ("textarea",    ["label", "required"]),
-    "lightning-datatable":   ("table",       ["title", "label", "required"]),
-    "lightning-button":      ("button",      ["label", "variant"]),
-    "lightning-record-form": ("record_form", ["object-api-name", "label", "required"]),
+    "lightning-input":           ("input",    ["label", "type", "required"]),
+    "c-lightning-input-text":    ("input",    ["label", "required"]),
+    "lightning-combobox":        ("picklist", ["label", "required"]),
+    "c-lightning-combobox":      ("picklist", ["label", "required"]),
+    "lightning-textarea":        ("textarea", ["label", "required"]),
+    "c-lightning-textarea":      ("textarea", ["label", "required"]),
+    "lightning-datatable":       ("table",    ["title", "label", "required"]),
+    "c-lightning-datatable":     ("table",    ["title", "label", "required"]),
+    "lightning-button":          ("button",   ["label", "variant"]),
+    "c-lightning-button":        ("button",   ["label", "variant"]),
+    "lightning-record-form":     ("record_form", ["object-api-name", "label", "required"]),
+    "lightning-record-picker":   ("input",    ["label", "required"]),
+    "c-lightning-record-picker": ("input",    ["label", "required"]),
+    "lightning-dual-listbox":    ("picklist", ["label", "required"]),
+    "c-lightning-dual-listbox":  ("picklist", ["label", "required"]),
 }
 
 

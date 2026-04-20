@@ -311,6 +311,9 @@ def build_screen_layout(wb):
     # row 37: スペーサー
     set_h(ws, 37, 10)
 
+    # row 38: section_band for wireframes
+    section_band(ws, 38, "■ 3. 画面ワイヤーフレーム")
+
 
 # ─────────────────────────────────────────────────────────────
 # Sheet 5: コンポーネント構成
