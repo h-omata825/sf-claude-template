@@ -343,7 +343,7 @@ def main():
     name_ja  = data.get("name_ja", "機能グループ")
     safe_name = re.sub(r'[\\/:*?"<>|]', "_", name_ja)
 
-    out_dir = Path(args.output_dir) / "basic"
+    out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"【{group_id}】{safe_name}.xlsx"
 

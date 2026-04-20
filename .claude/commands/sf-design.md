@@ -448,6 +448,24 @@ sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生
 
 ---
 
+## 完了前クリーンアップ
+
+全ステップ完了後、全 `.tmp` フォルダを削除する:
+
+```bash
+python -c "
+import shutil, pathlib
+for subdir in ['基本設計書', '詳細設計書', 'プログラム設計書']:
+    tmp = pathlib.Path(r'{ROOT}') / subdir / '.tmp'
+    if tmp.exists():
+        shutil.rmtree(tmp, ignore_errors=True)
+        print(f'削除: {tmp}')
+print('クリーンアップ完了')
+"
+```
+
+---
+
 ## 完了報告
 
 ```

@@ -335,7 +335,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_detail_design.py \
 
 `--project-dir` を渡すと、`screens[]` の各コンポーネントについて LWC/VF/Aura ソースを自動検索してワイヤーフレーム画像を生成し、画面仕様シートに埋め込む（ソースが見つからない場合はスキップ）。
 
-出力先: `{output_dir}/detail/【{group_id}】{name_ja}.xlsx`
+出力先: `{output_dir}/【{group_id}】{name_ja}.xlsx`
 
 ---
 

@@ -329,7 +329,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_basic_design.py \
 
 > `{source_hash}` は Phase 0.7 で source_hash_checker.py が出力した `hash:XXXX` の値。新規作成・ハッシュなしの場合は空文字で渡す（`--source-hash ""`）。
 
-出力先: `{output_dir}/basic/【{group_id}】{name_ja}.xlsx`
+出力先: `{output_dir}/【{group_id}】{name_ja}.xlsx`
 
 ---
 
