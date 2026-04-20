@@ -796,28 +796,47 @@ def _build_tx_er_grouped(title, std_ext_apis, mst_ext_apis,
     # valid_tx: 外部参照のあるTXオブジェクトのみ
     valid_tx = [api for api in TX_ORDER if api in label_map and api in tx_connections]
 
-    SLIDE_H  = 7.5
-    BOTTOM   = SLIDE_H - 0.15
+    SLIDE_H    = 7.5
+    BOTTOM     = SLIDE_H - 0.15
+    MIN_GAP    = 0.12   # ボックス間の最小隙間
+    FILL_RATIO = 0.70   # これを下回ったらボックスを引き伸ばす
 
-    # ── TX ボックス（単列・左）: 高さを均等分散 ──
+    # ── TX ボックス（単列・左） ──
     boxes = []
     tx_items = []
     for api in valid_tx:
         oinfo     = object_fields.get(api, {"fields": []})
-        fk_fields = [f for f in oinfo.get("fields", []) if f.get("is_fk")][:2]
+        all_fk    = [f for f in oinfo.get("fields", []) if f.get("is_fk")]
+        fk_fields = all_fk[:2]   # 初期は2件
         h = round(HDR_H + max(len(fk_fields), 1) * COMPACT_FIELD_H, 3)
-        tx_items.append((api, oinfo, fk_fields, h))
+        tx_items.append((api, oinfo, all_fk, fk_fields, h))
 
     if tx_items:
-        total_tx_h = sum(h for _, _, _, h in tx_items)
-        avail_tx   = BOTTOM - TX_Y0
-        tx_gap     = max(TX_GAP, (avail_tx - total_tx_h) / max(len(tx_items), 1))
+        n         = len(tx_items)
+        avail_tx  = BOTTOM - TX_Y0
+        total_nat = sum(h for *_, h in tx_items)
+
+        # スパース判定: 自然な高さが利用可能領域の FILL_RATIO 未満 → 引き伸ばす
+        if total_nat < avail_tx * FILL_RATIO:
+            total_gap = MIN_GAP * (n - 1)
+            per_h     = (avail_tx - total_gap) / n
+            new_items = []
+            for api, oinfo, all_fk, _, _ in tx_items:
+                # 引き伸ばした高さに収まるだけFKフィールドを表示
+                n_fit = max(1, int((per_h - HDR_H) / COMPACT_FIELD_H))
+                fk_show = all_fk[:n_fit]
+                new_items.append((api, oinfo, all_fk, fk_show, per_h))
+            tx_items = new_items
+            tx_gap = MIN_GAP
+        else:
+            tx_gap = max(TX_GAP, (avail_tx - total_nat) / max(n - 1, 1))
+
         y = TX_Y0
-        for api, oinfo, fk_fields, h in tx_items:
+        for api, oinfo, _, fk_fields, h in tx_items:
             boxes.append({
                 "id": api, "label": label_map.get(api, api), "api_name": api,
                 "fields": fk_fields,
-                "x": TX_X, "y": round(y, 3), "w": TX_W, "h": h,
+                "x": TX_X, "y": round(y, 3), "w": TX_W, "h": round(h, 3),
                 "style": style_by_api.get(api, "primary"),
                 "owd":          oinfo.get("owd", ""),
                 "record_count": "",
@@ -830,24 +849,32 @@ def _build_tx_er_grouped(title, std_ext_apis, mst_ext_apis,
     rgt_all = rgt_order_std + rgt_order_mst
 
     if rgt_all:
-        rgt_h_list = [HDR_H for _ in rgt_all]
-        total_rgt_h = sum(rgt_h_list)
-        avail_rgt   = BOTTOM - RGT_Y0
-        rgt_gap     = max(RGT_GAP, (avail_rgt - total_rgt_h) / max(len(rgt_all), 1))
+        n_rgt        = len(rgt_all)
+        avail_rgt    = BOTTOM - RGT_Y0
+        total_rgt_h  = HDR_H * n_rgt
+
+        # スパース判定: 引き伸ばして均等配置
+        if total_rgt_h < avail_rgt * FILL_RATIO:
+            total_gap_rgt = MIN_GAP * (n_rgt - 1)
+            rgt_box_h     = (avail_rgt - total_gap_rgt) / n_rgt
+            rgt_gap       = MIN_GAP
+        else:
+            rgt_box_h = HDR_H
+            rgt_gap   = max(RGT_GAP, (avail_rgt - total_rgt_h) / max(n_rgt - 1, 1))
+
         rgt_y = RGT_Y0
         for api in rgt_all:
             style = "secondary" if api in rgt_order_std else "accent"
             oinfo = object_fields.get(api, {"fields": []})
-            h = HDR_H
             boxes.append({
                 "id": api, "label": label_map.get(api, api), "api_name": api,
                 "fields": [],
-                "x": RGT_X, "y": round(rgt_y, 3), "w": RGT_W, "h": h,
+                "x": RGT_X, "y": round(rgt_y, 3), "w": RGT_W, "h": round(rgt_box_h, 3),
                 "style": style,
                 "owd":          oinfo.get("owd", ""),
                 "record_count": "",
             })
-            rgt_y += h + rgt_gap
+            rgt_y += rgt_box_h + rgt_gap
 
     # ── 矢印: TX → 個別外部オブジェクト ──
     def _fracs_range(n, lo=0.2, hi=0.8):
