@@ -679,3 +679,269 @@ def generate_component_diagram(
     plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return True
+
+
+# ── LWC ワイヤーフレーム生成 ─────────────────────────────────────────────────
+import re
+
+_SLDS_BRAND  = "#0070D2"
+_SLDS_GRAY   = "#F3F2F2"
+_SLDS_BORDER = "#DDDBDA"
+
+# タグ名 → (type, 抽出する属性リスト)
+_LWC_TAG_MAP: dict[str, tuple[str, list[str]]] = {
+    "lightning-input":       ("input",       ["label", "type", "required"]),
+    "lightning-combobox":    ("picklist",    ["label", "required"]),
+    "lightning-textarea":    ("textarea",    ["label", "required"]),
+    "lightning-datatable":   ("table",       ["title", "label", "required"]),
+    "lightning-button":      ("button",      ["label", "variant"]),
+    "lightning-record-form": ("record_form", ["object-api-name", "label", "required"]),
+}
+
+
+def extract_lwc_ui_elements(html_content: str) -> list[dict]:
+    """LWC HTML から UI エレメント情報を抽出する。"""
+    elements: list[dict] = []
+    if not html_content:
+        return elements
+
+    for tag_name, (elem_type, _attrs) in _LWC_TAG_MAP.items():
+        # 自己終了タグ・通常タグ両方にマッチ
+        pattern = rf"<{re.escape(tag_name)}\b([^>]*?)(/?>)"
+        for m in re.finditer(pattern, html_content, re.DOTALL):
+            attr_str = m.group(1)
+
+            # --- 属性値の抽出ヘルパー ---
+            def _attr(name: str, _attr_str: str = attr_str) -> str | None:
+                am = re.search(
+                    rf"""{re.escape(name)}\s*=\s*(?:"([^"]*)"|'([^']*)')""",
+                    _attr_str, re.DOTALL,
+                )
+                if am:
+                    return am.group(1) if am.group(1) is not None else am.group(2)
+                return None
+
+            # lightning-button: variant フィルタ
+            if elem_type == "button":
+                label = _attr("label")
+                if not label:
+                    continue
+                variant = _attr("variant") or "neutral"
+                if variant not in ("brand", "destructive", "neutral"):
+                    continue
+                elements.append({
+                    "type": "button",
+                    "label": label,
+                    "required": False,
+                    "subtype": variant,
+                })
+                continue
+
+            # 共通処理
+            label = _attr("label")
+            required = "required" in attr_str and _attr("required") != "false"
+
+            if elem_type == "table":
+                label = _attr("title") or _attr("label") or "データテーブル"
+            elif elem_type == "record_form":
+                label = _attr("object-api-name") or label or "RecordForm"
+
+            if label is None:
+                label = ""
+
+            subtype = ""
+            if elem_type == "input":
+                subtype = _attr("type") or "text"
+
+            elements.append({
+                "type": elem_type,
+                "label": label,
+                "required": required,
+                "subtype": subtype,
+            })
+
+    return elements
+
+
+def generate_screen_wireframe(
+    title: str,
+    elements: list[dict],
+    out_path: str,
+    fig_w: float = 9,
+) -> bool:
+    """SLDS 風簡易ワイヤーフレームを PNG で出力する。"""
+    if not HAS_MPL:
+        return False
+
+    # ── ボタンとフィールドを分離 ───────────────────────────────────────────
+    buttons = [e for e in elements if e["type"] == "button"]
+    fields  = [e for e in elements if e["type"] != "button"]
+
+    # ── フィールド高さ計算 ─────────────────────────────────────────────────
+    _FIELD_H = {
+        "input": 0.38, "picklist": 0.38, "textarea": 0.7,
+        "table": 1.2, "record_form": 0.38,
+    }
+    _LABEL_H   = 0.28   # ラベル行の高さ
+    _GAP       = 0.12   # フィールド間の余白
+    _CARD_PAD  = 0.30   # カード内の上下左右余白
+    _HEADER_H  = 0.60
+
+    # 2カラム判定
+    use_two_col = len(fields) > 8
+    if use_two_col:
+        mid = (len(fields) + 1) // 2
+        col_left  = fields[:mid]
+        col_right = fields[mid:]
+    else:
+        col_left  = fields
+        col_right = []
+
+    def _col_height(col: list[dict]) -> float:
+        h = 0.0
+        for f in col:
+            h += _LABEL_H + _FIELD_H.get(f["type"], 0.38) + _GAP
+        return h
+
+    body_h = max(_col_height(col_left), _col_height(col_right)) if col_right else _col_height(col_left)
+    fig_h  = _HEADER_H + body_h + _CARD_PAD * 2 + 0.3  # 0.3 = 外枠余白
+
+    # ── Figure / Axes ──────────────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(fig_w, max(fig_h, 2.0)))
+    ax.set_xlim(0, fig_w)
+    ax.set_ylim(fig_h, 0)  # Y軸反転（上→下）
+    ax.set_aspect("equal")
+    ax.axis("off")
+    fig.patch.set_facecolor(_SLDS_GRAY)
+
+    # ── ヘッダーバー ───────────────────────────────────────────────────────
+    ax.add_patch(FancyBboxPatch(
+        (0.2, 0.15), fig_w - 0.4, _HEADER_H,
+        boxstyle="round,pad=0.05",
+        facecolor=_SLDS_BRAND, edgecolor="none",
+    ))
+    ax.text(0.55, 0.15 + _HEADER_H / 2, title,
+            ha="left", va="center", color="white",
+            **_fpkw(11.0, bold=True))
+
+    # ヘッダー内ボタン（右寄せ）
+    btn_x = fig_w - 0.5
+    for btn in reversed(buttons):
+        lbl = btn["label"]
+        bw = max(len(lbl) * 0.18 + 0.3, 0.8)
+        bx = btn_x - bw
+        by = 0.15 + (_HEADER_H - 0.32) / 2
+        is_brand = btn.get("subtype") in ("brand", "destructive")
+        ax.add_patch(FancyBboxPatch(
+            (bx, by), bw, 0.32,
+            boxstyle="round,pad=0.05",
+            facecolor=_SLDS_BRAND if is_brand else "white",
+            edgecolor=_SLDS_BRAND,
+            linewidth=1.0,
+        ))
+        ax.text(bx + bw / 2, by + 0.16, lbl,
+                ha="center", va="center",
+                color="white" if is_brand else _SLDS_BRAND,
+                **_fpkw(8.0, bold=True))
+        btn_x = bx - 0.15
+
+    # ── カード（白背景） ──────────────────────────────────────────────────
+    card_top  = _HEADER_H + 0.30
+    card_left = 0.3
+    card_w    = fig_w - 0.6
+    card_h    = body_h + _CARD_PAD * 2
+    ax.add_patch(FancyBboxPatch(
+        (card_left, card_top), card_w, max(card_h, 0.5),
+        boxstyle="round,pad=0.06",
+        facecolor="white", edgecolor=_SLDS_BORDER, linewidth=0.8,
+    ))
+
+    # ── フィールド描画 ────────────────────────────────────────────────────
+    def _draw_fields(col: list[dict], x_start: float, col_w: float, y_start: float):
+        y = y_start
+        for f in col:
+            ftype = f["type"]
+            label = f.get("label", "")
+            req   = f.get("required", False)
+            fh    = _FIELD_H.get(ftype, 0.38)
+            fw    = col_w - 0.2  # フィールド幅
+
+            # ラベル
+            if req:
+                ax.text(x_start, y, label,
+                        ha="left", va="top", color="#3E3E3C",
+                        **_fpkw(8.5, bold=True))
+                ax.text(x_start + len(label) * 0.14 + 0.05, y, "*",
+                        ha="left", va="top", color="red",
+                        **_fpkw(9.0, bold=True))
+            else:
+                ax.text(x_start, y, label,
+                        ha="left", va="top", color="#3E3E3C",
+                        **_fpkw(8.5, bold=True))
+
+            y += _LABEL_H
+
+            # 入力ボックス
+            if ftype == "table":
+                _draw_table_placeholder(ax, x_start, y, fw, fh, label)
+            else:
+                ax.add_patch(FancyBboxPatch(
+                    (x_start, y), fw, fh,
+                    boxstyle="round,pad=0.03",
+                    facecolor="white", edgecolor=_SLDS_BORDER, linewidth=0.8,
+                ))
+                if ftype == "picklist":
+                    ax.text(x_start + fw - 0.2, y + fh / 2, "\u25bc",
+                            ha="center", va="center", color="#706E6B",
+                            **_fpkw(8.0))
+
+            y += fh + _GAP
+
+    def _draw_table_placeholder(ax, x: float, y: float, w: float, h: float, label: str):
+        """データテーブルのプレースホルダーを描画。"""
+        cols = ["No", "\u9805\u76ee1", "\u9805\u76ee2", "\u9805\u76ee3"]
+        col_ws = [w * 0.1, w * 0.35, w * 0.3, w * 0.25]
+        row_h = h / 3.0
+
+        # 外枠
+        ax.add_patch(plt.Rectangle(
+            (x, y), w, h,
+            facecolor="white", edgecolor=_SLDS_BORDER, linewidth=0.8,
+        ))
+
+        # ヘッダー行
+        cx = x
+        for ci, (col_label, cw) in enumerate(zip(cols, col_ws)):
+            ax.add_patch(plt.Rectangle(
+                (cx, y), cw, row_h,
+                facecolor=_SLDS_GRAY, edgecolor=_SLDS_BORDER, linewidth=0.5,
+            ))
+            ax.text(cx + cw / 2, y + row_h / 2, col_label,
+                    ha="center", va="center", color="#3E3E3C",
+                    **_fpkw(7.0, bold=True))
+            cx += cw
+
+        # データ行（空）
+        for ri in range(1, 3):
+            ry = y + row_h * ri
+            cx = x
+            for cw in col_ws:
+                ax.add_patch(plt.Rectangle(
+                    (cx, ry), cw, row_h,
+                    facecolor="white", edgecolor=_SLDS_BORDER, linewidth=0.3,
+                ))
+                cx += cw
+
+    # カラム描画
+    field_y_start = card_top + _CARD_PAD
+    if use_two_col:
+        half_w = (card_w - _CARD_PAD) / 2
+        _draw_fields(col_left,  card_left + _CARD_PAD / 2, half_w, field_y_start)
+        _draw_fields(col_right, card_left + half_w + _CARD_PAD / 2, half_w, field_y_start)
+    else:
+        _draw_fields(col_left, card_left + _CARD_PAD / 2, card_w - _CARD_PAD, field_y_start)
+
+    # ── 保存 ──────────────────────────────────────────────────────────────
+    plt.savefig(out_path, dpi=180, bbox_inches="tight", facecolor=_SLDS_GRAY)
+    plt.close(fig)
+    return True
