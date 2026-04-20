@@ -32,51 +32,16 @@ AskUserQuestion で生成する設計書を選択する:
 
 ## Step 0-2: 共通情報の取得
 
-### プロジェクトディレクトリ
+### 管理フォルダ（= プロジェクトルート）
 
-**最初に**チャットで直接聞く（force-app/ があるフォルダ）:
+> sf-design は **管理フォルダ = プロジェクトルート（force-app/ / docs/ / scripts/ が存在するフォルダ）** を前提とする。`project_dir` は `ROOT` と同じ値を使用する。
+
+まず前回設定を確認するために、一時的に仮パスでファイルを探す。**前回値がある場合**: AskUserQuestion で提示（1択+Other自動）:
+- label: "前回: {last_output_dir}"、description: "前回と同じフォルダを使用"
+
+Other が選ばれた場合またはチャットで直接聞く:
 ```
-プロジェクトルートのパスを入力してください（force-app/ があるフォルダ）:
-```
-
-### 前回設定の読み込み
-
-project_dir が確定したら設定ファイルを読む:
-
-```bash
-python -c "
-import pathlib
-try:
-    import yaml
-    p = pathlib.Path(r'{project_dir}') / 'docs' / 'sf_design_config.yml'
-    if p.exists():
-        d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
-        print('author:' + str(d.get('author', '')))
-        print('output_dir:' + str(d.get('output_dir', '')))
-    else:
-        print('author:')
-        print('output_dir:')
-except Exception:
-    print('author:')
-    print('output_dir:')
-"
-```
-
-出力から `author`（前回の作成者名）と `output_dir`（前回の管理フォルダ）を控える。
-
-### 管理フォルダ
-
-**前回値がある場合:** AskUserQuestion で提示（1択+Other自動）:
-- label: "前回: {last_output_dir}"、description: "前回と同じ管理フォルダを使用"
-
-Other が選ばれた場合はチャットで入力:
-```
-資料の管理フォルダパスを入力してください:
-```
-
-**前回値がない場合:** チャットで直接聞く:
-```
-資料の管理フォルダパスを入力してください:
+プロジェクトフォルダのパスを入力してください（設計書の出力先になります）:
 ```
 
 入力後、ROOT 解決スクリプトを実行:
@@ -92,7 +57,26 @@ for part in [p] + list(p.parents):
 print('ROOT:' + str(p))
 "
 ```
-出力の `ROOT:` 以降を `ROOT` として控える。
+出力の `ROOT:` 以降を `ROOT` として控える。**`project_dir = ROOT`** とする。
+
+前回設定の読み込み（ROOT 確定後）:
+```bash
+python -c "
+import pathlib
+try:
+    import yaml
+    p = pathlib.Path(r'{ROOT}') / 'docs' / 'sf_design_config.yml'
+    if p.exists():
+        d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
+        print('author:' + str(d.get('author', '')))
+    else:
+        print('author:')
+except Exception:
+    print('author:')
+"
+```
+
+出力から `author`（前回の作成者名）を控える。
 
 ### 作成者名
 
@@ -136,7 +120,7 @@ python -c "
 import pathlib
 try:
     import yaml
-    p = pathlib.Path(r'{project_dir}') / 'docs' / 'sf_design_config.yml'
+    p = pathlib.Path(r'{ROOT}') / 'docs' / 'sf_design_config.yml'
     p.parent.mkdir(parents=True, exist_ok=True)
     data = {'author': r'{author}', 'output_dir': r'{ROOT}'}
     p.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding='utf-8')
