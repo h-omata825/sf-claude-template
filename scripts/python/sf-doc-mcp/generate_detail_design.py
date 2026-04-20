@@ -6,14 +6,13 @@
   詳細設計書テンプレート.xlsx（build_detail_design_template.py で生成した「器」）を
   コピーしてセル値 + 図形PNGを流し込む。
 
-7シート構成:
+6シート構成:
   1. 改版履歴           : メタ + 履歴テーブル
   2. 概要               : 機能名 / 機能概要 / 目的 / 利用者 / 起点画面 / 操作トリガー
   3. 業務フロー         : スイムレーン図PNG + フロー表(No/アクター/処理内容/分岐条件)
   4. 対象オブジェクト   : ER図PNG + 項目表(オブジェクト名/項目API名/項目ラベル/読み書き区分/備考)
   5. 処理概要           : フローチャートPNG + 処理表(No/処理内容/コンポーネント/分岐条件)
   6. 関連コンポーネント : コンポーネント図PNG + 一覧表(コンポーネント名/種別/役割/依存方向)
-  7. 影響範囲           : 5セクション(更新/参照オブジェクト、関連Apex等、外部連携、他機能依存)
 
 Usage:
   python generate_detail_design.py \\
@@ -35,8 +34,14 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 import design_revision as dr
+from build_detail_design_template import (
+    section_band, diagram_area, data_rows, setup_grid, set_h,
+    GRID_LEFT, GRID_RIGHT,
+    C_BAND_BLUE, C_TITLE_DARK,
+)
 from meta_store import read_meta, write_meta
 from version_manager import increment_version
 
@@ -79,19 +84,21 @@ OV_ROWS = {
     "trigger":        8,
 }
 
-# 業務フロー: 表上・図下レイアウト
-# テーブル: row3=バンド, row4=ヘッダ, row5〜24=データ(20行)
-# 図エリア: row26=バンド, row27〜56=図エリア(30行)
-BF_IMG_ANCHOR      = "B27"
+# 業務フロー: テーブルヘッダは row4、データは row5 から動的追加
 BF_DATA_ROW_START  = 5
 BF_STEP_CS,  BF_STEP_CE  = 2,  3
 BF_ACTOR_CS, BF_ACTOR_CE = 4,  8
 BF_ACT_CS,   BF_ACT_CE   = 9,  22
 BF_COND_CS,  BF_COND_CE  = 23, 31
+# BF_COL_GROUPS: データ行のマージセル定義
+BF_COL_GROUPS = [
+    (BF_STEP_CS, BF_STEP_CE),
+    (BF_ACTOR_CS, BF_ACTOR_CE),
+    (BF_ACT_CS, BF_ACT_CE),
+    (BF_COND_CS, BF_COND_CE),
+]
 
-# 対象オブジェクト: 表上・図下レイアウト
-# テーブル: row3=バンド, row4=ヘッダ, row5〜34=データ(30行)
-# 図エリア: row36=バンド, row37〜66=図エリア(30行)
+# 対象オブジェクト: 表上・図下レイアウト（固定30行）
 OBJ_IMG_ANCHOR     = "B37"
 OBJ_DATA_ROW_START = 5
 OBJ_NAME_CS,  OBJ_NAME_CE  = 2,  7
@@ -100,39 +107,33 @@ OBJ_FLBL_CS,  OBJ_FLBL_CE  = 15, 20
 OBJ_ACC_CS,   OBJ_ACC_CE   = 21, 23
 OBJ_NOTE_CS,  OBJ_NOTE_CE  = 24, 31
 
-# 処理概要: 表上・図下レイアウト
-# テーブル: row3=バンド, row4=ヘッダ, row5〜24=データ(20行)
-# 図エリア: row26=バンド, row27〜56=図エリア(30行)
-PROC_IMG_ANCHOR     = "B27"
+# 処理概要: テーブルヘッダは row4、データは row5 から動的追加
 PROC_DATA_ROW_START = 5
 PROC_STEP_CS, PROC_STEP_CE = 2,  3
 PROC_DESC_CS, PROC_DESC_CE = 4,  15
 PROC_COMP_CS, PROC_COMP_CE = 16, 22
 PROC_COND_CS, PROC_COND_CE = 23, 31
+PROC_COL_GROUPS = [
+    (PROC_STEP_CS, PROC_STEP_CE),
+    (PROC_DESC_CS, PROC_DESC_CE),
+    (PROC_COMP_CS, PROC_COMP_CE),
+    (PROC_COND_CS, PROC_COND_CE),
+]
 
-# 関連コンポーネント: 表上・図下レイアウト
-# テーブル: row3=バンド, row4=ヘッダ, row5〜19=データ(15行)
-# 図エリア: row21=バンド, row22〜51=図エリア(30行)
-COMP_IMG_ANCHOR     = "B22"
+# 関連コンポーネント: テーブルヘッダは row4、データは row5 から動的追加
 COMP_DATA_ROW_START = 5
 COMP_NAME_CS, COMP_NAME_CE = 2,  9
 COMP_TYPE_CS, COMP_TYPE_CE = 10, 13
 COMP_ROLE_CS, COMP_ROLE_CE = 14, 24
 COMP_DEP_CS,  COMP_DEP_CE  = 25, 31
+COMP_COL_GROUPS = [
+    (COMP_NAME_CS, COMP_NAME_CE),
+    (COMP_TYPE_CS, COMP_TYPE_CE),
+    (COMP_ROLE_CS, COMP_ROLE_CE),
+    (COMP_DEP_CS, COMP_DEP_CE),
+]
 
-# 影響範囲: row3 から積み上がる
-# 更新オブジェクト: row3=バンド, row4=ヘッダ, row5-12=データ(8行), row13=spacer
-# 参照オブジェクト: row14=バンド, row15=ヘッダ, row16-23=データ(8行), row24=spacer
-# 関連Apex/Flow/LWC: row25=バンド, row26=ヘッダ, row27-34=データ(8行), row35=spacer
-# 外部連携影響: row36=バンド, row37=ヘッダ, row38-42=データ(5行), row43=spacer
-# 他機能依存: row44=バンド, row45=ヘッダ, row46-50=データ(5行), row51=spacer
-IMPACT_UPDATE_OBJ_START = 5
-IMPACT_REF_OBJ_START    = 16
-IMPACT_APEX_START       = 27
-IMPACT_EXT_START        = 38
-IMPACT_DEP_START        = 46
-
-GRID_RIGHT = 31
+GRID_RIGHT_C = 31
 
 SCALAR_FIELDS  = ["summary", "purpose", "users", "trigger_screen", "trigger"]
 SECTION_SHEETS = {
@@ -141,6 +142,11 @@ SECTION_SHEETS = {
     "process_steps":    "処理概要",
     "components":       "関連コンポーネント",
 }
+
+# 動的シートの図エリア高さ（行数）
+DIAGRAM_AREA_ROWS = 30
+# 動的シートの空行追加数（手動入力用）
+DYNAMIC_EMPTY_ROWS = 5
 
 
 # ── スタイルヘルパー ────────────────────────────────────────────────
@@ -172,8 +178,7 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
     ws.merge_cells(start_row=row, start_column=cs, end_row=row, end_column=ce)
     return W(ws, row, cs, value, border=border, bg=bg, **kwargs)
 
-def set_h(ws, row, h):
-    ws.row_dimensions[row].height = h
+# set_h is imported from build_detail_design_template
 
 
 # ── PNG埋め込み ────────────────────────────────────────────────────
@@ -218,18 +223,21 @@ def fill_overview(ws, data: dict, changed_fields: set):
 
 def fill_business_flow(ws, data: dict, changed_step_nos: set,
                        png_path: str | None):
-    """業務フローシート: スイムレーン図 + テーブル。"""
-    if png_path:
-        _embed_image(ws, png_path, BF_IMG_ANCHOR, img_w=880)
-
+    """業務フローシート: テーブル(動的行) + スイムレーン図。"""
     flows = data.get("business_flow", [])
+    n_data = len(flows)
+    total_rows = n_data + DYNAMIC_EMPTY_ROWS
+
+    # データ行 + 空行の枠を作成
     r = BF_DATA_ROW_START
+    data_rows(ws, r, r + total_rows - 1, BF_COL_GROUPS, row_h=24)
+
+    # データ書き込み
     for i, flow in enumerate(flows):
         step_no = flow.get("step", i + 1)
         is_changed = step_no in changed_step_nos
         set_h(ws, r, 24)
 
-        # 分岐条件テキスト: nextのconditionを集約
         nexts = flow.get("next", [])
         conditions = [n.get("condition", "") for n in nexts if n.get("condition")]
         cond_text = " / ".join(conditions)
@@ -247,29 +255,70 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
                 dr.apply_red(c)
         r += 1
 
+    # スペーサー + 図エリア
+    spacer_row = BF_DATA_ROW_START + total_rows
+    set_h(ws, spacer_row, 8)
+    diagram_start = spacer_row + 1
+    diagram_area(ws, diagram_start, "業務フロー図（自動生成）", section_no=2)
+
+    # 図埋め込み
+    img_anchor = f"B{diagram_start + 1}"
+    if png_path:
+        _embed_image(ws, png_path, img_anchor, img_w=880)
+
+
+def _compute_obj_note(obj_api: str, access: str, impact: dict) -> str:
+    """対象オブジェクトの備考テキストを計算する。
+
+    - access が W/RW で impact.update_objects に含まれる → 「更新対象」
+    - access が R のみ → 「参照のみ」
+    - それ以外 → 空文字
+    """
+    update_objects = set(impact.get("update_objects", []))
+    if access in ("W", "RW") and obj_api in update_objects:
+        return "更新対象"
+    if access == "R":
+        return "参照のみ"
+    if access in ("W", "RW"):
+        return "更新対象"
+    return ""
+
 
 def fill_target_objects(ws, data: dict, changed_obj_keys: set,
                         png_path: str | None):
-    """対象オブジェクトシート: ER図 + 項目テーブル。"""
+    """対象オブジェクトシート: ER図 + 項目テーブル（固定30行）。
+
+    備考列に影響範囲情報を吸収:
+    - W/RW + impact.update_objects → 「更新対象」
+    - R のみ → 「参照のみ」
+    """
     if png_path:
         _embed_image(ws, png_path, OBJ_IMG_ANCHOR, img_w=880)
 
+    impact = data.get("impact", {})
     objects = data.get("related_objects", [])
     r = OBJ_DATA_ROW_START
     for obj in objects:
         obj_name = f"{obj.get('label', '')} ({obj.get('api_name', '')})"
-        is_changed = obj.get("api_name", "") in changed_obj_keys
+        obj_api = obj.get("api_name", "")
+        is_changed = obj_api in changed_obj_keys
         for field in obj.get("fields", []):
             set_h(ws, r, 22)
+            access = field.get("access", "")
+            # 備考: field固有のnoteがあればそれを優先、なければ影響範囲から導出
+            note = field.get("note", "")
+            if not note:
+                note = _compute_obj_note(obj_api, access, impact)
+
             c1 = MW(ws, r, OBJ_NAME_CS,  OBJ_NAME_CE,  obj_name,
                     border=B_all())
             c2 = MW(ws, r, OBJ_FAPI_CS,  OBJ_FAPI_CE,  field.get("api_name", ""),
                     border=B_all())
             c3 = MW(ws, r, OBJ_FLBL_CS,  OBJ_FLBL_CE,  field.get("label", ""),
                     border=B_all())
-            c4 = MW(ws, r, OBJ_ACC_CS,   OBJ_ACC_CE,   field.get("access", ""),
+            c4 = MW(ws, r, OBJ_ACC_CS,   OBJ_ACC_CE,   access,
                     border=B_all(), h="center")
-            c5 = MW(ws, r, OBJ_NOTE_CS,  OBJ_NOTE_CE,  field.get("note", ""),
+            c5 = MW(ws, r, OBJ_NOTE_CS,  OBJ_NOTE_CE,  note,
                     border=B_all(), wrap=True)
             if is_changed:
                 for c in (c1, c2, c3, c4, c5):
@@ -279,12 +328,15 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
 
 def fill_process_overview(ws, data: dict, changed_step_nos: set,
                           png_path: str | None):
-    """処理概要シート: フローチャート + テーブル。"""
-    if png_path:
-        _embed_image(ws, png_path, PROC_IMG_ANCHOR, img_w=880)
-
+    """処理概要シート: テーブル(動的行) + フローチャート。"""
     steps = data.get("process_steps", [])
+    n_data = len(steps)
+    total_rows = n_data + DYNAMIC_EMPTY_ROWS
+
+    # データ行 + 空行の枠を作成
     r = PROC_DATA_ROW_START
+    data_rows(ws, r, r + total_rows - 1, PROC_COL_GROUPS, row_h=30)
+
     for i, ps in enumerate(steps):
         step_no = ps.get("step", i + 1)
         is_changed = step_no in changed_step_nos
@@ -307,23 +359,64 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
                 dr.apply_red(c)
         r += 1
 
+    # スペーサー + 図エリア
+    spacer_row = PROC_DATA_ROW_START + total_rows
+    set_h(ws, spacer_row, 8)
+    diagram_start = spacer_row + 1
+    diagram_area(ws, diagram_start, "処理フロー図（自動生成）", section_no=2)
+
+    img_anchor = f"B{diagram_start + 1}"
+    if png_path:
+        _embed_image(ws, png_path, img_anchor, img_w=880)
+
+
+def _compute_dep_direction(api_name: str, components: list[dict]) -> str:
+    """依存方向テキストを計算する。
+
+    - callees があれば「呼び出す」
+    - 他コンポーネントの callees に含まれていれば「呼ばれる」
+    - 両方なら「双方向」
+    """
+    has_callees = False
+    has_callers = False
+
+    for comp in components:
+        if comp.get("api_name", "") == api_name:
+            if comp.get("callees", []):
+                has_callees = True
+        else:
+            if api_name in comp.get("callees", []):
+                has_callers = True
+
+    if has_callees and has_callers:
+        return "双方向"
+    if has_callees:
+        return "呼び出す"
+    if has_callers:
+        return "呼ばれる"
+    return ""
+
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
                             png_path: str | None):
-    """関連コンポーネントシート: コンポーネント図 + 一覧テーブル。"""
-    if png_path:
-        _embed_image(ws, png_path, COMP_IMG_ANCHOR, img_w=880)
+    """関連コンポーネントシート: テーブル(動的行) + コンポーネント図。
 
+    依存方向列に callees/callers 情報を吸収。
+    """
     components = data.get("components", [])
+    n_data = len(components)
+    total_rows = n_data + DYNAMIC_EMPTY_ROWS
+
+    # データ行 + 空行の枠を作成
     r = COMP_DATA_ROW_START
+    data_rows(ws, r, r + total_rows - 1, COMP_COL_GROUPS, row_h=24)
+
     for comp in components:
         api_name = comp.get("api_name", "")
         is_changed = api_name in changed_comp_keys
         set_h(ws, r, 24)
 
-        # 依存方向: callees のリストを文字列化
-        callees = comp.get("callees", [])
-        dep_text = " → ".join(callees) if callees else ""
+        dep_text = _compute_dep_direction(api_name, components)
 
         c1 = MW(ws, r, COMP_NAME_CS, COMP_NAME_CE, api_name,
                 border=B_all())
@@ -338,109 +431,17 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
                 dr.apply_red(c)
         r += 1
 
+    # スペーサー + 図エリア
+    spacer_row = COMP_DATA_ROW_START + total_rows
+    set_h(ws, spacer_row, 8)
+    diagram_start = spacer_row + 1
+    diagram_area(ws, diagram_start, "コンポーネント関連図（自動生成）", section_no=2)
 
-def _build_obj_field_map(data: dict) -> dict[str, dict[str, list[str]]]:
-    """related_objects から {obj_api: {"W": [field_names], "R": [field_names]}} を構築する。
-
-    access が "W" → W のみ, "R" → R のみ, "RW" → 両方に含める。
-    """
-    result: dict[str, dict[str, list[str]]] = {}
-    for obj in data.get("related_objects", []):
-        api = obj.get("api_name", "")
-        w_fields: list[str] = []
-        r_fields: list[str] = []
-        for f in obj.get("fields", []):
-            access = f.get("access", "")
-            fname = f.get("label") or f.get("api_name", "")
-            if access in ("W", "RW"):
-                w_fields.append(fname)
-            if access in ("R", "RW"):
-                r_fields.append(fname)
-        result[api] = {"W": w_fields, "R": r_fields}
-    return result
+    img_anchor = f"B{diagram_start + 1}"
+    if png_path:
+        _embed_image(ws, png_path, img_anchor, img_w=880)
 
 
-def _build_comp_role_map(data: dict) -> dict[str, str]:
-    """components から {api_name: role} マップを構築する。"""
-    return {c.get("api_name", ""): c.get("role", "") for c in data.get("components", [])}
-
-
-def fill_impact_scope(ws, data: dict):
-    """影響範囲シート: 5セクションに値を書き込む。
-
-    related_objects の fields 情報から更新項目・参照項目を導出する。
-    components から関連Apex/Flow/LWC の関連内容(role)を導出する。
-    """
-    impact = data.get("impact", {})
-    obj_field_map = _build_obj_field_map(data)
-    comp_role_map = _build_comp_role_map(data)
-
-    # 更新オブジェクト: col 2-9=名前, 10-20=更新項目, 21-31=更新条件
-    r = IMPACT_UPDATE_OBJ_START
-    for obj_name in impact.get("update_objects", []):
-        set_h(ws, r, 22)
-        # 更新項目を related_objects から導出
-        w_fields = obj_field_map.get(obj_name, {}).get("W", [])
-        update_fields_text = ", ".join(w_fields) if w_fields else ""
-        MW(ws, r, 2,  9,  obj_name,           border=B_all())
-        MW(ws, r, 10, 20, update_fields_text,  border=B_all(), wrap=True)
-        MW(ws, r, 21, 31, "",                  border=B_all())
-        r += 1
-
-    # 参照オブジェクト: col 2-9=名前, 10-20=参照項目, 21-31=参照目的
-    r = IMPACT_REF_OBJ_START
-    for obj_name in impact.get("reference_objects", []):
-        set_h(ws, r, 22)
-        # 参照項目を related_objects から導出
-        r_fields = obj_field_map.get(obj_name, {}).get("R", [])
-        ref_fields_text = ", ".join(r_fields) if r_fields else ""
-        MW(ws, r, 2,  9,  obj_name,          border=B_all())
-        MW(ws, r, 10, 20, ref_fields_text,   border=B_all(), wrap=True)
-        MW(ws, r, 21, 31, "",                border=B_all())
-        r += 1
-
-    # 関連Apex/Flow/LWC: col 2-9=名称, 10-13=種別, 14-31=関連内容
-    r = IMPACT_APEX_START
-    apex_items = impact.get("related_apex", [])
-    flow_items = impact.get("related_flow", [])
-    lwc_items  = impact.get("related_lwc", [])
-    for name in apex_items:
-        role = comp_role_map.get(name, "")
-        set_h(ws, r, 22)
-        MW(ws, r, 2,  9,  name,   border=B_all())
-        MW(ws, r, 10, 13, "Apex", border=B_all(), h="center")
-        MW(ws, r, 14, 31, role,   border=B_all(), wrap=True)
-        r += 1
-    for name in flow_items:
-        role = comp_role_map.get(name, "")
-        set_h(ws, r, 22)
-        MW(ws, r, 2,  9,  name,   border=B_all())
-        MW(ws, r, 10, 13, "Flow", border=B_all(), h="center")
-        MW(ws, r, 14, 31, role,   border=B_all(), wrap=True)
-        r += 1
-    for name in lwc_items:
-        role = comp_role_map.get(name, "")
-        set_h(ws, r, 22)
-        MW(ws, r, 2,  9,  name,  border=B_all())
-        MW(ws, r, 10, 13, "LWC", border=B_all(), h="center")
-        MW(ws, r, 14, 31, role,  border=B_all(), wrap=True)
-        r += 1
-
-    # 外部連携影響: col 2-9=連携先, 10-31=影響内容
-    r = IMPACT_EXT_START
-    for name in impact.get("external_integrations", []):
-        set_h(ws, r, 22)
-        MW(ws, r, 2,  9,  name, border=B_all())
-        MW(ws, r, 10, 31, "",   border=B_all())
-        r += 1
-
-    # 他機能依存: col 2-9=機能名, 10-31=依存内容
-    r = IMPACT_DEP_START
-    for name in impact.get("feature_dependencies", []):
-        set_h(ws, r, 22)
-        MW(ws, r, 2,  9,  name, border=B_all())
-        MW(ws, r, 10, 31, "",   border=B_all())
-        r += 1
 
 
 # ── 差分計算 ────────────────────────────────────────────────────────
@@ -764,8 +765,6 @@ def main():
             wb["関連コンポーネント"], data,
             changed_comp_keys=set() if is_major else changed_comps,
             png_path=png_paths.get("component"))
-
-        fill_impact_scope(wb["影響範囲"], data)
 
         meta_payload = {
             "version": current_version,

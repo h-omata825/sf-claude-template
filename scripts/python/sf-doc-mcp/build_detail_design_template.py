@@ -1,18 +1,18 @@
 """
 詳細設計書テンプレート Excel を生成する。
 
-7シート構成（T-04仕様）:
+6シート構成:
   1. 改版履歴           : 基本情報 + 改版履歴テーブル
   2. 概要               : 機能名 / 機能概要 / 目的 / 利用者 / 起点画面 / 操作トリガー
   3. 業務フロー         : No / アクター / 処理内容 / 分岐条件
   4. 対象オブジェクト   : オブジェクト名 / 項目API名 / 項目ラベル / 読み書き区分 / 備考
   5. 処理概要           : No / 処理内容 / コンポーネント / 分岐条件
   6. 関連コンポーネント : コンポーネント名 / 種別 / 役割 / 依存方向
-  7. 影響範囲           : 5セクション（更新/参照オブジェクト、関連Apex等、外部連携、他機能依存）
 
 方針:
   - 設計書テンプレートと同じデザインシステム（狭幅グリッド + セル結合 + 罫線統一）
   - グリッド: col A=2.0、col 2-31=4.2（30列）
+  - データ行はヘッダーのみ（generate側で動的に追加）
 
 Usage:
   python build_detail_design_template.py --output "C:/.../詳細設計書テンプレート.xlsx"
@@ -209,16 +209,9 @@ def build_business_flow(wb):
     title_band(ws, 1, "詳細設計書 — 業務フロー")
     set_h(ws, 2, 6)
 
-    # テーブル（上）
+    # テーブル（ヘッダーのみ — データ行はgenerate側で動的追加）
     section_band(ws, 3, "\u25a0 1. 業務フロー")
     table_header(ws, 4, BF_COLS)
-    data_rows(ws, 5, 24, [(cs, ce) for cs, ce, _ in BF_COLS])
-
-    # スペーサー
-    set_h(ws, 25, 8)
-
-    # 図エリア（下）
-    diagram_area(ws, 26, "業務フロー図（自動生成）", section_no=2)
 
 
 # =====================================================================
@@ -239,7 +232,7 @@ def build_target_objects(wb):
     title_band(ws, 1, "詳細設計書 — 対象オブジェクト")
     set_h(ws, 2, 6)
 
-    # テーブル（上）
+    # テーブル（ヘッダーのみ — データ行はgenerate側で動的追加、最大30行固定）
     section_band(ws, 3, "\u25a0 1. 対象オブジェクト・項目一覧")
     table_header(ws, 4, OBJ_COLS)
     data_rows(ws, 5, 34, [(cs, ce) for cs, ce, _ in OBJ_COLS])
@@ -268,16 +261,9 @@ def build_process_overview(wb):
     title_band(ws, 1, "詳細設計書 — 処理概要")
     set_h(ws, 2, 6)
 
-    # テーブル（上）
+    # テーブル（ヘッダーのみ — データ行はgenerate側で動的追加）
     section_band(ws, 3, "\u25a0 1. 処理概要")
     table_header(ws, 4, PROC_COLS)
-    data_rows(ws, 5, 24, [(cs, ce) for cs, ce, _ in PROC_COLS])
-
-    # スペーサー
-    set_h(ws, 25, 8)
-
-    # 図エリア（下）
-    diagram_area(ws, 26, "処理フロー図（自動生成）", section_no=2)
 
 
 # =====================================================================
@@ -297,68 +283,9 @@ def build_related_components(wb):
     title_band(ws, 1, "詳細設計書 — 関連コンポーネント")
     set_h(ws, 2, 6)
 
-    # テーブル（上）
+    # テーブル（ヘッダーのみ — データ行はgenerate側で動的追加）
     section_band(ws, 3, "\u25a0 1. 関連コンポーネント一覧")
     table_header(ws, 4, COMP_COLS)
-    data_rows(ws, 5, 19, [(cs, ce) for cs, ce, _ in COMP_COLS])
-
-    # スペーサー
-    set_h(ws, 20, 8)
-
-    # 図エリア（下）
-    diagram_area(ws, 21, "コンポーネント関連図（自動生成）", section_no=2)
-
-
-# =====================================================================
-# Sheet 7: 影響範囲
-# =====================================================================
-IMPACT_SECTIONS = [
-    {
-        "title": "更新オブジェクト",
-        "cols": [(2, 9, "オブジェクト名"), (10, 20, "更新項目"), (21, 31, "更新条件")],
-        "rows": 8,
-    },
-    {
-        "title": "参照オブジェクト",
-        "cols": [(2, 9, "オブジェクト名"), (10, 20, "参照項目"), (21, 31, "参照目的")],
-        "rows": 8,
-    },
-    {
-        "title": "関連Apex/Flow/LWC",
-        "cols": [(2, 9, "名称"), (10, 13, "種別"), (14, 31, "関連内容")],
-        "rows": 8,
-    },
-    {
-        "title": "外部連携影響",
-        "cols": [(2, 9, "連携先"), (10, 31, "影響内容")],
-        "rows": 5,
-    },
-    {
-        "title": "他機能依存",
-        "cols": [(2, 9, "機能名"), (10, 31, "依存内容")],
-        "rows": 5,
-    },
-]
-
-def build_impact_scope(wb):
-    ws = wb.create_sheet("影響範囲")
-    setup_grid(ws)
-
-    title_band(ws, 1, "詳細設計書 — 影響範囲")
-    set_h(ws, 2, 6)
-
-    r = 3
-    for sec in IMPACT_SECTIONS:
-        section_band(ws, r, f"■ {sec['title']}")
-        r += 1
-        table_header(ws, r, sec["cols"])
-        r += 1
-        end_r = r + sec["rows"] - 1
-        data_rows(ws, r, end_r, [(cs, ce) for cs, ce, _ in sec["cols"]])
-        r = end_r + 1
-        # スペーサー行
-        set_h(ws, r, 6)
-        r += 1
 
 
 # =====================================================================
@@ -376,7 +303,6 @@ def main():
     build_target_objects(wb)
     build_process_overview(wb)
     build_related_components(wb)
-    build_impact_scope(wb)
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
