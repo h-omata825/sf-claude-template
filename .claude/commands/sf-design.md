@@ -139,17 +139,9 @@ mkdir -p "{ROOT}/基本設計書" && mkdir -p "{ROOT}/基本設計書/.tmp"
 
 `output_dir` = `{ROOT}/基本設計書`、`tmp_dir` = `{ROOT}/基本設計書/.tmp`
 
-### feature_groups.yml の確認・生成
+### feature_groups.yml の生成
 
-```bash
-python -c "
-import pathlib
-p = pathlib.Path(r'{project_dir}') / 'docs' / 'feature_groups.yml'
-print('exists' if p.exists() else 'not_found')
-"
-```
-
-なければ生成する:
+毎回再生成する（force-app/ の最新状態を反映するため）:
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
   --project-dir "{project_dir}" \
