@@ -1,6 +1,6 @@
 Salesforce プロジェクトの設計書を生成します。
 
-**基本設計 / 詳細設計 / プログラム設計** の3層構成に対応しています。
+**ドメイン設計 / 詳細設計 / プログラム設計** の3層構成に対応しています。
 
 **AskUserQuestion のルール（厳守）:**
 - **1質問1回答**: 複数の質問を1つの AskUserQuestion にまとめない。必ず1問ずつ順番に聞く
@@ -13,9 +13,9 @@ Salesforce プロジェクトの設計書を生成します。
 
 | 層 | 対象読者 | 内容 | 出力先 |
 |---|---|---|---|
-| 基本設計 | 業務担当者・PM | 誰が・何のために・どう使うか・業務フロー | `{ROOT}/基本設計書/` |
-| 詳細設計 | エンジニア | コンポーネント仕様・インターフェース・画面項目 | `{ROOT}/詳細設計書/` |
-| プログラム設計 | 実装者 | SOQL・DML・メソッド呼び出しの詳細・フローチャート | `{ROOT}/プログラム設計書/` |
+| ドメイン設計 | 経営者・PM・業務担当者 | 業務ドメイン単位の目的・業務フロー・画面構成・コンポーネント全体像（5〜20件） | `{ROOT}/ドメイン設計書/` |
+| 詳細設計 | エンジニア | 機能グループ単位のコンポーネント仕様・インターフェース・画面項目 | `{ROOT}/詳細設計書/` |
+| プログラム設計 | 実装者 | コンポーネント単位の処理フロー・SOQL・DML | `{ROOT}/プログラム設計書/` |
 
 ---
 
@@ -23,9 +23,9 @@ Salesforce プロジェクトの設計書を生成します。
 
 AskUserQuestion で生成する設計書を選択する:
 
-- 全て — 基本設計 → 詳細設計 → プログラム設計の順に生成（各層が前層の JSON を参照して精度を高める）
-- 基本設計 — 業務グループ単位の基本設計書（業務目的・業務フロー・構成コンポーネント）
-- 詳細設計 — 業務グループ単位の詳細設計書（コンポーネント仕様・インターフェース・画面項目）
+- 全て — ドメイン設計 → 詳細設計 → プログラム設計の順に生成（各層が前層の JSON を参照して精度を高める）
+- ドメイン設計 — 業務ドメイン単位の設計書（業務フロー・画面遷移・コンポーネント構成の全体像）
+- 詳細設計 — 機能グループ単位の詳細設計書（コンポーネント仕様・インターフェース・画面項目）
 - プログラム設計 — コンポーネント単位のプログラム設計書（処理フロー・SOQL・DML）
 
 ---
@@ -133,7 +133,7 @@ except Exception as e:
 
 ## Step 0-3: 事前確認（「全て」選択時のみ・ここで全質問を終わらせる）
 
-> **「全て」を選択した場合はこのセクションを実行する。** 基本・詳細・プログラム設計で必要な対象グループを一括で決定し、以降の Step では一切ユーザーへの確認を行わない。
+> **「全て」を選択した場合はこのセクションを実行する。** ドメイン・詳細・プログラム設計で必要な対象を一括で決定し、以降の Step では一切ユーザーへの確認を行わない。
 
 ### feature_groups.yml の生成
 
@@ -227,15 +227,15 @@ for e in errors:
 
 ---
 
-## Step 1: 基本設計（選択した場合）
+## Step 1: ドメイン設計（選択した場合）
 
 ```bash
-mkdir -p "{ROOT}/基本設計書" && mkdir -p "{ROOT}/基本設計書/.tmp"
+mkdir -p "{ROOT}/ドメイン設計書" && mkdir -p "{ROOT}/ドメイン設計書/.tmp"
 ```
 
-`output_dir` = `{ROOT}/基本設計書`、`tmp_dir` = `{ROOT}/基本設計書/.tmp`
+`output_dir` = `{ROOT}/ドメイン設計書`、`tmp_dir` = `{ROOT}/ドメイン設計書/.tmp`
 
-**「全て」モードの場合**: feature_groups.yml は Step 0-3 で生成済み。`target_group_ids_1 = target_group_ids`（Step 0-3 で確定済み）。グループ選択をスキップして委譲へ進む。
+**「全て」モードの場合**: feature_groups.yml は Step 0-3 で生成済み。ドメイン定義は sf-domain-design-writer が `domain_groups.yml` から読み取る。選択をスキップして委譲へ進む。
 
 **単独実行の場合**: 以下を実行する。
 
@@ -247,48 +247,45 @@ python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
   --output "{project_dir}/docs/.sf/feature_groups.yml"
 ```
 
-### 対象グループの選択（単独実行時のみ）
+### 対象ドメインの選択（単独実行時のみ）
 
-feature_groups.yml の内容を表示:
+`docs/.sf/domain_groups.yml` が存在する場合はドメイン一覧を表示する:
 ```bash
 python -c "
-import yaml
-with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
-    groups = yaml.safe_load(f)
-for g in groups:
-    print(f\"{g['group_id']}: {g['name_ja']} ({len(g.get('feature_ids', []))}コンポーネント)\")
+import yaml, pathlib
+p = pathlib.Path(r'{project_dir}/docs/.sf/domain_groups.yml')
+if p.exists():
+    d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
+    for dom in d.get('domains', []):
+        print(f\"{dom['domain_id']}: {dom['name_ja']}\")
+else:
+    print('domain_groups.yml なし（sf-domain-design-writer が自動生成します）')
 "
 ```
 
 AskUserQuestion で対象を選択する:
-- 全グループ — feature_groups.yml に含まれる全グループを処理
-- グループIDを指定 — GRP-XXX をカンマ区切りで入力（次の質問で聞く）
-- コンポーネントを指定 — Apex名・LWC名・F-XXX等で指定してグループに変換する（次の質問で聞く）
+- 全ドメイン — 全ドメインを処理（または自動生成）
+- ドメインIDを指定 — DOM-XXX をカンマ区切りで入力（次の質問で聞く）
 
-「グループIDを指定」の場合:
+「ドメインIDを指定」の場合:
 ```
-対象グループIDをカンマ区切りで入力してください（例: GRP-001,GRP-003）:
-```
-
-「コンポーネントを指定」の場合:
-```
-対象コンポーネント名または機能IDをカンマ区切りで入力してください（例: QuotationRequestController,F-012）:
+対象ドメインIDをカンマ区切りで入力してください（例: DOM-001,DOM-003）:
 ```
 
-グループ解決スクリプト（Step 0-3 と同じスクリプト）を実行し、結果を `target_group_ids_1` として保存する。
+結果を `target_domain_ids_1` として保存する。
 
 ### 委譲
 
-以下の情報を渡して **sf-basic-design-writer** エージェントを起動する:
+以下の情報を渡して **sf-domain-design-writer** エージェントを起動する:
 
 ```
-project_dir:      {project_dir}
-output_dir:       {ROOT}/基本設計書
-tmp_dir:          {ROOT}/基本設計書/.tmp
-author:           {author}
-project_name:     {project_name}
-target_group_ids: {target_group_ids_1}  # 全グループの場合は空リスト []
-version_increment: minor
+project_dir:        {project_dir}
+output_dir:         {ROOT}/ドメイン設計書
+tmp_dir:            {ROOT}/ドメイン設計書/.tmp
+author:             {author}
+project_name:       {project_name}
+target_domain_ids:  {target_domain_ids_1}  # 全ドメインの場合は空リスト []
+version_increment:  minor
 ```
 
 ---
@@ -306,12 +303,12 @@ mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
 **「全て」モードの場合**: `target_group_ids_2 = target_group_ids`（Step 0-3 確定済み）。選択をスキップして委譲へ進む。
 
 **単独実行の場合**:
-- Step 1 を実行した場合: AskUserQuestion で選択する（全グループ / 基本設計と同じ / その他指定）
-- Step 1 を実行していない場合: 「基本設計と同じ」の選択肢は表示しない。feature_groups.yml 読み込み → AskUserQuestion で決定する
+- AskUserQuestion で選択する（全グループ / グループIDを指定 / コンポーネントを指定）
+- feature_groups.yml がない場合は group_features.py を実行してから表示する
 
-「その他指定」を選択した場合は Step 1 と同様のグループ解決スクリプトで GRP-XXX に変換して `target_group_ids_2` とする。
+「グループIDを指定」の場合は Step 0-3 と同じグループ解決スクリプトで GRP-XXX に変換して `target_group_ids_2` とする。
 
-**基本設計 JSON の参照**: Step 1 完了後は `basic_design_json_dir = "{ROOT}/基本設計書/.tmp"` を変数として保持する。sf-detail-design-writer はこのディレクトリから `{group_id}_basic.json` を自動参照する。
+**ドメイン設計 JSON の参照**: Step 1 完了後は `{ROOT}/ドメイン設計書/.tmp` に domain JSON が存在する。sf-detail-design-writer はこれを自動参照できる。
 
 ### sf-detail-design-writer に委譲
 
@@ -321,7 +318,6 @@ mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
 project_dir:           {project_dir}
 output_dir:            {ROOT}/詳細設計書
 tmp_dir:               {ROOT}/詳細設計書/.tmp
-basic_design_json_dir: {ROOT}/基本設計書/.tmp  # Step 1 未実行の場合は省略
 author:                {author}
 project_name:          {project_name}
 target_group_ids:      {target_group_ids_2}  # 全グループの場合は空リスト []
@@ -455,7 +451,7 @@ sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生
 ```bash
 python -c "
 import shutil, pathlib
-for subdir in ['基本設計書', '詳細設計書', 'プログラム設計書']:
+for subdir in ['ドメイン設計書', '詳細設計書', 'プログラム設計書']:
     tmp = pathlib.Path(r'{ROOT}') / subdir / '.tmp'
     if tmp.exists():
         shutil.rmtree(tmp, ignore_errors=True)
@@ -471,9 +467,9 @@ print('クリーンアップ完了')
 ```
 ✅ 設計書生成完了
 
-【基本設計】（生成した場合）
-  生成先: {ROOT}/基本設計書/
-  生成数: {n} グループ
+【ドメイン設計】（生成した場合）
+  生成先: {ROOT}/ドメイン設計書/
+  生成数: {n} ドメイン
 
 【詳細設計】（生成した場合）
   生成先: {ROOT}/詳細設計書/
@@ -490,7 +486,8 @@ print('クリーンアップ完了')
 
 ## 注意事項
 
-- 基本設計・詳細設計は **グループ単位**（feature_groups.yml が必要）
+- ドメイン設計は **ドメイン単位**（domain_groups.yml が必要・なければ自動生成）
+- 詳細設計は **グループ単位**（feature_groups.yml が必要）
 - プログラム設計は **コンポーネント単位**（scan_features.py の出力が必要）
-- 「全て」を選択した場合は **基本設計 → 詳細設計 → プログラム設計** の順に逐次実行する（各層が前層の JSON を参照して精度を高めるため並列化しない）
+- 「全て」を選択した場合は **ドメイン設計 → 詳細設計 → プログラム設計** の順に逐次実行する（各層が前層の JSON を参照して精度を高めるため並列化しない）
 - コンポーネント名（API名・F-XXX）で対象を指定した場合は、スクリプトで対応する GRP-XXX に変換してから処理する
