@@ -57,9 +57,9 @@ def classify_category(cat_name: str) -> tuple:
             return bucket, style
     return "sup", "light"
 
-HDR_H      = 0.52
-FIELD_H    = 0.28   # 0.215→0.28: テキスト見切れ対策
-MIN_BODY_H = 0.28
+HDR_H      = 0.62   # er_utils.py と同期 (0.52→0.62)
+FIELD_H    = 0.32   # er_utils.py と同期 (0.28→0.32)
+MIN_BODY_H = 0.36
 MAX_FIELDS = 8
 
 
@@ -383,7 +383,7 @@ def compute_box_h(n_fields: int) -> float:
 
 
 def layout_hierarchical(node_ids, relations, box_heights,
-                         x0, y0, x1, y1, box_w=2.2):
+                         x0, y0, x1, y1, box_w=2.8):
     """階層配置（親→子 を左→右）。
     同レイヤーに収まらない場合は隣レイヤーに溢れさせて縦オーバーフローを防ぐ。
     最終的に全ボックスの重なりを検出して補正する。
@@ -446,7 +446,7 @@ def layout_hierarchical(node_ids, relations, box_heights,
 
     n_layers = max(by_layer.keys()) + 1
     col_step = (x1 - x0) / max(n_layers, 1)
-    actual_box_w = min(box_w, col_step - 0.25, 2.4)
+    actual_box_w = min(box_w, col_step - 0.25, 3.2)
 
     positions = {}
     for l in sorted(by_layer.keys()):
@@ -523,7 +523,7 @@ def _build_object_list_table(categories: dict, object_fields: dict) -> dict:
 
 
 def _build_er_slide(title, node_ids, cat_map, label_map,
-                    object_fields, relations, style_by_api, box_w=2.2,
+                    object_fields, relations, style_by_api, box_w=2.8,
                     ref_only_ids=None):
     """ER図スライドを組み立てる。
 
@@ -542,10 +542,10 @@ def _build_er_slide(title, node_ids, cat_map, label_map,
         for nid in main_nodes
     }
     # メインレイアウト領域を右端 ref_only 用に少し狭める
-    main_x1 = 10.8 if ref_only_ids else 13.0
+    main_x1 = 10.6 if ref_only_ids else 13.18
     positions = layout_hierarchical(
         main_nodes, relations, box_heights,
-        x0=0.3, y0=1.3, x1=main_x1, y1=7.1, box_w=box_w,
+        x0=0.15, y0=1.1, x1=main_x1, y1=7.38, box_w=box_w,
     )
     boxes = []
     for nid, (x, y, w, h) in positions.items():
@@ -562,8 +562,8 @@ def _build_er_slide(title, node_ids, cat_map, label_map,
 
     # ref_only ボックスを右端にスタック配置
     if ref_only_ids:
-        rx0, rx1 = 11.0, 12.8
-        ry0, ry1 = 1.3, 7.1
+        rx0, rx1 = 10.8, 13.15
+        ry0, ry1 = 1.1, 7.38
         rw = rx1 - rx0
         rh = 0.52  # ヘッダーのみ
         n = len(ref_only_ids)
@@ -624,11 +624,11 @@ def _build_tx_er_core(title, label_map, object_fields, relations, style_by_api):
         "BillingDetail__c":           (2, 1),
     }
     COL_W    = 3.3
-    BOX_W    = 2.3   # COL_W - BOX_W = 1.0" ギャップ（矢印の余白）
-    X0       = 0.2
+    BOX_W    = 2.8   # COL_W - BOX_W = 0.5" ギャップ（矢印の余白）
+    X0       = 0.1
     SLIDE_H  = 7.5
-    TITLE_H  = 1.3   # タイトル行の占有高さ
-    ROW_GAP  = 0.6   # 行間の最低ギャップ
+    TITLE_H  = 1.1   # タイトル行の占有高さ
+    ROW_GAP  = 0.5   # 行間の最低ギャップ
 
     tx_apis = set(GRID_POS.keys())
 
@@ -723,17 +723,17 @@ def _build_tx_er_grouped(title, std_ext_apis, mst_ext_apis,
         "BillingDetail__c",            # MST
         "PaymentManagement__c",        # 外部参照なし
     ]
-    TX_X            = 0.2
-    TX_W            = 3.0
+    TX_X            = 0.15
+    TX_W            = 3.5
     TX_GAP          = 0.12
-    TX_Y0           = 1.3
-    COMPACT_FIELD_H = 0.26  # 0.19→0.26: テキスト見切れ対策（分割後は枚数少ないため余裕あり）
+    TX_Y0           = 1.1
+    COMPACT_FIELD_H = 0.32
 
-    RGT_X       = 8.5
-    RGT_W       = 4.5
-    RGT_GAP     = 0.20   # 外部ボックス間隔
-    RGT_Y0      = 1.3
-    STD_MST_SEP = 0.45   # STD→MST 間の追加スペース
+    RGT_X       = 8.4
+    RGT_W       = 4.8
+    RGT_GAP     = 0.22   # 外部ボックス間隔
+    RGT_Y0      = 1.1
+    STD_MST_SEP = 0.50   # STD→MST 間の追加スペース
 
     tx_api_set = set(TX_ORDER)
     std_set    = set(std_ext_apis)
@@ -843,9 +843,9 @@ def _build_tx_er_grouped_pages(
     TX オブジェクト数が多くスライド高さ(7.5")を超える場合、TX を分割して複数スライドを返す。
     """
     SLIDE_H         = 7.5
-    TX_Y0           = 1.3
+    TX_Y0           = 1.1
     TX_GAP          = 0.12
-    COMPACT_FIELD_H = 0.26
+    COMPACT_FIELD_H = 0.32
     MAX_FK          = 2
 
     # valid_tx の高さ合計を事前計算して 1 枚に収まる最大 TX 数を求める
@@ -1137,7 +1137,7 @@ def build_json(categories, relations, object_fields, author, company):
             slides.append(_build_er_slide(
                 "マスタ系リレーション図",
                 list(mst_api), cat_map, label_map, object_fields, mst_relations,
-                style_by_api, box_w=2.4,
+                style_by_api, box_w=2.8,
             ))
         slides.append(_build_master_table(mst_objs, object_fields, relations))
 

@@ -1633,6 +1633,46 @@ def build_er_legend_image(prs, slide_data: dict, page_num: int, total: int):
     _add_footer(slide, page_num, total, slide_data.get("title", "ER図 凡例"))
 
 
+def build_diagram_image(prs, slide_data: dict, page_num: int, total: int):
+    """ダイアグラムを matplotlib で PNG レンダリングしてスライドに埋め込む。
+    build_diagram の画像版。JSON 形式は build_diagram と同じ。"""
+    import tempfile
+    try:
+        from diagram_utils import generate_diagram_image
+    except ImportError:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent))
+        from diagram_utils import generate_diagram_image
+
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+    elements = slide_data.get("elements", {})
+    boxes    = elements.get("boxes", [])
+    arrows   = elements.get("arrows", [])
+    groups   = elements.get("groups", [])
+    title    = slide_data.get("title", "")
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        tmp_png = f.name
+
+    try:
+        ok = generate_diagram_image(boxes, arrows, tmp_png, title=title, groups=groups)
+        if ok:
+            slide.shapes.add_picture(
+                tmp_png, Emu(0), Emu(0), width=SLIDE_W, height=SLIDE_H,
+            )
+        else:
+            build_diagram(prs, slide_data, page_num, total)
+            return
+    finally:
+        try:
+            os.unlink(tmp_png)
+        except Exception:
+            pass
+
+    _add_footer(slide, page_num, total, title)
+
+
 # ── ビルダーマップ ──
 BUILDERS = {
     "section":    build_section,
@@ -1640,8 +1680,8 @@ BUILDERS = {
     "bullets":    build_bullets,
     "table":      build_table,
     "two_column": build_two_column,
-    "diagram":    build_diagram,
-    "er":         build_er_image,        # matplotlib PNG 版（旧 pptx 図形版から置き換え）
+    "diagram":    build_diagram_image,   # matplotlib PNG 版（旧 pptx 図形版から置き換え）
+    "er":         build_er_image,        # matplotlib PNG 版
     "er_legend":  build_er_legend_image, # matplotlib PNG 版
     "swimlane":   build_swimlane,
     "mermaid":    build_mermaid_diagram,

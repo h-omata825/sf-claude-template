@@ -77,21 +77,21 @@ _OWD_BADGE: dict[str, tuple] = {
 # ── レイアウト定数 ─────────────────────────────────────────────────────────────
 SLIDE_W  = 13.333
 SLIDE_H  = 7.5
-TITLE_H  = 1.05      # タイトルバーの高さ
-HDR_H    = 0.52      # ボックスヘッダーの高さ
-FIELD_H  = 0.26      # フィールド行の高さ
-DPI      = 180
+TITLE_H  = 1.10      # タイトルバーの高さ
+HDR_H    = 0.62      # ボックスヘッダーの高さ
+FIELD_H  = 0.32      # フィールド行の高さ
+DPI      = 220
 
 # リレーション記号の定数
 ARROW_MD_COLOR = "#CC2200"   # 主従: 赤
 ARROW_LU_COLOR = "#2C6FAC"   # 参照: 青
-DIAMOND_LEN    = 0.22        # 菱形の全長（ボックス端→先端）
-DIAMOND_SPREAD = 0.065       # 菱形の幅の半分
-CIRCLE_R       = 0.060       # オプション丸の半径
-BAR_HALF       = 0.075       # バーの半幅
-CF_LEN         = 0.130       # クロウフット: apex までの距離
-CF_SPREAD      = 0.075       # クロウフット: 扇の広がり
-CF_EXTRA       = 0.130       # クロウフット先に追加する記号のオフセット
+DIAMOND_LEN    = 0.26        # 菱形の全長（ボックス端→先端）
+DIAMOND_SPREAD = 0.078       # 菱形の幅の半分
+CIRCLE_R       = 0.075       # オプション丸の半径
+BAR_HALF       = 0.090       # バーの半幅
+CF_LEN         = 0.155       # クロウフット: apex までの距離
+CF_SPREAD      = 0.090       # クロウフット: 扇の広がり
+CF_EXTRA       = 0.155       # クロウフット先に追加する記号のオフセット
 
 # 辺ごとの「ボックス外向き方向ベクトル」
 SIDE_DIR: dict[str, tuple] = {
@@ -194,26 +194,26 @@ def _draw_box(ax, box: dict) -> dict:
         ax.add_patch(badge)
         ax.text(bx_ + badge_w / 2, by_ + badge_h / 2, owd_label,
                 ha="center", va="center", color=_hex(fg_col),
-                zorder=6, clip_on=True, **_fpkw(5.0, bold=True))
+                zorder=6, clip_on=True, **_fpkw(6.5, bold=True))
 
     # 5. ヘッダーテキスト（ラベル / API名 の2行）
     text_right = x + w - (badge_w + 0.12 if badge_w else 0.10)
     label  = box.get("label", box.get("api_name", ""))
     api    = box.get("api_name", "")
-    tx     = x + 0.09
+    tx     = x + 0.11
     if label and label != api:
-        ax.text(tx, y + HDR_H * 0.36, label,
+        ax.text(tx, y + HDR_H * 0.35, label,
                 ha="left", va="center", color=_hex(sc["hdr_fg"]),
                 clip_on=True, zorder=5,
-                **_fpkw(7.5, bold=True))
+                **_fpkw(9.5, bold=True))
         ax.text(tx, y + HDR_H * 0.72, api,
                 ha="left", va="center",
-                color=(*_hex(sc["hdr_fg"]), 0.72),
-                clip_on=True, zorder=5, **_fpkw(5.5))
+                color=(*_hex(sc["hdr_fg"]), 0.75),
+                clip_on=True, zorder=5, **_fpkw(7.0))
     else:
         ax.text(tx, y + HDR_H / 2, label or api,
                 ha="left", va="center", color=_hex(sc["hdr_fg"]),
-                clip_on=True, zorder=5, **_fpkw(7.5, bold=True))
+                clip_on=True, zorder=5, **_fpkw(9.5, bold=True))
 
     # 6. フィールド行（FK のみ表示）
     for i, fld in enumerate(fields):
@@ -231,8 +231,8 @@ def _draw_box(ax, box: dict) -> dict:
             ax.add_patch(row_bg)
 
         # FK アイコン（小菱形）
-        ix, iy = x + 0.10, fy + FIELD_H / 2
-        ds = 0.042
+        ix, iy = x + 0.12, fy + FIELD_H / 2
+        ds = 0.052
         icon_pts = [(ix, iy - ds), (ix + ds * 1.5, iy),
                     (ix, iy + ds), (ix - ds * 1.5, iy)]
         ax.add_patch(mpatches.Polygon(
@@ -241,30 +241,30 @@ def _draw_box(ax, box: dict) -> dict:
         ))
 
         fname = fld.get("label") or fld.get("api_name", "")
-        ax.text(x + 0.20, fy + FIELD_H / 2, fname,
+        ax.text(x + 0.24, fy + FIELD_H / 2, fname,
                 ha="left", va="center", color="#1E1E1E",
-                clip_on=True, zorder=4, **_fpkw(6.0, bold=True))
+                clip_on=True, zorder=4, **_fpkw(8.0, bold=True))
 
         ftype_lbl = {"reference": "ref", "master_detail": "MD"}.get(
             fld.get("type", ""), fld.get("type", "")[:3]
         )
-        ax.text(x + w - 0.08, fy + FIELD_H / 2, ftype_lbl,
+        ax.text(x + w - 0.10, fy + FIELD_H / 2, ftype_lbl,
                 ha="right", va="center", color="#666666",
-                clip_on=True, zorder=4, **_fpkw(5.0))
+                clip_on=True, zorder=4, **_fpkw(6.5))
 
     # フィールドなし（ref_only でない場合のみ）
     if not fields and not is_ref:
-        ax.text(x + w / 2, y + HDR_H + 0.13, "（FK なし）",
+        ax.text(x + w / 2, y + HDR_H + 0.16, "（FK なし）",
                 ha="center", va="top", color="#AAAAAA",
-                clip_on=True, zorder=4, **_fpkw(5.5))
+                clip_on=True, zorder=4, **_fpkw(7.0))
 
     # 7. レコード数（下端右）
     rc = box.get("record_count", "")
     if rc and not is_ref:
         rc_text = rc if ("件" in rc or "レコード" in rc) else f"{rc}件"
-        ax.text(x + w - 0.08, y + h - 0.06, rc_text,
+        ax.text(x + w - 0.10, y + h - 0.07, rc_text,
                 ha="right", va="bottom", color="#888888",
-                clip_on=True, zorder=4, **_fpkw(5.0))
+                clip_on=True, zorder=4, **_fpkw(6.5))
 
     cx, cy = x + w / 2, y + h / 2
     return {
@@ -519,7 +519,7 @@ def generate_er_image(
     if title:
         ax.text(0.55, TITLE_H / 2, title,
                 ha="left", va="center", color="white",
-                zorder=2, **_fpkw(14.0, bold=True))
+                zorder=2, **_fpkw(16.0, bold=True))
 
     # ── ボックス描画 ──
     edges: dict[str, dict] = {}
@@ -557,17 +557,17 @@ def generate_er_legend_image(out_path: str,
         linewidth=0, facecolor=_hex("#1E3A5F"), zorder=1,
     ))
     ax.text(0.55, TITLE_H / 2, "ER図 凡例",
-            ha="left", va="center", color="white", zorder=2, **_fpkw(14.0, bold=True))
+            ha="left", va="center", color="white", zorder=2, **_fpkw(16.0, bold=True))
 
-    y = TITLE_H + 0.35
+    y = TITLE_H + 0.38
 
     def section(text, y_pos):
         ax.text(0.55, y_pos, text, ha="left", va="top",
-                color=_hex("#1E3A5F"), zorder=2, **_fpkw(11.0, bold=True))
+                color=_hex("#1E3A5F"), zorder=2, **_fpkw(12.5, bold=True))
 
-    def desc(text, y_pos, indent=2.4):
-        ax.text(indent, y_pos + 0.14, text, ha="left", va="center",
-                color=_hex("#2D2D2D"), zorder=2, **_fpkw(9.5))
+    def desc(text, y_pos, indent=2.6):
+        ax.text(indent, y_pos + 0.17, text, ha="left", va="center",
+                color=_hex("#2D2D2D"), zorder=2, **_fpkw(10.5))
 
     # ── リレーション種別 ──
     section("【リレーション種別】", y); y += 0.38
