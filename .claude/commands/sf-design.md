@@ -243,7 +243,7 @@ for e in errors:
 "
 ```
 
-出力の `group_id:` 以降を target_group_ids として使用する。`error:` がある場合はユーザーに確認する。
+出力の `group_id:` 以降を `target_group_ids_1` として保存する。`error:` がある場合はユーザーに確認する。
 
 ### 委譲
 
@@ -255,7 +255,7 @@ output_dir:       {ROOT}/基本設計書
 tmp_dir:          {ROOT}/基本設計書/.tmp
 author:           {author}
 project_name:     {project_name}
-target_group_ids: {target_group_ids}  # 全グループの場合は空リスト []
+target_group_ids: {target_group_ids_1}  # 全グループの場合は空リスト []
 version_increment: minor
 ```
 
@@ -269,7 +269,18 @@ mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
 
 `output_dir` = `{ROOT}/詳細設計書`、`tmp_dir` = `{ROOT}/詳細設計書/.tmp`
 
-feature_groups.yml の確認・グループ選択は Step 1 と同じ手順で行う（コンポーネント名指定にも対応）。ただし `{project_dir}/docs/feature_groups.yml` が存在しかつ対象グループIDが既にセッション内で確定している場合はスキップしてよい。
+### 対象グループの選択
+
+AskUserQuestion で対象を選択する:
+- 全グループ — feature_groups.yml に含まれる全グループを処理
+- 基本設計と同じ（`{target_group_ids_1}`）— Step 1 で選択したグループをそのまま使用（**デフォルト**）
+- その他指定 — グループIDまたはコンポーネント名をカンマ区切りで入力（次の質問で聞く）
+
+「全グループ」を選択した場合は `target_group_ids_2 = []`。
+「基本設計と同じ」を選択した場合は `target_group_ids_2 = target_group_ids_1`。
+「その他指定」を選択した場合は、チャットでグループIDまたはコンポーネント名を聞き、Step 1 と同様のスクリプトで GRP-XXX に変換して `target_group_ids_2` とする。
+
+> Step 1 を実行していない場合（詳細設計のみ選択した場合）は、Step 1 の「対象グループの選択」と同じ手順で `target_group_ids_2` を決定する。
 
 **基本設計 JSON の参照**: Step 1 完了後に `{ROOT}/基本設計書/.tmp/{group_id}_basic.json` が存在する場合は、**sf-detail-design-writer に渡す情報として明示する**（エージェント内で自動参照する）。
 
@@ -283,7 +294,7 @@ output_dir:       {ROOT}/詳細設計書
 tmp_dir:          {ROOT}/詳細設計書/.tmp
 author:           {author}
 project_name:     {project_name}
-target_group_ids: {target_group_ids}
+target_group_ids: {target_group_ids_2}  # 全グループの場合は空リスト []
 version_increment: minor
 ```
 
@@ -324,43 +335,93 @@ for t, n in sorted(cnt.items()): print(f'  {t}: {n}件')
 
 AskUserQuestion で対象を選択する:
 - 全機能 — スキャンで検出した全コンポーネントを処理
-- 特定のIDのみ — 機能IDをカンマ区切りで入力
+- 詳細設計と同じグループのコンポーネント（`{target_group_ids_2}` に属する機能）— **デフォルト**
+- その他指定 — 機能IDをカンマ区切りで入力（次の質問で聞く）
 
-### 処理の分岐（エージェントへの委譲）
+「全機能」を選択した場合は `target_ids = []`（全件処理）。
+「詳細設計と同じグループ」を選択した場合は、feature_groups.yml と feature_ids.yml を参照して `target_group_ids_2` に属する機能IDを抽出する:
+```bash
+python -c "
+import yaml, json, pathlib
+with open(r'{project_dir}/docs/feature_groups.yml', encoding='utf-8') as f:
+    groups = yaml.safe_load(f)
+target_groups = {r'{target_group_ids_2}'.replace(\"'\", '').split(',')} if r'{target_group_ids_2}' else set()
+fids = []
+for g in groups:
+    if not target_groups or g['group_id'] in target_groups:
+        fids.extend(g.get('feature_ids', []))
+for fid in fids:
+    print(f'feature_id:{fid}')
+print(f'total:{len(fids)}件')
+"
+```
+出力の `feature_id:` 以降を `target_ids` として使用する。`target_group_ids_2` が空（全グループ）の場合は `target_ids = []`。
 
-スキャン結果を **Apex/Batch/Flow(非画面)/Integration** と **LWC/画面フロー/Visualforce/Aura** に分類し、それぞれのエージェントに委譲する。
+「その他指定」を選択した場合は、チャットで機能IDを聞く:
+```
+対象の機能IDをカンマ区切りで入力してください（例: F-001,F-003）:
+```
+
+> Step 2 を実行していない場合（プログラム設計のみ選択した場合）は「全機能」か「その他指定」の2択で聞く。
+
+### feature_list の読み込み
+
+スキャン完了後、`{tmp_dir}/feature_list.json` を Read ツールで読み込み、内容を `feature_list` として保持する。
+
+```bash
+python -c "
+import json
+with open(r'{tmp_dir}/feature_list.json', encoding='utf-8') as f:
+    fl = json.load(f)
+# 種別ごとに分類して表示
+apex_types = {'Apex', 'Batch', 'Integration', 'Trigger'}
+screen_types = {'LWC', '画面フロー', 'Visualforce', 'Aura'}
+apex_list = [f for f in fl if f.get('type') in apex_types]
+screen_list = [f for f in fl if f.get('type') in screen_types]
+print(f'Apex系（sf-design-writer対象）: {len(apex_list)}件')
+print(f'画面系（sf-screen-writer対象）: {len(screen_list)}件')
+"
+```
+
+### 処理の委譲（① sf-screen-writer → ② sf-design-writer の順）
+
+> **実行順序は必ず守ること**: sf-design-writer の機能一覧生成は sf-screen-writer が出力した design JSON も収集するため、sf-screen-writer を先に完了させてから sf-design-writer を起動する。
 
 **上位設計 JSON の参照**: `{ROOT}/基本設計書/.tmp/` と `{ROOT}/詳細設計書/.tmp/` に JSON が存在する場合は、その旨を**エージェント起動時に明示する**（エージェント内で自動参照する）。
 
-**Apex・Batch・Flow(非画面)・Integration → sf-design-writer に委譲:**
+**① LWC・画面フロー・Visualforce・Aura → sf-screen-writer に委譲（先に実行）:**
 ```
 project_dir:       {project_dir}
 output_dir:        {ROOT}/プログラム設計書
 tmp_dir:           {ROOT}/プログラム設計書/.tmp
 author:            {author}
 project_name:      {project_name}
-feature_list:      {feature_list}（上記で絞り込み済みのリスト）
+feature_list:      {feature_list}（画面系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
 target_ids:        {target_ids}
 version_increment: minor
 上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/詳細設計書/.tmp/ に存在する JSON（なければ省略）
 ```
+
+sf-screen-writer の完了を確認してから次へ進む。
+
+**② Apex・Batch・Flow(非画面)・Integration → sf-design-writer に委譲（sf-screen-writer 完了後）:**
+```
+project_dir:       {project_dir}
+output_dir:        {ROOT}/プログラム設計書
+tmp_dir:           {ROOT}/プログラム設計書/.tmp
+author:            {author}
+project_name:      {project_name}
+feature_list:      {feature_list}（Apex系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
+target_ids:        {target_ids}
+version_increment: minor
+上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/詳細設計書/.tmp/ に存在する JSON（なければ省略）
+```
+
+sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生成する。sf-screen-writer の design JSON が `{tmp_dir}` に揃っている状態で起動すること。
 
 テンプレートパス:
 - Apex/Flow/Batch/Integration: `{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書テンプレート.xlsx`
 - LWC/画面フロー/VF/Aura: `{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書（画面）テンプレート.xlsx`
-
-**LWC・画面フロー・Visualforce・Aura → sf-screen-writer に委譲:**
-```
-project_dir:       {project_dir}
-output_dir:        {ROOT}/プログラム設計書
-tmp_dir:           {ROOT}/プログラム設計書/.tmp
-author:            {author}
-project_name:      {project_name}
-feature_list:      {feature_list}（画面系のみに絞り込み）
-target_ids:        {target_ids}
-version_increment: minor
-上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/詳細設計書/.tmp/ に存在する JSON（なければ省略）
-```
 
 ---
 
