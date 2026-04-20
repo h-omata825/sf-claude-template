@@ -249,20 +249,42 @@ def _parse_fields_from_table(text: str) -> list:
 
     def _parse_table_block(block: str) -> list:
         result = []
+        # 列インデックス: ヘッダー行から自動検出（デフォルトは旧形式: label=0, api=1, type=2）
+        api_col, label_col, dtype_col = 1, 0, 2
+        detected = False
         for line in block.splitlines():
             if not line.strip().startswith("|"):
                 continue
             cols = [c.strip() for c in line.strip().strip("|").split("|")]
             if len(cols) < 3:
                 continue
-            label, api_name, dtype = cols[0], cols[1], cols[2]
+            # 区切り行スキップ
+            if all(c.startswith("---") or not c for c in cols):
+                continue
+            # ヘッダー行検出: "API名" または "項目名" が含まれる行
+            if not detected and any(c in ("API名", "項目名") for c in cols):
+                detected = True
+                for ci, ch in enumerate(cols):
+                    if ch in ("API名", "項目名"):
+                        api_col = ci
+                    elif ch in ("表示ラベル", "ラベル"):
+                        label_col = ci
+                    elif ch == "型":
+                        dtype_col = ci
+                continue
+            if len(cols) <= max(api_col, label_col, dtype_col):
+                continue
+            api_name = cols[api_col].strip("`").strip()
+            label    = re.sub(r'\*+', '', cols[label_col]).strip()
+            dtype    = cols[dtype_col] if dtype_col < len(cols) else ""
             if not api_name or api_name.startswith("---") or api_name in ("API名", "項目名"):
                 continue
             if api_name in _SKIP_FIELDS:
                 continue
-            label = re.sub(r'\*+', '', label).strip()
+            if not re.match(r'^[A-Za-z_]\w*$', api_name):
+                continue
             dtype_clean = dtype.split("(")[0].strip().lower()
-            is_fk = dtype_clean in ("reference",)
+            is_fk = dtype_clean in ("reference", "lookup", "master_detail", "masterdetail")
             result.append({"api_name": api_name, "type": dtype_clean,
                            "label": label, "is_fk": is_fk})
         return result
@@ -272,20 +294,27 @@ def _parse_fields_from_table(text: str) -> list:
     if m1:
         return _parse_table_block(m1.group(1))
 
-    # 形式2: ## 項目一覧 > ### カスタム項目 / ### 標準項目
+    # 形式2: ## 項目一覧 配下を走査（### サブセクションあり・なし両対応）
     m2 = re.search(r'##\s+項目一覧\n(.*?)(?=\n##\s|\Z)', text, re.DOTALL)
     if m2:
         block = m2.group(1)
-        # ### カスタム項目 を優先
-        mc = re.search(r'###\s+カスタム項目\n(.*?)(?=\n###|\Z)', block, re.DOTALL)
-        if mc:
-            fields += _parse_table_block(mc.group(1))
-        # ### 標準項目 も補完（FK判定できるもののみ）
-        ms = re.search(r'###\s+標準項目\n(.*?)(?=\n###|\Z)', block, re.DOTALL)
-        if ms:
-            for f in _parse_table_block(ms.group(1)):
-                if f["is_fk"]:
-                    fields.append(f)
+        seen_apis: set = set()
+        sub_sections = list(re.finditer(r'###\s+.+?\n(.*?)(?=\n###|\Z)', block, re.DOTALL))
+        if sub_sections:
+            # ### サブセクションあり: 全サブセクションからFK抽出
+            for sub_m in sub_sections:
+                for f in _parse_table_block(sub_m.group(1)):
+                    if f["api_name"] not in seen_apis:
+                        seen_apis.add(f["api_name"])
+                        if f["is_fk"]:
+                            fields.append(f)
+        else:
+            # ### サブセクションなし: 直接テーブルを解析
+            for f in _parse_table_block(block):
+                if f["api_name"] not in seen_apis:
+                    seen_apis.add(f["api_name"])
+                    if f["is_fk"]:
+                        fields.append(f)
     return fields
 
 
@@ -345,10 +374,14 @@ def parse_object_fields(md_path: Path) -> dict:
     if not all_parsed:
         all_parsed = _parse_fields_from_table(text)
 
-    # Mermaid/テーブルにある FK は relation テーブルで上書き（relation テーブルが正）
-    # 非 FK はそのまま利用
+    # relation テーブルの FK を正とし、テーブル/Mermaid で見つかった FK を補完
     non_fk = [f for f in all_parsed if not f.get("is_fk") and f["api_name"] not in _SKIP_FIELDS]
-    fk_fields    = list(fk_from_relation.values())
+    fk_fields = list(fk_from_relation.values())
+    existing_fk_apis = {f["api_name"] for f in fk_fields}
+    for f in all_parsed:
+        if f.get("is_fk") and f["api_name"] not in existing_fk_apis:
+            fk_fields.append(f)
+            existing_fk_apis.add(f["api_name"])
     other_fields = non_fk
     selected = (fk_fields + other_fields)[:MAX_FIELDS]
     return {"description": desc, "fields": selected,
@@ -648,13 +681,19 @@ def _build_tx_er_core(title, label_map, object_fields, relations, style_by_api):
         r = info["row"]
         row_max_h[r] = max(row_max_h.get(r, 0), info["h"])
 
-    # Y_ROW を自動計算: 行0は TITLE_H から、行1は行0の下端 + ROW_GAP
+    # Y_ROW を自動計算: 2行を上下均等配置してスライドを埋める
+    BOTTOM   = SLIDE_H - 0.15
+    row0_h   = row_max_h.get(0, 0)
+    row1_h   = row_max_h.get(1, 0)
+    total_h  = row0_h + row1_h
+    avail    = BOTTOM - TITLE_H
+    gap      = max(ROW_GAP, (avail - total_h) / max(1, len(row_max_h)))
     row0_top = TITLE_H
-    row1_top = row0_top + row_max_h.get(0, 0) + ROW_GAP
-    # 行1がスライドからはみ出す場合はフォールバック（高さを抑制）
-    if row1_top + row_max_h.get(1, 0) > SLIDE_H - 0.2:
-        row1_top = SLIDE_H - 0.2 - row_max_h.get(1, 0)
-    Y_ROW = [row0_top, max(row1_top, row0_top + row_max_h.get(0, 0) + ROW_GAP)]
+    row1_top = row0_top + row0_h + gap
+    # はみ出し保護
+    if row1_top + row1_h > BOTTOM:
+        row1_top = BOTTOM - row1_h
+    Y_ROW = [row0_top, row1_top]
 
     # 行の中心Y = Y_ROW[row] + max_h/2
     row_center_y = {r: Y_ROW[r] + row_max_h[r] / 2 for r in row_max_h}
@@ -757,32 +796,49 @@ def _build_tx_er_grouped(title, std_ext_apis, mst_ext_apis,
     # valid_tx: 外部参照のあるTXオブジェクトのみ
     valid_tx = [api for api in TX_ORDER if api in label_map and api in tx_connections]
 
-    # ── TX ボックス（単列・左） ──
+    SLIDE_H  = 7.5
+    BOTTOM   = SLIDE_H - 0.15
+
+    # ── TX ボックス（単列・左）: 高さを均等分散 ──
     boxes = []
-    y = TX_Y0
+    tx_items = []
     for api in valid_tx:
         oinfo     = object_fields.get(api, {"fields": []})
         fk_fields = [f for f in oinfo.get("fields", []) if f.get("is_fk")][:2]
-        h = round(HDR_H + len(fk_fields) * COMPACT_FIELD_H, 3)
-        boxes.append({
-            "id": api, "label": label_map.get(api, api), "api_name": api,
-            "fields": fk_fields,
-            "x": TX_X, "y": round(y, 3), "w": TX_W, "h": h,
-            "style": style_by_api.get(api, "primary"),
-            "owd":          oinfo.get("owd", ""),
-            "record_count": "",
-        })
-        y += h + TX_GAP
+        h = round(HDR_H + max(len(fk_fields), 1) * COMPACT_FIELD_H, 3)
+        tx_items.append((api, oinfo, fk_fields, h))
 
-    # ── 右列ボックス: STD（上）→ MST（下）、個別ボックス縦並び ──
+    if tx_items:
+        total_tx_h = sum(h for _, _, _, h in tx_items)
+        avail_tx   = BOTTOM - TX_Y0
+        tx_gap     = max(TX_GAP, (avail_tx - total_tx_h) / max(len(tx_items), 1))
+        y = TX_Y0
+        for api, oinfo, fk_fields, h in tx_items:
+            boxes.append({
+                "id": api, "label": label_map.get(api, api), "api_name": api,
+                "fields": fk_fields,
+                "x": TX_X, "y": round(y, 3), "w": TX_W, "h": h,
+                "style": style_by_api.get(api, "primary"),
+                "owd":          oinfo.get("owd", ""),
+                "record_count": "",
+            })
+            y += h + tx_gap
+
+    # ── 右列ボックス: STD（上）→ MST（下）、均等分散 ──
     rgt_order_std = [api for api in std_ext_apis if api in ext_connections and api in label_map]
     rgt_order_mst = [api for api in mst_ext_apis if api in ext_connections and api in label_map]
+    rgt_all = rgt_order_std + rgt_order_mst
 
-    rgt_y = RGT_Y0
-    for grp_order, style in [(rgt_order_std, "secondary"), (rgt_order_mst, "accent")]:
-        for i, api in enumerate(grp_order):
+    if rgt_all:
+        rgt_h_list = [HDR_H for _ in rgt_all]
+        total_rgt_h = sum(rgt_h_list)
+        avail_rgt   = BOTTOM - RGT_Y0
+        rgt_gap     = max(RGT_GAP, (avail_rgt - total_rgt_h) / max(len(rgt_all), 1))
+        rgt_y = RGT_Y0
+        for api in rgt_all:
+            style = "secondary" if api in rgt_order_std else "accent"
             oinfo = object_fields.get(api, {"fields": []})
-            h = HDR_H  # 外部オブジェクトはヘッダーのみ
+            h = HDR_H
             boxes.append({
                 "id": api, "label": label_map.get(api, api), "api_name": api,
                 "fields": [],
@@ -791,10 +847,7 @@ def _build_tx_er_grouped(title, std_ext_apis, mst_ext_apis,
                 "owd":          oinfo.get("owd", ""),
                 "record_count": "",
             })
-            rgt_y += h + RGT_GAP
-        # STD→MST 間の追加スペース
-        if grp_order is rgt_order_std and rgt_order_mst:
-            rgt_y += STD_MST_SEP - RGT_GAP
+            rgt_y += h + rgt_gap
 
     # ── 矢印: TX → 個別外部オブジェクト ──
     def _fracs_range(n, lo=0.2, hi=0.8):

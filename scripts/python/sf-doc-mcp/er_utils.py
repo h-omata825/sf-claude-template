@@ -218,7 +218,7 @@ def _draw_box(ax, box: dict) -> dict:
     # 6. フィールド行（FK のみ）
     for i, fld in enumerate(fields):
         fy = y + HDR_H + i * FIELD_H
-        if fy + FIELD_H > y + h - 0.02:
+        if fy + FIELD_H > y + h + 0.01:
             break
 
         # 交互背景
