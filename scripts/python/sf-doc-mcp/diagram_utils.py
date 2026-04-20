@@ -720,18 +720,6 @@ def generate_component_diagram(
     ax.set_ylim(0, fig_h)
     fig.patch.set_facecolor("white")
 
-    # 段ラベル（上段/下段の分類名を表示）
-    if top_nodes:
-        top_y = fig_h * 0.68
-        ax.text(0.3, top_y, "LWC / Aura",
-                ha="left", va="center", fontsize=8, color="#555555",
-                **_fpkw(8.0, bold=True))
-    if bot_nodes:
-        bot_y = fig_h * 0.28
-        ax.text(0.3, bot_y, "Apex / Flow",
-                ha="left", va="center", fontsize=8, color="#555555",
-                **_fpkw(8.0, bold=True))
-
     # 分割線
     ax.plot([0.2, fig_w - 0.2], [fig_h * 0.48, fig_h * 0.48],
             color="#CCCCCC", linewidth=0.8, linestyle="--")
@@ -961,8 +949,8 @@ def generate_flowchart(
     from matplotlib.patches import Polygon
 
     n_steps = len(process_steps)
-    y_gap = 2.8
-    fig_h = max(8, n_steps * y_gap + 1.5)
+    y_gap = 2.2
+    fig_h = max(6, n_steps * y_gap + 1.5)
     center_x = fig_w / 2
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=96)
@@ -1040,45 +1028,52 @@ def generate_flowchart(
             cx1, cy1 = step_positions[to_step]
 
             if is_branch and len(nexts) > 1:
-                # 分岐矢印: 最初は右へ、2番目は左へ
+                # 分岐矢印: 1本目は真下、2本目は右にオフセット
                 if ni == 0:
-                    # 右分岐
-                    mid_x = cx0 + diamond_w / 2 + 0.5
+                    # 真下（通常矢印と同じ）
+                    y_from = cy0 + diamond_h / 2 + 0.05
+                    y_to = cy1 - box_h / 2 - 0.05
+                    ax.annotate(
+                        "", xy=(cx1, y_to), xytext=(cx0, y_from),
+                        arrowprops=dict(arrowstyle="-|>", color="#1F3864",
+                                        lw=1.3, mutation_scale=12),
+                        zorder=4,
+                    )
+                    if condition:
+                        my = (y_from + y_to) / 2
+                        ax.text(cx0 - 0.3, my, condition,
+                                ha="right", va="center", fontsize=6.5,
+                                color="#C55A11", **_fpkw(6.5, bold=True),
+                                bbox=dict(boxstyle="round,pad=0.12", facecolor="#FFF2CC",
+                                          edgecolor="#C55A11", linewidth=0.6, alpha=0.9))
+                else:
+                    # 右にオフセットして下の行へ
+                    mid_x = cx0 + diamond_w / 2 + 3.5
+                    y_from = cy0
+                    y_to = cy1
                     pts_line = [
                         (cx0 + diamond_w / 2, cy0),
                         (mid_x, cy0),
                         (mid_x, cy1),
                         (cx1 + box_w / 2 + 0.05, cy1),
                     ]
-                else:
-                    # 左分岐
-                    mid_x = cx0 - diamond_w / 2 - 0.5
-                    pts_line = [
-                        (cx0 - diamond_w / 2, cy0),
-                        (mid_x, cy0),
-                        (mid_x, cy1),
-                        (cx1 - box_w / 2 - 0.05, cy1),
-                    ]
-                # 折れ線描画
-                xs = [p[0] for p in pts_line]
-                ys = [p[1] for p in pts_line]
-                ax.plot(xs, ys, color="#1F3864", linewidth=1.3, zorder=1)
-                # 矢印ヘッド
-                ax.annotate(
-                    "", xy=pts_line[-1], xytext=pts_line[-2],
-                    arrowprops=dict(arrowstyle="-|>", color="#1F3864",
-                                    lw=1.3, mutation_scale=12),
-                    zorder=4,
-                )
-                # 条件ラベル
-                if condition:
-                    lx = (pts_line[0][0] + pts_line[1][0]) / 2
-                    ly = pts_line[0][1] - 0.2
-                    ax.text(lx, ly, condition,
-                            ha="center", va="bottom", fontsize=6.5,
-                            color="#C55A11", **_fpkw(6.5, bold=True),
-                            bbox=dict(boxstyle="round,pad=0.12", facecolor="#FFF2CC",
-                                      edgecolor="#C55A11", linewidth=0.6, alpha=0.9))
+                    xs = [p[0] for p in pts_line]
+                    ys = [p[1] for p in pts_line]
+                    ax.plot(xs, ys, color="#1F3864", linewidth=1.3, zorder=1)
+                    ax.annotate(
+                        "", xy=pts_line[-1], xytext=pts_line[-2],
+                        arrowprops=dict(arrowstyle="-|>", color="#1F3864",
+                                        lw=1.3, mutation_scale=12),
+                        zorder=4,
+                    )
+                    if condition:
+                        lx = (pts_line[0][0] + pts_line[1][0]) / 2
+                        ly = pts_line[0][1] - 0.2
+                        ax.text(lx, ly, condition,
+                                ha="center", va="bottom", fontsize=6.5,
+                                color="#C55A11", **_fpkw(6.5, bold=True),
+                                bbox=dict(boxstyle="round,pad=0.12", facecolor="#FFF2CC",
+                                          edgecolor="#C55A11", linewidth=0.6, alpha=0.9))
             else:
                 # 通常の下向き矢印
                 y_from = cy0 + (diamond_h / 2 if is_branch else box_h / 2) + 0.05

@@ -110,17 +110,17 @@ def label_row(ws, row, label, label_cs=2, label_ce=6, val_cs=7, val_ce=31, heigh
     MW(ws, row, val_cs, val_ce, "", border=B_all())
 
 
-def diagram_area(ws, start_row, title, height_rows=30):
+def diagram_area(ws, start_row, title, section_no=2, height_rows=30):
     """図エリアを配置し、使用した行数を返す。
 
     構造:
-      start_row    : セクションバンド「■ 1. {title}」
+      start_row    : セクションバンド「■ {section_no}. {title}」
       +1 ~ +height : 図エリア（col 2-31 マージ、bg=F2F2F2、罫線）
       +height+1    : スペーサー 8pt
     返値: 次のセクションが始まる行番号
     """
     # セクションバンド
-    section_band(ws, start_row, f"\u25a0 1. {title}")
+    section_band(ws, start_row, f"\u25a0 {section_no}. {title}")
     r = start_row + 1
 
     # 図エリア: 先にスタイルを全セルに設定してからマージ
@@ -215,15 +215,16 @@ def build_business_flow(wb):
     title_band(ws, 1, "詳細設計書 — 業務フロー")
     set_h(ws, 2, 6)
 
-    # 図エリア
-    r = diagram_area(ws, 3, "業務フロー図（自動生成）")
+    # テーブル（上）
+    section_band(ws, 3, "\u25a0 1. 業務フロー")
+    table_header(ws, 4, BF_COLS)
+    data_rows(ws, 5, 24, [(cs, ce) for cs, ce, _ in BF_COLS])
 
-    # テーブル
-    section_band(ws, r, "\u25a0 2. 業務フロー")
-    r += 1
-    table_header(ws, r, BF_COLS)
-    r += 1
-    data_rows(ws, r, r + 19, [(cs, ce) for cs, ce, _ in BF_COLS])
+    # スペーサー
+    set_h(ws, 25, 8)
+
+    # 図エリア（下）
+    diagram_area(ws, 26, "業務フロー図（自動生成）", section_no=2)
 
 
 # =====================================================================
@@ -244,15 +245,16 @@ def build_target_objects(wb):
     title_band(ws, 1, "詳細設計書 — 対象オブジェクト")
     set_h(ws, 2, 6)
 
-    # 図エリア
-    r = diagram_area(ws, 3, "オブジェクト関連図（自動生成）")
+    # テーブル（上）
+    section_band(ws, 3, "\u25a0 1. 対象オブジェクト・項目一覧")
+    table_header(ws, 4, OBJ_COLS)
+    data_rows(ws, 5, 34, [(cs, ce) for cs, ce, _ in OBJ_COLS])
 
-    # テーブル
-    section_band(ws, r, "\u25a0 2. 対象オブジェクト・項目一覧")
-    r += 1
-    table_header(ws, r, OBJ_COLS)
-    r += 1
-    data_rows(ws, r, r + 29, [(cs, ce) for cs, ce, _ in OBJ_COLS])
+    # スペーサー
+    set_h(ws, 35, 8)
+
+    # 図エリア（下）
+    diagram_area(ws, 36, "オブジェクト関連図（自動生成）", section_no=2)
 
 
 # =====================================================================
@@ -273,15 +275,16 @@ def build_process_overview(wb):
     title_band(ws, 1, "詳細設計書 — 処理概要")
     set_h(ws, 2, 6)
 
-    # 図エリア
-    r = diagram_area(ws, 3, "処理フロー図（自動生成）")
+    # テーブル（上）
+    section_band(ws, 3, "\u25a0 1. 処理概要")
+    table_header(ws, 4, PROC_COLS)
+    data_rows(ws, 5, 24, [(cs, ce) for cs, ce, _ in PROC_COLS])
 
-    # テーブル
-    section_band(ws, r, "\u25a0 2. 処理概要")
-    r += 1
-    table_header(ws, r, PROC_COLS)
-    r += 1
-    data_rows(ws, r, r + 19, [(cs, ce) for cs, ce, _ in PROC_COLS])
+    # スペーサー
+    set_h(ws, 25, 8)
+
+    # 図エリア（下）
+    diagram_area(ws, 26, "処理フロー図（自動生成）", section_no=2)
 
 
 # =====================================================================
@@ -301,15 +304,16 @@ def build_related_components(wb):
     title_band(ws, 1, "詳細設計書 — 関連コンポーネント")
     set_h(ws, 2, 6)
 
-    # 図エリア
-    r = diagram_area(ws, 3, "コンポーネント関連図（自動生成）")
+    # テーブル（上）
+    section_band(ws, 3, "\u25a0 1. 関連コンポーネント一覧")
+    table_header(ws, 4, COMP_COLS)
+    data_rows(ws, 5, 19, [(cs, ce) for cs, ce, _ in COMP_COLS])
 
-    # テーブル
-    section_band(ws, r, "\u25a0 2. 関連コンポーネント一覧")
-    r += 1
-    table_header(ws, r, COMP_COLS)
-    r += 1
-    data_rows(ws, r, r + 14, [(cs, ce) for cs, ce, _ in COMP_COLS])
+    # スペーサー
+    set_h(ws, 20, 8)
+
+    # 図エリア（下）
+    diagram_area(ws, 21, "コンポーネント関連図（自動生成）", section_no=2)
 
 
 # =====================================================================

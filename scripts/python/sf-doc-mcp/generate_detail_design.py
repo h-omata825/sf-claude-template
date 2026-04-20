@@ -79,36 +79,43 @@ OV_ROWS = {
     "trigger":        8,
 }
 
-# 業務フロー: diagram_area(3, ...) → 図エリア row4-33, spacer row34, 返値=35
-# テーブル: row35=セクションバンド, row36=ヘッダ, row37〜=データ
-BF_IMG_ANCHOR      = "B4"
-BF_DATA_ROW_START  = 37
+# 業務フロー: 表上・図下レイアウト
+# テーブル: row3=バンド, row4=ヘッダ, row5〜24=データ(20行)
+# 図エリア: row26=バンド, row27〜56=図エリア(30行)
+BF_IMG_ANCHOR      = "B27"
+BF_DATA_ROW_START  = 5
 BF_STEP_CS,  BF_STEP_CE  = 2,  3
 BF_ACTOR_CS, BF_ACTOR_CE = 4,  8
 BF_ACT_CS,   BF_ACT_CE   = 9,  22
 BF_COND_CS,  BF_COND_CE  = 23, 31
 
-# 対象オブジェクト: 同パターン
-OBJ_IMG_ANCHOR     = "B4"
-OBJ_DATA_ROW_START = 37
+# 対象オブジェクト: 表上・図下レイアウト
+# テーブル: row3=バンド, row4=ヘッダ, row5〜34=データ(30行)
+# 図エリア: row36=バンド, row37〜66=図エリア(30行)
+OBJ_IMG_ANCHOR     = "B37"
+OBJ_DATA_ROW_START = 5
 OBJ_NAME_CS,  OBJ_NAME_CE  = 2,  7
 OBJ_FAPI_CS,  OBJ_FAPI_CE  = 8,  14
 OBJ_FLBL_CS,  OBJ_FLBL_CE  = 15, 20
 OBJ_ACC_CS,   OBJ_ACC_CE   = 21, 23
 OBJ_NOTE_CS,  OBJ_NOTE_CE  = 24, 31
 
-# 処理概要: 同パターン
-PROC_IMG_ANCHOR     = "B4"
-PROC_DATA_ROW_START = 37
+# 処理概要: 表上・図下レイアウト
+# テーブル: row3=バンド, row4=ヘッダ, row5〜24=データ(20行)
+# 図エリア: row26=バンド, row27〜56=図エリア(30行)
+PROC_IMG_ANCHOR     = "B27"
+PROC_DATA_ROW_START = 5
 PROC_STEP_CS, PROC_STEP_CE = 2,  3
 PROC_DESC_CS, PROC_DESC_CE = 4,  13
 PROC_COND_CS, PROC_COND_CE = 14, 19
 PROC_SOQL_CS, PROC_SOQL_CE = 20, 25
 PROC_DML_CS,  PROC_DML_CE  = 26, 31
 
-# 関連コンポーネント: 同パターン
-COMP_IMG_ANCHOR     = "B4"
-COMP_DATA_ROW_START = 37
+# 関連コンポーネント: 表上・図下レイアウト
+# テーブル: row3=バンド, row4=ヘッダ, row5〜19=データ(15行)
+# 図エリア: row21=バンド, row22〜51=図エリア(30行)
+COMP_IMG_ANCHOR     = "B22"
+COMP_DATA_ROW_START = 5
 COMP_NAME_CS, COMP_NAME_CE = 2,  9
 COMP_TYPE_CS, COMP_TYPE_CE = 10, 13
 COMP_ROLE_CS, COMP_ROLE_CE = 14, 24
@@ -214,7 +221,7 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
                        png_path: str | None):
     """業務フローシート: スイムレーン図 + テーブル。"""
     if png_path:
-        _embed_image(ws, png_path, BF_IMG_ANCHOR, img_w=840)
+        _embed_image(ws, png_path, BF_IMG_ANCHOR, img_w=880)
 
     flows = data.get("business_flow", [])
     r = BF_DATA_ROW_START
@@ -246,7 +253,7 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
                         png_path: str | None):
     """対象オブジェクトシート: ER図 + 項目テーブル。"""
     if png_path:
-        _embed_image(ws, png_path, OBJ_IMG_ANCHOR, img_w=840)
+        _embed_image(ws, png_path, OBJ_IMG_ANCHOR, img_w=880)
 
     objects = data.get("related_objects", [])
     r = OBJ_DATA_ROW_START
@@ -275,7 +282,7 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
                           png_path: str | None):
     """処理概要シート: フローチャート + テーブル。"""
     if png_path:
-        _embed_image(ws, png_path, PROC_IMG_ANCHOR, img_w=840)
+        _embed_image(ws, png_path, PROC_IMG_ANCHOR, img_w=880)
 
     steps = data.get("process_steps", [])
     r = PROC_DATA_ROW_START
@@ -307,7 +314,7 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
                             png_path: str | None):
     """関連コンポーネントシート: コンポーネント図 + 一覧テーブル。"""
     if png_path:
-        _embed_image(ws, png_path, COMP_IMG_ANCHOR, img_w=840)
+        _embed_image(ws, png_path, COMP_IMG_ANCHOR, img_w=880)
 
     components = data.get("components", [])
     r = COMP_DATA_ROW_START
