@@ -142,8 +142,8 @@ print('テンプレート確認OK: プログラム設計書テンプレート.xl
 python -c "
 import pathlib, sys
 root = pathlib.Path(r'{output_dir}').parent
-basic_dir = root / '基本設計書' / '.tmp'
-detail_dir = root / '詳細設計書' / '.tmp'
+basic_dir = root / '01_基本設計' / '.tmp'
+detail_dir = root / '02_詳細設計' / '.tmp'
 for p in sorted(basic_dir.glob('*_basic.json')) if basic_dir.exists() else []:
     print(f'basic_json:{p}')
 for p in sorted(detail_dir.glob('*_detail.json')) if detail_dir.exists() else []:

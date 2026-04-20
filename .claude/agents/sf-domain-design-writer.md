@@ -130,7 +130,7 @@ print(json.dumps(groups, ensure_ascii=False, indent=2))
 - `docs/requirements/` — 要件定義書
 - `docs/design/` — 既存設計書
 - `docs/overview/org-profile.md` — プロジェクト概要
-- `docs/memory/` — Claude memory コマンドで生成されたドメイン情報
+- `docs/flow/` — 業務フロー・ユースケース
 
 グループをビジネス機能で分類し（5〜20ドメインが目安）、以下を `docs/.sf/domain_groups.yml` に書き出す:
 
@@ -171,8 +171,8 @@ type_dir = {
     'LWC': ('lwc', ''), 'Aura': ('aura', ''), 'Trigger': ('triggers', '.trigger'),
 }
 force_app = proj / 'force-app' / 'main' / 'default'
-# {group_ids_for_domain} をリストに展開する
-target_group_ids = {group_ids_for_domain}
+# {group_ids_for_domain} は必ず Python list[str] 形式で展開すること（例: ["GRP-001", "GRP-002"]）
+target_group_ids = {group_ids_for_domain}  # type: list[str]
 target_groups = [g for g in groups if g['group_id'] in target_group_ids]
 paths = []
 for grp in target_groups:
@@ -223,7 +223,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
 ### 1-2. 既存の設計資料を最優先で参照
 
 以下を優先順に読む（コードより設計書を信頼する）:
-1. `docs/memory/` — ドメイン情報・業務フロー（memory コマンドで生成）
+1. `docs/flow/` — 業務フロー・ユースケース（memory コマンドで生成）
 2. `docs/requirements/` — 要件定義書
 3. `docs/design/` — 既存設計書 MD
 4. `docs/overview/org-profile.md` — プロジェクト概要

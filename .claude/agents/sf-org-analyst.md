@@ -122,7 +122,7 @@ SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
 | システム構成図データ | `docs/architecture/system.json` | システム・利用者・外部連携・データストアの関係 |
 | 業務ユースケース一覧 | `docs/flow/usecases.md` | 新規申込・解約申込・見積依頼等の業務UC一覧 |
 | 業務フロー図データ | `docs/flow/swimlanes.json` | 全体／UC別／例外／データフローのスイムレーン |
-| 変更履歴 | `docs/logs/changelog.md` | 実行履歴・変更点の記録 |
+| 変更履歴 | `docs/changelog.md` | 実行履歴・変更点の記録 |
 
 ### Phase 0: 実行モード判定
 
@@ -385,7 +385,7 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Acti
 
 ### Phase 6: 変更履歴の記録
 
-`docs/logs/changelog.md` に追記する。
+`docs/changelog.md` に追記する。
 
 ---
 
@@ -755,15 +755,16 @@ FGは `sf-design [1] 詳細設計` の1ファイル生成単位となる（1FG =
 ### スキーマ
 
 ```yaml
-feature_groups:
-  - id: "FG-001"            # FG-001〜 で採番
-    name: "商談受注後処理"   # 業務担当者が呼ぶ名前（Apex名ではなく業務名）
+groups:
+  - group_id: "GRP-001"            # GRP-001〜 で採番（group_features.py と同形式）
+    name_ja: "商談受注後処理"       # 業務担当者が呼ぶ名前（Apex名ではなく業務名）
+    name_en: "OpportunityPostProcess"
     description: "商談がクローズ受注になった際に後続処理（契約作成・通知等）を実行する機能群"
     trigger: "商談ステージが「受注」に変更された時"
-    components:             # 関連するコンポーネントのAPI名
-      - "OpportunityTrigger"
-      - "OpportunityTriggerHandler"
-      - "ContractCreationFlow"
+    feature_ids:            # docs/.sf/feature_ids.yml の id（F-xxx）。存在する場合は必ず参照して F-xxx を記載
+      - "F-001"             # OpportunityTrigger
+      - "F-002"             # OpportunityTriggerHandler
+      - "F-003"             # ContractCreationFlow
     related_objects:        # 主に操作するSalesforceオブジェクト
       - "Opportunity"
       - "Contract__c"
@@ -868,25 +869,33 @@ UCごとに1つのFGを作成する。以下の基準でマージ・分割を行
 
 `docs/.sf/` フォルダが存在しない場合は作成してからYAMLを書き込む。
 
+**feature_ids.yml が存在する場合は必ず読み込み、コンポーネントAPI名を F-xxx ID に変換してから記載する。**
+
+```bash
+# feature_ids.yml が存在するか確認
+ls "{project_dir}/docs/.sf/feature_ids.yml" 2>/dev/null
+```
+
 ```yaml
 # docs/.sf/feature_groups.yml
 # sf-memoryカテゴリ5が生成。sf-design[1]詳細設計の生成単位。
 # 手動追記・修正可（次回実行時に保持される）
 generated_at: "YYYY-MM-DD"
-feature_groups:
-  - id: "FG-001"
-    name: "<業務名>"
+groups:
+  - group_id: "GRP-001"
+    name_ja: "<業務名>"
+    name_en: "<英語名（Apex命名プレフィックス等）>"
     description: "<業務観点の説明>"
     trigger: "<いつ・何をきっかけに動くか>"
-    components:
-      - "<コンポーネントAPI名>"
+    feature_ids:            # feature_ids.yml の F-xxx ID を記載（未確認の場合は空配列）
+      - "F-001"
     related_objects:
       - "<オブジェクトAPI名>"
 ```
 
 ### Phase 4: 変更履歴の記録
 
-`docs/logs/changelog.md` にカテゴリ5実行履歴を追記する。
+`docs/changelog.md` にカテゴリ5実行履歴を追記する。
 
 ---
 

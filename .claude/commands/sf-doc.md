@@ -189,21 +189,24 @@ AskUserQuestion で提示（1択＋Other自動）:
 
 **B-2: バージョン種別**
 
-`01_基本設計/` 内の `オブジェクト項目定義書_v*.xlsx` を確認:
+`01_基本設計/` 内の `オブジェクト項目定義書_v*.xlsx` を確認し、**最新ファイルのフルパスを `latest_obj_file` 変数に保存する**:
 ```bash
 python -c "
-import pathlib, glob
-files = sorted(glob.glob('01_基本設計/オブジェクト項目定義書_v*.xlsx'))
+import pathlib, glob, os
+files = sorted(glob.glob('01_基本設計/オブジェクト項目定義書_v*.xlsx'), key=os.path.getmtime, reverse=True)
 for f in files:
     print(f)
+print('LATEST:', files[0] if files else '')
 "
 ```
+
+`LATEST:` 行に表示されたパスを `latest_obj_file` として記録する（後の B-4 で使用）。
 
 既存ファイルがある場合は AskUserQuestion で選択:
 - label: "マイナー更新（vX.Y → vX.Y+1）"
 - label: "メジャー更新（vX.Y → vX+1.0）"
 
-既存ファイルがない場合: `version_increment = minor`（新規）として続行。
+既存ファイルがない場合: `version_increment = minor`（新規）として続行。`latest_obj_file` は空とする。
 
 **B-3: システム名称**
 
@@ -288,7 +291,7 @@ for k, p in paths.items():
 
 出力先フォルダを作成してから実行:
 ```bash
-mkdir -p "docs/01_基本設計"
+mkdir -p "01_基本設計"
 ```
 
 ```bash
@@ -424,7 +427,7 @@ python -c "
 import sys
 sys.path.insert(0, 'scripts/python/sf-doc-mcp')
 from meta_store import read_meta
-m = read_meta(r'{既存ファイルのフルパス}')
+m = read_meta(r'{latest_obj_file}')
 if m:
     print(' '.join(m.get('objects', {}).keys()))
 "
@@ -458,14 +461,14 @@ if m:
 出力先フォルダを作成してから実行:
 
 ```bash
-mkdir -p "docs/01_基本設計"
+mkdir -p "01_基本設計"
 ```
 
 ```bash
 python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate.py" \
   --sf-alias {SF_ALIAS} \
   --objects {オブジェクトリスト} \
-  --output-dir "{カレントディレクトリ}/docs/01_基本設計" \
+  --output-dir "{カレントディレクトリ}/01_基本設計" \
   --author "{作成者名}" \
   --system-name "{システム名称}" \
   --source-file "{カレントディレクトリ}/01_基本設計/{既存ファイル名（新規は省略）}" \
@@ -558,7 +561,7 @@ if p.exists():
 
 出力先フォルダを作成してからスキャンを実行:
 ```bash
-mkdir -p "docs/01_基本設計"
+mkdir -p "01_基本設計"
 ```
 
 ```bash
@@ -571,7 +574,7 @@ python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/scan_features
 ```bash
 python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
   --input "{カレントディレクトリ}/01_基本設計/.features_tmp.json" \
-  --output-dir "{カレントディレクトリ}/docs/01_基本設計" \
+  --output-dir "{カレントディレクトリ}/01_基本設計" \
   --author "{作成者名}" \
   --project-name "{プロジェクト名}" \
   --source-file "{カレントディレクトリ}/01_基本設計/{既存ファイル名（新規は省略）}" \

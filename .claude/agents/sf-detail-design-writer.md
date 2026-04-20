@@ -122,14 +122,15 @@ import pathlib
 root = pathlib.Path(r'{output_dir}').parent
 
 # 基本設計 JSON（グループ単位）
-basic_dir = root / '基本設計書' / '.tmp'
-for group_id in {target_group_ids_list}:
+# {target_group_ids_list} は必ず Python list[str] 形式で展開すること（例: ["GRP-001", "GRP-002"]）
+basic_dir = root / '01_基本設計' / '.tmp'
+for group_id in {target_group_ids_list}:  # type: list[str]
     p = basic_dir / f'{group_id}_basic.json'
     if p.exists():
         print(f'basic_json:{group_id}:{p}')
 
 # プログラム設計 JSON（コンポーネント単位）
-prog_dir = root / 'プログラム設計書' / '.tmp'
+prog_dir = root / '03_プログラム設計' / '.tmp'
 if prog_dir.exists():
     for p in sorted(prog_dir.glob('*_design.json')):
         print(f'prog_json:{p.stem.replace(\"_design\", \"\")}:{p}')

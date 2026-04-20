@@ -36,10 +36,7 @@ AskUserQuestion で生成する設計書を選択する:
 
 > sf-design は **管理フォルダ = プロジェクトルート（force-app/ / docs/ / scripts/ が存在するフォルダ）** を前提とする。`project_dir` は `ROOT` と同じ値を使用する。
 
-まず前回設定を確認するために、一時的に仮パスでファイルを探す。**前回値がある場合**: AskUserQuestion で提示（1択+Other自動）:
-- label: "前回: {last_output_dir}"、description: "前回と同じフォルダを使用"
-
-Other が選ばれた場合またはチャットで直接聞く:
+チャットで直接聞く:
 ```
 プロジェクトフォルダのパスを入力してください（設計書の出力先になります）:
 ```
@@ -69,14 +66,16 @@ try:
     if p.exists():
         d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
         print('author:' + str(d.get('author', '')))
+        print('output_dir:' + str(d.get('output_dir', '')))
     else:
         print('author:')
+        print('output_dir:')
 except Exception:
     print('author:')
 "
 ```
 
-出力から `author`（前回の作成者名）を控える。
+出力から `author`（前回の作成者名）と `output_dir`（前回の ROOT）を控える。
 
 ### 作成者名
 
@@ -136,6 +135,18 @@ except Exception as e:
 > **「全て」を選択した場合はこのセクションを実行する。** ドメイン・詳細・プログラム設計で必要な対象を一括で決定し、以降の Step では一切ユーザーへの確認を行わない。
 
 ### feature_groups.yml の生成
+
+`feature_ids.yml` が存在しない場合は先に `/sf-memory` を実行するよう案内して中断する:
+```bash
+python -c "
+import pathlib, sys
+p = pathlib.Path(r'{project_dir}') / 'docs' / '.sf' / 'feature_ids.yml'
+if not p.exists():
+    print('ERROR: docs/.sf/feature_ids.yml が見つかりません。先に /sf-memory を実行してください。')
+    sys.exit(1)
+print('OK')
+"
+```
 
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
@@ -222,7 +233,7 @@ for e in errors:
 
 確定後、ユーザーに伝える:
 ```
-確認完了。基本設計 → 詳細設計 → プログラム設計の順に自動生成を開始します。以降は完了まで待機してください。
+確認完了。ドメイン設計 → 詳細設計 → プログラム設計の順に自動生成を開始します。以降は完了まで待機してください。
 ```
 
 ---
@@ -415,6 +426,7 @@ output_dir:        {ROOT}/03_プログラム設計
 tmp_dir:           {ROOT}/03_プログラム設計/.tmp
 author:            {author}
 project_name:      {project_name}
+sf_alias:          {SF_ALIAS}
 feature_list:      {feature_list}（画面系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
 target_ids:        {target_ids}
 version_increment: minor
