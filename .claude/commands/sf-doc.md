@@ -142,6 +142,135 @@ except Exception as e:
 
 ---
 
+## Step 0-3: 事前確認（「全て」選択時のみ・ここで全質問を終わらせる）
+
+> **「全て」を選択した場合はこのセクションを実行する。** Step A〜C で必要な情報を一括収集し、以降は一切ユーザーへの確認を行わない。
+
+### docs/ ファイル存在確認
+
+```bash
+python -c "
+import pathlib
+docs = pathlib.Path('docs')
+checks = {
+    'カテゴリ1（Step A用）': [
+        docs / 'overview' / 'org-profile.md',
+        docs / 'requirements' / 'requirements.md',
+    ],
+    'カテゴリ2（Step B/C用）': [
+        docs / 'catalog' / '_index.md',
+        docs / 'catalog' / '_data-model.md',
+    ],
+}
+for label, paths in checks.items():
+    missing = [str(p) for p in paths if not p.exists()]
+    if missing:
+        print(f'MISSING {label}: {missing}')
+    else:
+        print(f'OK {label}')
+"
+```
+
+`MISSING` が出た場合は「先に `/sf-memory` を実行してください」と伝えて終了する。全て `OK` なら続ける。
+
+### /sf-memory 最新化確認（カテゴリ1・カテゴリ2 まとめて）
+
+AskUserQuestion で確認:
+- label: "両カテゴリとも最新化済み・このまま続ける"
+- label: "先に /sf-memory を実行する（ここで終了）"
+
+「先に実行する」が選ばれた場合: `/sf-memory` を実行してから改めて本コマンドを実行するよう案内して終了。
+
+### Step C 事前設定（オブジェクト定義書の設定）
+
+**C-1: 接続先組織の確認**
+
+`.sf/config.json` から target-org を取得:
+```bash
+python -c "
+import json, pathlib
+p = pathlib.Path('.sf/config.json')
+if p.exists():
+    d = json.loads(p.read_text(encoding='utf-8'))
+    print(d.get('target-org', ''))
+"
+```
+
+`org-profile.md` からシステム名を取得:
+```bash
+python -c "
+import re, pathlib, sys
+sys.stdout.reconfigure(encoding='utf-8')
+p = pathlib.Path('docs/overview/org-profile.md')
+if p.exists():
+    text = p.read_text(encoding='utf-8')
+    for pat in [r'\|\s*組織名\s*\|\s*(.+?)\s*\|', r'システム名[^\n:：]*[:：]\s*(.+)', r'プロジェクト名[^\n:：]*[:：]\s*(.+)']:
+        m = re.search(pat, text)
+        if m:
+            print(m.group(1).strip())
+            break
+"
+```
+
+AskUserQuestion で提示（1択＋Other自動）:
+- target-org が取得できた場合: label: "{alias}（{system_name}）"、description: "このプロジェクトのデフォルト組織"
+- 取得できなかった場合: label: "ブラウザでログインする"
+
+`SF_ALIAS` として保持する（`（` より前の alias 部分のみ）。ブラウザログインを選択した場合は後述の一時エイリアス処理を Step C 冒頭で実行。
+
+**C-2: バージョン種別**
+
+`{ROOT}/オブジェクト定義書/` 内の `オブジェクト項目定義書_v*.xlsx` を確認:
+```bash
+python -c "
+import pathlib, glob
+files = sorted(glob.glob(r'{ROOT}/オブジェクト定義書/オブジェクト項目定義書_v*.xlsx'))
+for f in files:
+    print(f)
+"
+```
+
+既存ファイルがある場合は AskUserQuestion で選択:
+- label: "マイナー更新（vX.Y → vX.Y+1）"
+- label: "メジャー更新（vX.Y → vX+1.0）"
+
+既存ファイルがない場合: `version_increment = minor`（新規）として続行。
+
+**C-3: システム名称**
+
+新規の場合は `org-profile.md` から、更新の場合は既存ファイルの `_meta` シートから取得してAskUserQuestion で確認:
+- label: "{値}（前回/自動取得）"
+
+Other の場合はチャットで入力。結果を `システム名称` として保持（`（前回/自動取得）` を除去した値のみ）。
+
+**C-4: 対象オブジェクトの選択**
+
+`docs/catalog/_index.md` からオブジェクト一覧を取得:
+```bash
+python -c "
+import re, pathlib
+text = pathlib.Path('docs/catalog/_index.md').read_text(encoding='utf-8')
+rows = re.findall(r'\|\s*[^\|]+\|\s*([A-Za-z][A-Za-z0-9_]*)\s*\|', text)
+skip = {'API名', 'キープレフィックス', 'オブジェクト', 'バージョン', '定義書'}
+all_objs = list(dict.fromkeys(r.strip() for r in rows if r.strip() not in skip))
+standard = [o for o in all_objs if not o.endswith('__c')]
+custom   = [o for o in all_objs if o.endswith('__c')]
+print(' '.join(standard + custom))
+"
+```
+
+AskUserQuestion で提示:
+- 新規の場合: label: "_index.md の全オブジェクト（{n}件）"
+- 更新の場合: label: "既存と同じ（{オブジェクト一覧}）" / label: "既存＋追加"
+
+Other の場合はチャットで入力。結果を `オブジェクトリスト` として保持。
+
+### 確定・開始
+
+「確認完了。プロジェクト概要書 → データモデル定義書 → オブジェクト定義書の順に自動生成を開始します。以降は完了まで待機してください。」と伝える。
+
+---
+
 ## Step A: 業務フロー図・システム構成図（PPTX）
 
 > - 本書の中身は **docs/ 配下の精度に完全依存** する。docs が薄いと骨組みだけのスライドになる。
@@ -154,7 +283,9 @@ except Exception as e:
 
 **【最新化手順】** `/sf-memory` → カテゴリ1「組織概要・環境情報」を選択
 
-AskUserQuestion で確認:
+**「全て」モードの場合**: Step 0-3 で確認済み。スキップして A-1 へ進む。
+
+**単独実行の場合**: AskUserQuestion で確認:
 - label: "最新化済み・このまま続ける"
 - label: "先に /sf-memory を実行する（ここで終了）"
 
@@ -239,7 +370,9 @@ python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_flow
 
 **【最新化手順】** `/sf-memory` → カテゴリ2「オブジェクト・項目構成」を選択
 
-AskUserQuestion で確認（「全て」の流れで来た場合も必ず確認する。Step A はカテゴリ1、Step B はカテゴリ2 で対象が異なるため）:
+**「全て」モードの場合**: Step 0-3 で確認済み。スキップして B-1 へ進む。
+
+**単独実行の場合**: AskUserQuestion で確認:
 - label: "最新化済み・このまま続ける"
 - label: "先に /sf-memory を実行する（ここで終了）"
 
@@ -283,11 +416,13 @@ python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_data
 - `_index.md` が古い（新規オブジェクトが未反映）場合: `/sf-memory` → カテゴリ2「オブジェクト・項目構成」
 - フィールドメタデータは実行時に Salesforce組織から直接取得するため、別途最新化不要
 
-AskUserQuestion で確認:
-- label: "このまま続ける"、description: "フィールドデータはSalesforce組織から直接取得するため常に最新。_index.md の更新は新規オブジェクト追加時のみ必要"
-- label: "/sf-memory カテゴリ2 を実行してから続ける（終了）"、description: "Salesforceに新しいオブジェクトを追加し、選択候補に追加したい場合"
+**「全て」モードの場合**: Step 0-3 で設定済み（`SF_ALIAS` / `version_increment` / `システム名称` / `オブジェクトリスト`）。C-1〜C-4 をスキップして C-5 へ進む。
 
-### C-1: 接続先の選択
+**単独実行の場合**: AskUserQuestion で確認:
+- label: "このまま続ける"
+- label: "/sf-memory カテゴリ2 を実行してから続ける（終了）"
+
+### C-1: 接続先の選択（単独実行時のみ）
 
 まずカレントディレクトリの `.sf/config.json` から target-org を取得する:
 ```bash
@@ -332,7 +467,7 @@ sf org login web --alias _doc-tmp
 ブラウザが開くのでログインしてもらう。完了後 `SF_ALIAS=_doc-tmp` として控える。
 （生成完了後に `sf org logout --target-org _doc-tmp --no-prompt` で一時エイリアスを削除する）
 
-### C-2: 新規 or 更新の自動判定
+### C-2: 新規 or 更新の自動判定（単独実行時のみ）
 
 `{ROOT}/オブジェクト定義書/` 内の `オブジェクト項目定義書_v*.xlsx` を確認する:
 
@@ -344,9 +479,7 @@ sf org login web --alias _doc-tmp
 **既存ファイルがない場合:**
 「新規作成モード（v1.0）で進めます」と表示して C-3 へ。
 
-### C-3: システム名称
-
-新規・更新どちらでも毎回確認する。
+### C-3: システム名称（単独実行時のみ）
 
 **新規作成の場合:** `docs/overview/org-profile.md` からシステム名を取得する（`組織名`・`システム名`・`プロジェクト名` の順で検索）。
 **更新の場合:** 既存ファイルの `_meta` シートから前回値を読む（`read_meta()` の `system_name` フィールド）。
@@ -359,7 +492,7 @@ Other が選ばれた場合はチャットで入力してもらう。
 
 > **重要**: 選択結果を後工程に渡す際は、label から `（前回/自動取得）` を除去した **元の値だけ** を `system_name` として使用する。ラベルの付記文字列は UI 表示用であり、資料には含めない。
 
-### C-4: 対象オブジェクトの選択
+### C-4: 対象オブジェクトの選択（単独実行時のみ）
 
 **新規作成の場合:**
 
@@ -415,13 +548,17 @@ if m:
 
 **スペルチェック:** オブジェクト名に明らかなタイポ（例: Oppotunity → Opportunity）があれば、生成前に確認を取る。
 
-### C-5: 確認して生成
+### C-5: 生成
 
-設定内容を表示し、AskUserQuestion で確認:
-- label: "生成する"、description: "定義書の生成を開始する"
-- label: "キャンセル"、description: "中止する"
+**「全て」モードの場合**: Step 0-3 で確認済み。確認なしでそのまま生成を開始する。
 
-「生成する」が選ばれたら出力先サブフォルダを作成してから実行:
+**単独実行の場合**: AskUserQuestion で確認:
+- label: "生成する"
+- label: "キャンセル"
+
+「キャンセル」が選ばれた場合は終了する。
+
+出力先サブフォルダを作成してから実行:
 
 ```bash
 mkdir -p "{ROOT}/オブジェクト定義書"
