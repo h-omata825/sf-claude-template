@@ -810,8 +810,8 @@ def generate_swimlane_diagram(
     n_actors = len(unique_actors)
     n_steps = len(business_flow)
 
-    col_w = 3.5   # 1アクターの列幅
-    row_h = 2.0   # 1ステップの行高さ
+    col_w = 2.2   # 1アクターの列幅（縦長になるよう狭く）
+    row_h = 2.5   # 1ステップの行高さ（縦方向に余裕を持たせる）
     header_h = 0.8  # アクターヘッダーの高さ
     margin = 0.5
 
@@ -964,7 +964,7 @@ def generate_flowchart(
     n_steps = len(process_steps)
     y_gap = 1.8
     fig_h = max(5, n_steps * y_gap + 1.5)
-    fig_w_adj = 8
+    fig_w_adj = 7  # スイムレーン図と同程度の幅に合わせる
 
     center_x = fig_w_adj / 2
 

@@ -98,14 +98,20 @@ BF_COL_GROUPS = [
     (BF_COND_CS, BF_COND_CE),
 ]
 
-# 対象オブジェクト: 表上・図下レイアウト（固定30行）
-OBJ_IMG_ANCHOR     = "B37"
+# 対象オブジェクト: 表上・図下レイアウト（動的行）
 OBJ_DATA_ROW_START = 5
 OBJ_NAME_CS,  OBJ_NAME_CE  = 2,  7
 OBJ_FAPI_CS,  OBJ_FAPI_CE  = 8,  14
 OBJ_FLBL_CS,  OBJ_FLBL_CE  = 15, 20
 OBJ_ACC_CS,   OBJ_ACC_CE   = 21, 23
 OBJ_NOTE_CS,  OBJ_NOTE_CE  = 24, 31
+OBJ_COL_GROUPS = [
+    (OBJ_NAME_CS, OBJ_NAME_CE),
+    (OBJ_FAPI_CS, OBJ_FAPI_CE),
+    (OBJ_FLBL_CS, OBJ_FLBL_CE),
+    (OBJ_ACC_CS,  OBJ_ACC_CE),
+    (OBJ_NOTE_CS, OBJ_NOTE_CE),
+]
 
 # 処理概要: テーブルヘッダは row4、データは row5 から動的追加
 PROC_DATA_ROW_START = 5
@@ -145,8 +151,8 @@ SECTION_SHEETS = {
 
 # 動的シートの図エリア高さ（行数）
 DIAGRAM_AREA_ROWS = 30
-# 動的シートの空行追加数（手動入力用）
-DYNAMIC_EMPTY_ROWS = 5
+# 動的シートの空行追加数（手動入力用）— 0=データ行のみ
+DYNAMIC_EMPTY_ROWS = 0
 
 
 # ── スタイルヘルパー ────────────────────────────────────────────────
@@ -286,18 +292,18 @@ def _compute_obj_note(obj_api: str, access: str, impact: dict) -> str:
 
 def fill_target_objects(ws, data: dict, changed_obj_keys: set,
                         png_path: str | None):
-    """対象オブジェクトシート: ER図 + 項目テーブル（固定30行）。
-
-    備考列に影響範囲情報を吸収:
-    - W/RW + impact.update_objects → 「更新対象」
-    - R のみ → 「参照のみ」
-    """
-    if png_path:
-        _embed_image(ws, png_path, OBJ_IMG_ANCHOR, img_w=880)
-
+    """対象オブジェクトシート: 項目テーブル(動的行) + ER図。"""
     impact = data.get("impact", {})
     objects = data.get("related_objects", [])
+
+    # フィールド数を合計してデータ行数を確定
+    n_data = sum(len(obj.get("fields", [])) for obj in objects)
+    total_rows = n_data + DYNAMIC_EMPTY_ROWS
+
+    # データ行 + 空行の枠を作成
     r = OBJ_DATA_ROW_START
+    data_rows(ws, r, r + total_rows - 1, OBJ_COL_GROUPS, row_h=22)
+
     for obj in objects:
         obj_name = f"{obj.get('label', '')} ({obj.get('api_name', '')})"
         obj_api = obj.get("api_name", "")
@@ -305,7 +311,6 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
         for field in obj.get("fields", []):
             set_h(ws, r, 22)
             access = field.get("access", "")
-            # 備考: field固有のnoteがあればそれを優先、なければ影響範囲から導出
             note = field.get("note", "")
             if not note:
                 note = _compute_obj_note(obj_api, access, impact)
@@ -324,6 +329,16 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
                 for c in (c1, c2, c3, c4, c5):
                     dr.apply_red(c)
             r += 1
+
+    # スペーサー + 図エリア
+    spacer_row = OBJ_DATA_ROW_START + total_rows
+    set_h(ws, spacer_row, 8)
+    diagram_start = spacer_row + 1
+    diagram_area(ws, diagram_start, "オブジェクト関連図（自動生成）", section_no=2)
+
+    img_anchor = f"B{diagram_start + 1}"
+    if png_path:
+        _embed_image(ws, png_path, img_anchor, img_w=880)
 
 
 def fill_process_overview(ws, data: dict, changed_step_nos: set,

@@ -232,16 +232,9 @@ def build_target_objects(wb):
     title_band(ws, 1, "詳細設計書 — 対象オブジェクト")
     set_h(ws, 2, 6)
 
-    # テーブル（ヘッダーのみ — データ行はgenerate側で動的追加、最大30行固定）
+    # テーブル（ヘッダーのみ — データ行・図エリアはgenerate側で動的追加）
     section_band(ws, 3, "\u25a0 1. 対象オブジェクト・項目一覧")
     table_header(ws, 4, OBJ_COLS)
-    data_rows(ws, 5, 34, [(cs, ce) for cs, ce, _ in OBJ_COLS])
-
-    # スペーサー
-    set_h(ws, 35, 8)
-
-    # 図エリア（下）
-    diagram_area(ws, 36, "オブジェクト関連図（自動生成）", section_no=2)
 
 
 # =====================================================================
