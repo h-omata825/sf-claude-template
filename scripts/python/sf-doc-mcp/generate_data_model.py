@@ -136,6 +136,27 @@ def parse_index(path: Path) -> dict:
 
 # ── パース: _data-model.md ────────────────────────────────────────────────────
 
+def _derive_fk_from_fields(parent: str, child_lookup_fields: list[str]) -> str:
+    """親オブジェクト名と子のlookupフィールドリストからFKフィールドを推定する。
+
+    例: parent="Account", fields=["Account__c","Opportunity__c"] → "Account__c"
+        parent="BusinessTravelerHeader__c", fields=["BusinessTravelerHeader__c"] → "BusinessTravelerHeader__c"
+        parent="Opportunity", fields=["OpportunityId__c","Opportunity__c"] → "Opportunity__c"
+    """
+    parent_base = re.sub(r'__[cm]$', '', parent, flags=re.IGNORECASE).lower()
+    # 完全一致（ベース名）を優先
+    for fld in child_lookup_fields:
+        fld_base = re.sub(r'__[cm]$', '', fld, flags=re.IGNORECASE).lower()
+        if fld_base == parent_base:
+            return fld
+    # 前方一致（OpportunityId__c → Opportunity）
+    for fld in child_lookup_fields:
+        fld_base = re.sub(r'__[cm]$', '', fld, flags=re.IGNORECASE).lower()
+        if fld_base.startswith(parent_base) or parent_base.startswith(fld_base):
+            return fld
+    return ""
+
+
 def parse_relations(path: Path) -> list:
     """リレーション一覧テーブル + Mermaid erDiagram からリレーションを返す。
     各リレーションに fk_field（FKフィールドAPI名）を付与する。
@@ -145,10 +166,10 @@ def parse_relations(path: Path) -> list:
         return []
     text = path.read_text(encoding="utf-8")
 
-    # 主従テーブルから親子ペア取得
+    # 主従テーブルから親子ペア取得（**主従 形式と MasterDetail 両対応）
     md_pairs = set()
-    for m in re.finditer(r'\|\s*(\w+)\s*\|\s*(\w+)\s*\|\s*\*\*主従', text):
-        md_pairs.add((m.group(1), m.group(2)))
+    for m in re.finditer(r'\|\s*(`?)(\w+)\1\s*\|\s*(`?)(\w+)\3\s*\|\s*(MasterDetail|\*\*?主従)', text, re.IGNORECASE):
+        md_pairs.add((m.group(2), m.group(4)))
 
     # リレーション一覧テーブルから FK フィールド名を取得
     # 形式: | 親オブジェクト | 子オブジェクト | 関係種別 | 項目 |
@@ -169,7 +190,8 @@ def parse_relations(path: Path) -> list:
             continue
         # FKフィールドが複数ある場合は最初だけ（括弧内の説明を除く）
         fk = re.split(r'[（(、,/ ]', fk)[0].strip()
-        if parent and child and fk and re.match(r'\w', fk):
+        # API名らしいもの（英数字アンダースコアのみ）だけ採用
+        if parent and child and fk and re.match(r'^\w+$', fk) and not re.search(r'[\u3040-\u9fff]', fk):
             fk_map[(parent, child)] = fk
 
     # Mermaid erDiagram をパース
@@ -177,9 +199,25 @@ def parse_relations(path: Path) -> list:
     if not mermaid_m:
         return []
 
+    mermaid_body = mermaid_m.group(1)
+
+    # エンティティのフィールドブロックからlookup/masterdetailフィールドを収集
+    # entity_lookup_fields: {entity_api_name: [field_api_name, ...]}
+    entity_lookup_fields: dict[str, list] = {}
+    for ent_m in re.finditer(r'(\w+)\s*\{([^}]*)\}', mermaid_body, re.DOTALL):
+        ent_name = ent_m.group(1)
+        fields = []
+        for fline in ent_m.group(2).splitlines():
+            fline = fline.strip()
+            fm = re.match(r'(lookup|masterdetail)\s+(\w+)', fline, re.IGNORECASE)
+            if fm:
+                fields.append(fm.group(2))
+        if fields:
+            entity_lookup_fields[ent_name] = fields
+
     relations = []
     seen = set()
-    for line in mermaid_m.group(1).splitlines():
+    for line in mermaid_body.splitlines():
         line = line.strip()
         if not line or line.startswith('%'):
             continue
@@ -200,7 +238,14 @@ def parse_relations(path: Path) -> list:
         if key in seen:
             continue
         seen.add(key)
+        # テーブル由来のFKを優先、なければエンティティフィールドから自動導出
         fk_field = fk_map.get(key, fk_map.get((raw_parent, raw_child), ""))
+        if not fk_field:
+            child_fields = entity_lookup_fields.get(child, [])
+            fk_field = _derive_fk_from_fields(parent, child_fields)
+        # 標準オブジェクト同士の標準FK規則: Account→Opportunity = AccountId
+        if not fk_field and not parent.endswith(("__c", "__mdt")) and not child.endswith(("__c", "__mdt")):
+            fk_field = parent + "Id"
         relations.append({
             "parent":   parent,
             "child":    child,

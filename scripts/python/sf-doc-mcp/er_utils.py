@@ -399,56 +399,77 @@ def _draw_crow_foot(ax, px: float, py: float, side: str,
 
 
 def _clear_mid_x(x1: float, y1: float, x2: float, y2: float,
-                  mid_x: float, box_edges: dict) -> float:
-    """垂直セグメント(mid_x, y1..y2)がボックスと重なる場合、mid_x をボックス外へシフトする。"""
-    y_lo = min(y1, y2) + 0.04
-    y_hi = max(y1, y2) - 0.04
-    x_lo = min(x1, x2) + 0.04
-    x_hi = max(x1, x2) - 0.04
-    blocking = []
-    for be in box_edges.values():
-        bx, by, bw, bh = be["x"], be["y"], be["w"], be["h"]
-        if (bx < mid_x + 0.04 and bx + bw > mid_x - 0.04 and
-                by < y_hi and by + bh > y_lo and
-                x_lo < mid_x < x_hi):
-            blocking.append(be)
-    if not blocking:
-        return mid_x
-    right_edge = max(be["x"] + be["w"] for be in blocking)
-    left_edge  = min(be["x"] for be in blocking)
-    gap_right  = x_hi - right_edge
-    gap_left   = left_edge - x_lo
-    if gap_right >= gap_left and gap_right > 0.12:
-        return right_edge + 0.10
-    elif gap_left > 0.12:
-        return left_edge - 0.10
+                  mid_x: float, box_edges: dict,
+                  skip_ids: set = None) -> float:
+    """垂直セグメント(mid_x, y1..y2)がボックスと重なる場合、mid_x をボックス外へシフトする。
+    skip_ids: 始終端ボックスのIDセット（除外対象）。
+    """
+    skip_ids = skip_ids or set()
+    y_lo = min(y1, y2) + 0.02
+    y_hi = max(y1, y2) - 0.02
+    x_lo = min(x1, x2)
+    x_hi = max(x1, x2)
+    margin = 0.04
+
+    for _pass in range(3):  # mid_x を移動した後も再チェック（最大3回）
+        blocking = []
+        for bid, be in box_edges.items():
+            if bid in skip_ids:
+                continue
+            bx, by, bw, bh = be["x"], be["y"], be["w"], be["h"]
+            if (bx < mid_x + margin and bx + bw > mid_x - margin and
+                    by < y_hi and by + bh > y_lo):
+                blocking.append(be)
+        if not blocking:
+            break
+        right_edge = max(be["x"] + be["w"] for be in blocking)
+        left_edge  = min(be["x"] for be in blocking)
+        # 右に出す余地 vs 左に出す余地（スライド範囲内）
+        gap_right = x_hi - right_edge
+        gap_left  = left_edge - x_lo
+        if gap_right >= gap_left and right_edge + 0.12 <= x_hi:
+            mid_x = right_edge + 0.10
+        elif left_edge - 0.12 >= x_lo:
+            mid_x = left_edge - 0.10
+        else:
+            break  # どちらにも余地がない場合は諦める
     return mid_x
 
 
 def _clear_mid_y(x1: float, y1: float, x2: float, y2: float,
-                  mid_y: float, box_edges: dict) -> float:
-    """水平セグメント(x1..x2, mid_y)がボックスと重なる場合、mid_y をボックス外へシフトする。"""
-    x_lo = min(x1, x2) + 0.04
-    x_hi = max(x1, x2) - 0.04
-    y_lo = min(y1, y2) + 0.04
-    y_hi = max(y1, y2) - 0.04
-    blocking = []
-    for be in box_edges.values():
-        bx, by, bw, bh = be["x"], be["y"], be["w"], be["h"]
-        if (by < mid_y + 0.04 and by + bh > mid_y - 0.04 and
-                bx < x_hi and bx + bw > x_lo and
-                y_lo < mid_y < y_hi):
-            blocking.append(be)
-    if not blocking:
-        return mid_y
-    top_edge = min(be["y"] for be in blocking)
-    bot_edge = max(be["y"] + be["h"] for be in blocking)
-    gap_above = top_edge - y_lo
-    gap_below = y_hi - bot_edge
-    if gap_above >= gap_below and gap_above > 0.12:
-        return top_edge - 0.10
-    elif gap_below > 0.12:
-        return bot_edge + 0.10
+                  mid_y: float, box_edges: dict,
+                  skip_ids: set = None) -> float:
+    """水平セグメント(x1..x2, mid_y)がボックスと重なる場合、mid_y をボックス外へシフトする。
+    skip_ids: 始終端ボックスのIDセット（除外対象）。
+    """
+    skip_ids = skip_ids or set()
+    x_lo = min(x1, x2) + 0.02
+    x_hi = max(x1, x2) - 0.02
+    y_lo = min(y1, y2)
+    y_hi = max(y1, y2)
+    margin = 0.04
+
+    for _pass in range(3):
+        blocking = []
+        for bid, be in box_edges.items():
+            if bid in skip_ids:
+                continue
+            bx, by, bw, bh = be["x"], be["y"], be["w"], be["h"]
+            if (by < mid_y + margin and by + bh > mid_y - margin and
+                    bx < x_hi and bx + bw > x_lo):
+                blocking.append(be)
+        if not blocking:
+            break
+        top_edge = min(be["y"] for be in blocking)
+        bot_edge = max(be["y"] + be["h"] for be in blocking)
+        gap_above = top_edge - y_lo
+        gap_below = y_hi - bot_edge
+        if gap_above >= gap_below and top_edge - 0.12 >= y_lo:
+            mid_y = top_edge - 0.10
+        elif bot_edge + 0.12 <= y_hi:
+            mid_y = bot_edge + 0.10
+        else:
+            break
     return mid_y
 
 
@@ -456,24 +477,26 @@ def _route_line(
     p1: tuple, side1: str,
     p2: tuple, side2: str,
     box_edges: dict = None,
+    skip_ids: set = None,
 ) -> list:
     """2点間の直角折れ線経路を計算する（z字形またはL字形）。
     box_edges が渡された場合、中間セグメントがボックスを避けるよう mid_x/mid_y を調整する。
+    skip_ids: 始終端ボックスのIDセット（回避対象から除外）。
     """
     x1, y1 = p1
     x2, y2 = p2
 
     if side1 in ("left", "right"):
-        # 水平出発: 中間X で折れる
+        # 水平出発: 中間X で折れる（垂直セグメントを回避）
         mid_x = (x1 + x2) / 2
         if box_edges:
-            mid_x = _clear_mid_x(x1, y1, x2, y2, mid_x, box_edges)
+            mid_x = _clear_mid_x(x1, y1, x2, y2, mid_x, box_edges, skip_ids=skip_ids)
         return [(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)]
     else:
-        # 垂直出発: 中間Y で折れる
+        # 垂直出発: 中間Y で折れる（水平セグメントを回避）
         mid_y = (y1 + y2) / 2
         if box_edges:
-            mid_y = _clear_mid_y(x1, y1, x2, y2, mid_y, box_edges)
+            mid_y = _clear_mid_y(x1, y1, x2, y2, mid_y, box_edges, skip_ids=skip_ids)
         return [(x1, y1), (x1, mid_y), (x2, mid_y), (x2, y2)]
 
 
@@ -516,8 +539,9 @@ def _draw_arrow(ax, edges: dict, arrow: dict, box_edges: dict = None) -> None:
     child_optional = not is_md   # MD 子は必須(|<), Lookup 子は任意(○|<)
     line_end = _draw_crow_foot(ax, p_to[0], p_to[1], side_to, color, child_optional)
 
-    # ── 接続線 ──
-    pts = _route_line(line_start, side_from, line_end, side_to, box_edges=box_edges)
+    # ── 接続線 ──（始終端ボックスは回避対象から除外）
+    skip_ids = {from_id, to_id}
+    pts = _route_line(line_start, side_from, line_end, side_to, box_edges=box_edges, skip_ids=skip_ids)
     xs  = [p[0] for p in pts]
     ys  = [p[1] for p in pts]
     ax.plot(xs, ys, color=_hex(color), linewidth=line_lw, linestyle=line_ls,
