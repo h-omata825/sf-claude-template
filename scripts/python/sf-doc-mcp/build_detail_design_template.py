@@ -1,16 +1,18 @@
 """
 詳細設計書テンプレート Excel を生成する。
 
-5シート構成:
-  1. 改版履歴                 : 基本情報 + 改版履歴テーブル
-  2. グループ詳細             : 処理目的 / データ連携概要 / 前提条件
-  3. コンポーネント仕様       : 担当処理 / 入力 / 出力 / エラー処理
-  4. インターフェース定義     : メソッド/API名 / パラメータ / 返却値 / 例外
-  5. 画面仕様                 : 画面項目 / UI種別 / 型 / 必須 / バリデーション
+7シート構成（T-04仕様）:
+  1. 改版履歴           : 基本情報 + 改版履歴テーブル
+  2. 概要               : 機能名 / 機能概要 / 目的 / 利用者 / 起点画面 / 操作トリガー
+  3. 業務フロー         : No / アクター / 処理内容 / 分岐条件
+  4. 対象オブジェクト   : オブジェクト名 / 項目API名 / 項目ラベル / 読み書き区分 / 備考
+  5. 処理概要           : ステップNo / 処理内容 / 条件分岐 / SOQL概要 / DML操作
+  6. 関連コンポーネント : コンポーネント名 / 種別 / 役割 / 依存方向
+  7. 影響範囲           : 5セクション（更新/参照オブジェクト、関連Apex等、外部連携、他機能依存）
 
 方針:
   - 設計書テンプレートと同じデザインシステム（狭幅グリッド + セル結合 + 罫線統一）
-  - グリッド: col A=2.0、col 2〜31=4.2（30列）
+  - グリッド: col A=2.0、col 2-31=4.2（30列）
 
 Usage:
   python build_detail_design_template.py --output "C:/.../詳細設計書テンプレート.xlsx"
@@ -23,7 +25,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-# ── カラー ──────────────────────────────────────────────────────
+# -- カラー --------------------------------------------------------------
 C_TITLE_DARK = "1F3864"
 C_HDR_BLUE   = "2E75B6"
 C_BAND_BLUE  = "0070C0"
@@ -34,7 +36,7 @@ C_FONT_D     = "000000"
 THIN = Side(style="thin",   color="8B9DC3")
 MED  = Side(style="medium", color="1F3864")
 
-# ── ヘルパー ───────────────────────────────────────────────────
+# -- ヘルパー -------------------------------------------------------------
 def _fill(c): return PatternFill("solid", fgColor=c)
 def _fnt(bold=False, color=C_FONT_D, size=10):
     return Font(name="游ゴシック", bold=bold, color=color, size=size)
@@ -66,7 +68,7 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
 def set_h(ws, row, h): ws.row_dimensions[row].height = h
 def set_w(ws, letter, w): ws.column_dimensions[letter].width = w
 
-# ── 共通グリッド ───────────────────────────────────────────────
+# -- 共通グリッド ---------------------------------------------------------
 GRID_LEFT  = 2
 GRID_RIGHT = 31
 
@@ -108,9 +110,9 @@ def label_row(ws, row, label, label_cs=2, label_ce=6, val_cs=7, val_ce=31, heigh
     MW(ws, row, val_cs, val_ce, "", border=B_all())
 
 
-# ─────────────────────────────────────────────────────────────
+# =====================================================================
 # Sheet 1: 改版履歴
-# ─────────────────────────────────────────────────────────────
+# =====================================================================
 REV_COLS = {
     "項番":     (2,  3),
     "版数":     (4,  5),
@@ -141,135 +143,170 @@ def build_revision(wb):
     data_rows(ws, 6, 25, [(cs, ce) for cs, ce in REV_COLS.values()])
 
 
-# ─────────────────────────────────────────────────────────────
-# Sheet 2: グループ詳細
-# ─────────────────────────────────────────────────────────────
-def build_group_detail(wb):
-    ws = wb.create_sheet("グループ詳細")
+# =====================================================================
+# Sheet 2: 概要
+# =====================================================================
+def build_overview(wb):
+    ws = wb.create_sheet("概要")
     setup_grid(ws)
 
-    title_band(ws, 1, "詳細設計書 — グループ詳細")
+    title_band(ws, 1, "詳細設計書 — 概要")
     set_h(ws, 2, 6)
 
-    # メタ 1段目
-    set_h(ws, 3, 22)
-    MW(ws, 3, 2,  5,  "プロジェクト名", bold=True, bg=C_LABEL_BG, border=B_all(), h="center")
-    MW(ws, 3, 6,  16, "", border=B_all())
-    MW(ws, 3, 17, 20, "グループID",    bold=True, bg=C_LABEL_BG, border=B_all(), h="center")
-    MW(ws, 3, 21, 24, "", border=B_all())
-    MW(ws, 3, 25, 27, "作成者",        bold=True, bg=C_LABEL_BG, border=B_all(), h="center")
-    MW(ws, 3, 28, 29, "", border=B_all())
-    MW(ws, 3, 30, 30, "版数",          bold=True, bg=C_LABEL_BG, border=B_all(), h="center")
-    MW(ws, 3, 31, 31, "", border=B_all())
-
-    # メタ 2段目
-    set_h(ws, 4, 22)
-    MW(ws, 4, 2,  5,  "グループ名",    bold=True, bg=C_LABEL_BG, border=B_all(), h="center")
-    MW(ws, 4, 6,  24, "", border=B_all())
-    MW(ws, 4, 25, 27, "作成日",        bold=True, bg=C_LABEL_BG, border=B_all(), h="center")
-    MW(ws, 4, 28, 31, "", border=B_all())
-
-    set_h(ws, 5, 10)
-
-    # セクション1: 処理目的
-    section_band(ws, 6, "■ 1. 処理目的")
-    label_row(ws, 7, "処理目的", height=44)
-
-    set_h(ws, 8, 10)
-
-    # セクション2: データ連携概要
-    section_band(ws, 9, "■ 2. データ連携概要")
-    label_row(ws, 10, "概要", height=44)
-
-    set_h(ws, 11, 10)
-
-    # セクション3: 前提条件・備考
-    section_band(ws, 12, "■ 3. 前提条件・備考")
-    label_row(ws, 13, "前提条件", height=36)
-    label_row(ws, 14, "備考",     height=30)
+    r = 3
+    for label, h in [
+        ("機能名",           22),
+        ("機能概要",         48),
+        ("目的",             48),
+        ("利用者/利用部門",  22),
+        ("起点画面",         22),
+        ("操作トリガー",     22),
+    ]:
+        label_row(ws, r, label, label_cs=2, label_ce=6, val_cs=7, val_ce=31, height=h)
+        r += 1
 
 
-# ─────────────────────────────────────────────────────────────
-# Sheet 3: コンポーネント仕様
-# ─────────────────────────────────────────────────────────────
-# | コンポーネント名 | 種別 | 担当処理 | 入力 | 出力 | エラー処理 |
-CM_COLS = [
-    (2,  8,  "コンポーネント名"),
-    (9,  11, "種別"),
-    (12, 20, "担当処理"),
-    (21, 24, "入力"),
-    (25, 28, "出力"),
-    (29, 31, "エラー処理"),
-]
-
-def build_component_spec(wb):
-    ws = wb.create_sheet("コンポーネント仕様")
-    setup_grid(ws)
-
-    title_band(ws, 1, "詳細設計書 — コンポーネント仕様")
-    set_h(ws, 2, 6)
-
-    section_band(ws, 3, "■ コンポーネント仕様")
-    table_header(ws, 4, CM_COLS)
-    data_rows(ws, 5, 19, [(cs, ce) for cs, ce, _ in CM_COLS], row_h=36)
-
-
-# ─────────────────────────────────────────────────────────────
-# Sheet 4: インターフェース定義
-# ─────────────────────────────────────────────────────────────
-# | コンポーネント | メソッド/API名 | 処理内容 | 入力パラメータ | 返却値 | 例外 |
-IF_COLS = [
-    (2,  6,  "コンポーネント"),
-    (7,  12, "メソッド/API名"),
-    (13, 19, "処理内容"),
-    (20, 25, "入力パラメータ"),
-    (26, 29, "返却値"),
-    (30, 31, "例外"),
-]
-
-def build_interface_def(wb):
-    ws = wb.create_sheet("インターフェース定義")
-    setup_grid(ws)
-
-    title_band(ws, 1, "詳細設計書 — インターフェース定義")
-    set_h(ws, 2, 6)
-
-    section_band(ws, 3, "■ インターフェース定義")
-    table_header(ws, 4, IF_COLS)
-    data_rows(ws, 5, 24, [(cs, ce) for cs, ce, _ in IF_COLS], row_h=36)
-
-
-# ─────────────────────────────────────────────────────────────
-# Sheet 5: 画面仕様
-# ─────────────────────────────────────────────────────────────
-# | No | 項目名 | API名/プロパティ | UI種別 | 型 | 必須 | 初期値 | バリデーション |
-SC_COLS = [
+# =====================================================================
+# Sheet 3: 業務フロー
+# =====================================================================
+BF_COLS = [
     (2,  3,  "No"),
-    (4,  8,  "項目名"),
-    (9,  14, "API名/プロパティ"),
-    (15, 17, "UI種別"),
-    (18, 19, "型"),
-    (20, 21, "必須"),
-    (22, 24, "初期値"),
-    (25, 31, "バリデーション"),
+    (4,  8,  "アクター"),
+    (9,  22, "処理内容"),
+    (23, 31, "分岐条件"),
 ]
 
-def build_screen_spec(wb):
-    ws = wb.create_sheet("画面仕様")
+def build_business_flow(wb):
+    ws = wb.create_sheet("業務フロー")
     setup_grid(ws)
 
-    title_band(ws, 1, "詳細設計書 — 画面仕様")
+    title_band(ws, 1, "詳細設計書 — 業務フロー")
     set_h(ws, 2, 6)
 
-    # 画面名セクション（generate 側で画面ごとに追記）
-    section_band(ws, 3, "■ {画面名}")
-    table_header(ws, 4, SC_COLS)
-    data_rows(ws, 5, 19, [(cs, ce) for cs, ce, _ in SC_COLS])
+    table_header(ws, 3, BF_COLS)
+    data_rows(ws, 4, 23, [(cs, ce) for cs, ce, _ in BF_COLS])
 
 
-# ─────────────────────────────────────────────────────────────
+# =====================================================================
+# Sheet 4: 対象オブジェクト
+# =====================================================================
+OBJ_COLS = [
+    (2,  7,  "オブジェクト名"),
+    (8,  14, "項目API名"),
+    (15, 20, "項目ラベル"),
+    (21, 23, "読み書き区分"),
+    (24, 31, "備考"),
+]
+
+def build_target_objects(wb):
+    ws = wb.create_sheet("対象オブジェクト")
+    setup_grid(ws)
+
+    title_band(ws, 1, "詳細設計書 — 対象オブジェクト")
+    set_h(ws, 2, 6)
+
+    table_header(ws, 3, OBJ_COLS)
+    data_rows(ws, 4, 33, [(cs, ce) for cs, ce, _ in OBJ_COLS])
+
+
+# =====================================================================
+# Sheet 5: 処理概要
+# =====================================================================
+PROC_COLS = [
+    (2,  3,  "ステップNo"),
+    (4,  13, "処理内容"),
+    (14, 19, "条件分岐"),
+    (20, 25, "SOQL概要"),
+    (26, 31, "DML操作"),
+]
+
+def build_process_overview(wb):
+    ws = wb.create_sheet("処理概要")
+    setup_grid(ws)
+
+    title_band(ws, 1, "詳細設計書 — 処理概要")
+    set_h(ws, 2, 6)
+
+    table_header(ws, 3, PROC_COLS)
+    data_rows(ws, 4, 23, [(cs, ce) for cs, ce, _ in PROC_COLS])
+
+
+# =====================================================================
+# Sheet 6: 関連コンポーネント
+# =====================================================================
+COMP_COLS = [
+    (2,  9,  "コンポーネント名"),
+    (10, 13, "種別"),
+    (14, 24, "役割"),
+    (25, 31, "依存方向"),
+]
+
+def build_related_components(wb):
+    ws = wb.create_sheet("関連コンポーネント")
+    setup_grid(ws)
+
+    title_band(ws, 1, "詳細設計書 — 関連コンポーネント")
+    set_h(ws, 2, 6)
+
+    table_header(ws, 3, COMP_COLS)
+    data_rows(ws, 4, 18, [(cs, ce) for cs, ce, _ in COMP_COLS])
+
+
+# =====================================================================
+# Sheet 7: 影響範囲
+# =====================================================================
+IMPACT_SECTIONS = [
+    {
+        "title": "更新オブジェクト",
+        "cols": [(2, 9, "オブジェクト名"), (10, 20, "更新項目"), (21, 31, "更新条件")],
+        "rows": 8,
+    },
+    {
+        "title": "参照オブジェクト",
+        "cols": [(2, 9, "オブジェクト名"), (10, 20, "参照項目"), (21, 31, "参照目的")],
+        "rows": 8,
+    },
+    {
+        "title": "関連Apex/Flow/LWC",
+        "cols": [(2, 9, "名称"), (10, 13, "種別"), (14, 31, "関連内容")],
+        "rows": 8,
+    },
+    {
+        "title": "外部連携影響",
+        "cols": [(2, 9, "連携先"), (10, 31, "影響内容")],
+        "rows": 5,
+    },
+    {
+        "title": "他機能依存",
+        "cols": [(2, 9, "機能名"), (10, 31, "依存内容")],
+        "rows": 5,
+    },
+]
+
+def build_impact_scope(wb):
+    ws = wb.create_sheet("影響範囲")
+    setup_grid(ws)
+
+    title_band(ws, 1, "詳細設計書 — 影響範囲")
+    set_h(ws, 2, 6)
+
+    r = 3
+    for sec in IMPACT_SECTIONS:
+        section_band(ws, r, f"■ {sec['title']}")
+        r += 1
+        table_header(ws, r, sec["cols"])
+        r += 1
+        end_r = r + sec["rows"] - 1
+        data_rows(ws, r, end_r, [(cs, ce) for cs, ce, _ in sec["cols"]])
+        r = end_r + 1
+        # スペーサー行
+        set_h(ws, r, 6)
+        r += 1
+
+
+# =====================================================================
 # エントリポイント
-# ─────────────────────────────────────────────────────────────
+# =====================================================================
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, help="出力先 xlsx パス")
@@ -277,10 +314,12 @@ def main():
 
     wb = Workbook()
     build_revision(wb)
-    build_group_detail(wb)
-    build_component_spec(wb)
-    build_interface_def(wb)
-    build_screen_spec(wb)
+    build_overview(wb)
+    build_business_flow(wb)
+    build_target_objects(wb)
+    build_process_overview(wb)
+    build_related_components(wb)
+    build_impact_scope(wb)
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
