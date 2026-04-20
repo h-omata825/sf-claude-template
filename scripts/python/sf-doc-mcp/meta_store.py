@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Excel _meta シートへのメタデータ読み書き"""
 
+import hashlib
 import json
+from pathlib import Path as _Path
 
 from openpyxl import load_workbook
 
@@ -56,3 +58,27 @@ def write_meta(wb, data: dict):
 def strip_meta(obj: dict) -> dict:
     """保存不要な大きなキーを除去した軽量メタデータを返す"""
     return {k: v for k, v in obj.items() if k not in _EXCLUDE_KEYS}
+
+
+def compute_source_hash(paths: list) -> str:
+    """複数ファイル／ディレクトリの SHA256 ハッシュを計算する。
+    ディレクトリが渡された場合は配下の全ファイルを再帰展開する。
+    パスでソートして順序を安定させる。
+    """
+    h = hashlib.sha256()
+    all_files: list[str] = []
+    for raw in paths:
+        p = _Path(str(raw))
+        if p.is_dir():
+            all_files.extend(str(f) for f in p.rglob("*") if f.is_file())
+        elif p.exists():
+            all_files.append(str(p))
+    for f in sorted(all_files):
+        h.update(_Path(f).read_bytes())
+    return h.hexdigest()
+
+
+def get_stored_hash(source_file: str) -> str | None:
+    """既存 Excel の _meta から source_hash を取得する。なければ None。"""
+    meta = read_meta(source_file)
+    return meta.get("source_hash") if meta else None

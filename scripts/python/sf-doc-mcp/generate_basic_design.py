@@ -331,6 +331,8 @@ def main():
                         help="更新時: 既存の基本設計書xlsxパス")
     parser.add_argument("--version-increment", default="minor",
                         choices=["minor", "major"])
+    parser.add_argument("--source-hash", default="",
+                        help="ソースファイルの SHA256 ハッシュ（source_hash_checker.py の出力値）")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -411,13 +413,16 @@ def main():
         changed_comp_keys=set() if is_major else changed_comps,
         changed_obj_keys=set() if is_major else changed_objs)
 
-    write_meta(wb, {
+    meta_payload = {
         "version": current_version,
         "date":    today,
         "author":  author,
         "data":    data,
         "history": history,
-    })
+    }
+    if args.source_hash:
+        meta_payload["source_hash"] = args.source_hash
+    write_meta(wb, meta_payload)
 
     wb.save(str(out_path))
     sys.stdout.buffer.write(

@@ -420,6 +420,8 @@ def main():
     parser.add_argument("--tmp-dir", default="", help="一時ファイル置き場（省略時は --output-dir/.tmp）")
     parser.add_argument("--version-increment", default="minor",
                         choices=["minor", "major"])
+    parser.add_argument("--source-hash", default="",
+                        help="ソースファイルの SHA256 ハッシュ（source_hash_checker.py の出力値）")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -505,13 +507,16 @@ def main():
     fill_screen_spec(
         wb["画面仕様"], data, project_dir=project_dir, tmp_dir=tmp_dir_path)
 
-    write_meta(wb, {
+    meta_payload = {
         "version": current_version,
         "date":    today,
         "author":  author,
         "data":    data,
         "history": history,
-    })
+    }
+    if args.source_hash:
+        meta_payload["source_hash"] = args.source_hash
+    write_meta(wb, meta_payload)
 
     wb.save(str(out_path))
     sys.stdout.buffer.write(

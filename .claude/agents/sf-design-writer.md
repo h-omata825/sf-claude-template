@@ -200,6 +200,43 @@ feature_list に `"absorb_into"` フィールドがある機能は**単独の設
 
 ---
 
+## Phase 0.7: ハッシュチェック（全コンポーネント一括）
+
+> **目的**: 変更のないコンポーネントをスキップして LLM 呼び出しと Excel 生成を節約する。
+
+対象コンポーネント全件に対して以下を実行し、スキップリストを作成する。
+
+```bash
+# 既存 Excel の自動検出（feature_id = feat_id フィールド）
+python -c "
+import pathlib, sys
+feat_id = '{feat_id}'
+out = pathlib.Path(r'{output_dir}')
+for sub in out.iterdir():
+    if sub.is_dir():
+        for f in sub.glob(f'【{feat_id}】*.xlsx'):
+            print(f)
+            sys.exit()
+print('')
+"
+```
+
+```bash
+# ハッシュチェック（source_file は feature_list の source_file フィールド）
+python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
+  --source-paths "{source_file}" \
+  --existing-excel "{detected_excel_or_empty}"
+```
+
+| stdout の status | 終了コード | 対応 |
+|---|---|---|
+| `status:MATCH` | 0 | このコンポーネントをスキップリストに追加（Phase 0.5 / Phase 1 / Phase 2 全てスキップ） |
+| `status:CHANGED` / `NEW` / `NO_HASH` | 1 | 通常どおり処理する。`hash:XXXX` の値を `{source_hash}` として記録する |
+
+全コンポーネントのチェック完了後、スキップしない対象だけを以降の Phase で処理する。
+
+---
+
 ## Phase 1: コンポーネントのソース読み込みと JSON 生成
 
 **Phase 1 開始時に必ず参照リファレンスを読む:**
@@ -305,8 +342,11 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
   --template "{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書テンプレート.xlsx" \
   --output-dir "{output_dir}" \
-  --version-increment {version_increment}
+  --version-increment {version_increment} \
+  --source-hash "{source_hash}"
 ```
+
+> `{source_hash}` は Phase 0.7 で source_hash_checker.py が出力した `hash:XXXX` の値。新規作成・ハッシュなしの場合は空文字で渡す（`--source-hash ""`）。
 
 出力先フォルダとファイル名:
 | 種別 | 出力先サブフォルダ | ファイル名 |

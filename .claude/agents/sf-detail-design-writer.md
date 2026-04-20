@@ -139,6 +139,74 @@ if prog_dir.exists():
 
 ---
 
+## Phase 0.7: ハッシュチェック（グループごと）
+
+> **目的**: ソースに変更がないグループをスキップして LLM 呼び出しと Excel 生成を節約する。
+
+各グループの処理前に以下を実行する。
+
+```bash
+# グループのソースファイル一覧を取得
+python -c "
+import yaml, pathlib, sys
+proj = pathlib.Path(r'{project_dir}')
+with open(proj / 'docs' / '.sf' / 'feature_groups.yml', encoding='utf-8') as f:
+    groups = yaml.safe_load(f)
+with open(proj / 'docs' / '.sf' / 'feature_ids.yml', encoding='utf-8') as f:
+    ids_data = yaml.safe_load(f) or {}
+fid_to_api = {}
+fid_to_type = {}
+for feat in ids_data.get('features', []):
+    if not feat.get('deprecated'):
+        fid_to_api[feat['id']] = feat.get('api_name', '')
+        fid_to_type[feat['id']] = feat.get('type', '')
+type_dir = {
+    'Apex': ('classes', '.cls'), 'Batch': ('classes', '.cls'),
+    'Integration': ('classes', '.cls'), 'Flow': ('flows', '.flow-meta.xml'),
+    'LWC': ('lwc', ''), 'Aura': ('aura', ''), 'Trigger': ('triggers', '.trigger'),
+}
+force_app = proj / 'force-app' / 'main' / 'default'
+group = next((g for g in groups if g['group_id'] == '{group_id}'), None)
+if not group:
+    sys.exit(0)
+paths = []
+for fid in group.get('feature_ids', []):
+    api = fid_to_api.get(fid, '')
+    ftype = fid_to_type.get(fid, '')
+    info = type_dir.get(ftype)
+    if not api or not info:
+        continue
+    d, ext = info
+    p = force_app / d / (api + ext if ext else api)
+    if p.exists():
+        paths.append(str(p))
+print(','.join(paths))
+"
+```
+
+```bash
+# 既存 Excel の自動検出
+python -c "
+import pathlib
+p = pathlib.Path(r'{output_dir}') / 'detail'
+matches = list(p.glob('【{group_id}】*.xlsx'))
+print(matches[0] if matches else '')
+"
+```
+
+```bash
+python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
+  --source-paths "{source_paths}" \
+  --existing-excel "{detected_excel_or_empty}"
+```
+
+| stdout の status | 終了コード | 対応 |
+|---|---|---|
+| `status:MATCH` | 0 | このグループをスキップ（Phase 1〜Phase 4 全てスキップ） |
+| `status:CHANGED` / `NEW` / `NO_HASH` | 1 | 通常どおり処理する。`hash:XXXX` の値を `{source_hash}` として記録する |
+
+---
+
 ## Phase 1: ソース読み込み（グループごとに繰り返す）
 
 ### 1-1. グループのコンポーネント取得
@@ -259,8 +327,11 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_detail_design.py \
   --template "{project_dir}/scripts/python/sf-doc-mcp/詳細設計書テンプレート.xlsx" \
   --output-dir "{output_dir}" \
   --project-dir "{project_dir}" \
-  --tmp-dir "{tmp_dir}"
+  --tmp-dir "{tmp_dir}" \
+  --source-hash "{source_hash}"
 ```
+
+> `{source_hash}` は Phase 0.7 で source_hash_checker.py が出力した `hash:XXXX` の値。新規作成・ハッシュなしの場合は空文字で渡す（`--source-hash ""`）。
 
 `--project-dir` を渡すと、`screens[]` の各コンポーネントについて LWC/VF/Aura ソースを自動検索してワイヤーフレーム画像を生成し、画面仕様シートに埋め込む（ソースが見つからない場合はスキップ）。
 
