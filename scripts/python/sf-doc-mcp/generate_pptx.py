@@ -1559,6 +1559,80 @@ def build_er_legend(prs, slide_data: dict, page_num: int, total: int):
     _add_footer(slide, page_num, total, slide_data.get("title", "ER図 凡例"))
 
 
+def build_er_image(prs, slide_data: dict, page_num: int, total: int):
+    """ER図を matplotlib で PNG レンダリングしてスライドに埋め込む。
+    build_er の画像版。JSON 形式は build_er と同じ。"""
+    import tempfile
+    try:
+        from er_utils import generate_er_image
+    except ImportError:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent))
+        from er_utils import generate_er_image
+
+    slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+
+    elements = slide_data.get("elements", {})
+    boxes    = elements.get("boxes", [])
+    arrows   = elements.get("arrows", [])
+    title    = slide_data.get("title", "")
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        tmp_png = f.name
+
+    try:
+        ok = generate_er_image(boxes, arrows, tmp_png, title=title)
+        if ok:
+            slide.shapes.add_picture(
+                tmp_png, Emu(0), Emu(0), width=SLIDE_W, height=SLIDE_H,
+            )
+        else:
+            tb = _add_text_box(slide, MARGIN_LEFT, MARGIN_TOP, CONTENT_W, Inches(1.0))
+            p = tb.text_frame.paragraphs[0]
+            _set_paragraph(p, "ER図の生成に失敗しました（matplotlib 未インストール）",
+                           font_size=11, color=C["accent"])
+    finally:
+        try:
+            os.unlink(tmp_png)
+        except Exception:
+            pass
+
+    _add_footer(slide, page_num, total, title)
+
+
+def build_er_legend_image(prs, slide_data: dict, page_num: int, total: int):
+    """ER図凡例を matplotlib で PNG レンダリングしてスライドに埋め込む。"""
+    import tempfile
+    try:
+        from er_utils import generate_er_legend_image
+    except ImportError:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent))
+        from er_utils import generate_er_legend_image
+
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        tmp_png = f.name
+
+    try:
+        ok = generate_er_legend_image(tmp_png)
+        if ok:
+            slide.shapes.add_picture(
+                tmp_png, Emu(0), Emu(0), width=SLIDE_W, height=SLIDE_H,
+            )
+        else:
+            build_er_legend(prs, slide_data, page_num, total)
+            return
+    finally:
+        try:
+            os.unlink(tmp_png)
+        except Exception:
+            pass
+
+    _add_footer(slide, page_num, total, slide_data.get("title", "ER図 凡例"))
+
+
 # ── ビルダーマップ ──
 BUILDERS = {
     "section":    build_section,
@@ -1567,8 +1641,8 @@ BUILDERS = {
     "table":      build_table,
     "two_column": build_two_column,
     "diagram":    build_diagram,
-    "er":         build_er,
-    "er_legend":  build_er_legend,
+    "er":         build_er_image,        # matplotlib PNG 版（旧 pptx 図形版から置き換え）
+    "er_legend":  build_er_legend_image, # matplotlib PNG 版
     "swimlane":   build_swimlane,
     "mermaid":    build_mermaid_diagram,
 }
