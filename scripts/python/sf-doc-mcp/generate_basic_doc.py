@@ -235,8 +235,13 @@ def parse_data_model(path: Path) -> list[dict]:
     for line in t.splitlines():
         if not line.strip().startswith("|"): continue
         cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 3 and cols[0] and cols[0] not in ("親オブジェクト", "---"):
-            rels.append({"parent": cols[0], "rel": cols[1] if len(cols)>1 else "",
+        _SKIP = {"親オブジェクト", "---", "オブジェクト", "オブジェクト名", "API名",
+                 "ラベル", "役割", "種別", "タイプ"}
+        if len(cols) >= 3 and cols[0] and cols[0] not in _SKIP:
+            rel_val = cols[1] if len(cols) > 1 else ""
+            if rel_val in _SKIP:
+                continue
+            rels.append({"parent": cols[0], "rel": rel_val,
                          "child": cols[2] if len(cols)>2 else "",
                          "field": cols[3] if len(cols)>3 else ""})
     return rels[:20]
@@ -268,13 +273,17 @@ def _build_cover(ws, org: dict, req: dict, author: str):
     r = _title_row(ws, r, "プロジェクト概要書")
     r = _margin(ws, r)
     r = _section_row(ws, r, "プロジェクト基本情報")
-    for label, key in [
-        ("プロジェクト名", "project_name"), ("システム名", "system_name"),
-        ("導入目的・背景", ""),           ("スコープ（対象）", ""),
-        ("スコープ（対象外）", ""),        ("開始日", "start_date"),
-        ("終了予定日", "end_date"),       ("本番公開日", "go_live_date"),
+    for label, src, key in [
+        ("プロジェクト名",     org, "project_name"),
+        ("システム名",        org, "system_name"),
+        ("導入目的・背景",     req, "background"),
+        ("スコープ（対象）",   req, "scope_in"),
+        ("スコープ（対象外）", req, "scope_out"),
+        ("開始日",          org, "start_date"),
+        ("終了予定日",       org, "end_date"),
+        ("本番公開日",       org, "go_live_date"),
     ]:
-        r = _meta_row(ws, r, label, org.get(key, "") if key else "")
+        r = _meta_row(ws, r, label, src.get(key, ""))
 
     r = _margin(ws, r)
     r = _section_row(ws, r, "体制")
@@ -308,17 +317,7 @@ def _build_system_overview(ws, req: dict, system: dict, sys_img_path: str | None
     r = _text_area(ws, r, n_bg_rows, bg_text)
     r = _margin(ws, r)
 
-    # システム全体構成図
-    r = _section_row(ws, r, "システム全体構成")
-    if sys_img_path:
-        n_img_rows = dg.embed_image_in_sheet(ws, sys_img_path, anchor_row=r,
-                                             anchor_col=GRID_LEFT, max_width_px=1100)
-        r += n_img_rows
-    else:
-        r = _text_area(ws, r, 15, "（system.json が見つかりません）")
-    r = _margin(ws, r)
-
-    # 外部連携先一覧
+    # 外部連携先一覧（表を先に、図は後）
     r = _section_row(ws, r, "外部連携先一覧")
     r = _hdr_row(ws, r, [(2,8,"連携先システム"),(9,12,"方向"),(13,18,"方式"),
                           (19,22,"頻度"),(23,31,"目的・概要")])
@@ -331,6 +330,16 @@ def _build_system_overview(ws, req: dict, system: dict, sys_img_path: str | None
     if len(system.get("external_systems", [])) < 5:
         r = _empty_rows(ws, r, 5 - len(system.get("external_systems", [])),
                         [(2,8),(9,12),(13,18),(19,22),(23,31)])
+    r = _margin(ws, r)
+
+    # システム全体構成図
+    r = _section_row(ws, r, "システム全体構成")
+    if sys_img_path:
+        n_img_rows = dg.embed_image_in_sheet(ws, sys_img_path, anchor_row=r,
+                                             anchor_col=GRID_LEFT, max_width_px=1100)
+        r += n_img_rows
+    else:
+        r = _text_area(ws, r, 15, "（system.json が見つかりません）")
 
 
 # ── シート 3: 業務フロー図 ────────────────────────────────────────
@@ -347,19 +356,12 @@ def _build_flow_sheet(ws, asis_flow: dict | None, tobe_flow: dict | None,
         ("To-Be 業務フロー（Salesforce導入後）", tobe_flow, tobe_img),
     ]:
         r = _section_row(ws, r, label)
-        if img_path:
-            n_img_rows = dg.embed_image_in_sheet(ws, img_path, anchor_row=r,
-                                                 anchor_col=GRID_LEFT, max_width_px=1100)
-            r += n_img_rows
-        else:
-            r = _text_area(ws, r, 12, "（フローデータなし）")
-        r = _margin(ws, r)
 
-        # 手順テーブル（steps から生成）
+        # 手順テーブルを先に（表が図に埋もれないよう）
         sub = label.split("（")[0]
-        r = _sub_section_row(ws, r, f"{sub} 手順（補足）")
+        r = _sub_section_row(ws, r, f"{sub} 手順")
         r = _hdr_row(ws, r, [(2,3,"No"),(4,8,"担当"),(9,22,"操作・処理内容"),(23,31,"備考")])
-        steps = (flow or {}).get("steps", [])[:10]
+        steps = (flow or {}).get("steps", [])[:20]
         for i, s in enumerate(steps):
             r = _data_row(ws, r, [
                 (2,3,str(s.get("id",""))),
@@ -369,6 +371,16 @@ def _build_flow_sheet(ws, asis_flow: dict | None, tobe_flow: dict | None,
             ], row_h=18)
         if len(steps) < 5:
             r = _empty_rows(ws, r, 5 - len(steps), [(2,3),(4,8),(9,22),(23,31)], row_h=18)
+        r = _margin(ws, r)
+
+        # フロー図（表の後）
+        r = _sub_section_row(ws, r, f"{sub} フロー図")
+        if img_path:
+            n_img_rows = dg.embed_image_in_sheet(ws, img_path, anchor_row=r,
+                                                 anchor_col=GRID_LEFT, max_width_px=1100)
+            r += n_img_rows
+        else:
+            r = _text_area(ws, r, 12, "（フローデータなし）")
         r = _margin(ws, r, 12)
 
 
@@ -380,15 +392,7 @@ def _build_er_sheet(ws, objects: list, relations: list, er_img: str | None):
     r = _title_row(ws, r, "ER図（オブジェクト関連図）")
     r = _margin(ws, r)
 
-    r = _section_row(ws, r, "オブジェクト関連図")
-    if er_img:
-        n_img_rows = dg.embed_image_in_sheet(ws, er_img, anchor_row=r,
-                                             anchor_col=GRID_LEFT, max_width_px=1100)
-        r += n_img_rows
-    else:
-        r = _text_area(ws, r, 18, "（カタログデータなし）")
-    r = _margin(ws, r)
-
+    # 関連定義表を先に（表が図に埋もれないよう）
     r = _section_row(ws, r, "関連定義表")
     r = _hdr_row(ws, r, [(2,8,"親オブジェクト"),(9,10,"関係"),
                           (11,17,"子オブジェクト"),(18,23,"参照関係項目"),(24,31,"備考")])
@@ -400,6 +404,16 @@ def _build_er_sheet(ws, objects: list, relations: list, er_img: str | None):
     if len(relations) < 5:
         r = _empty_rows(ws, r, 5 - len(relations),
                         [(2,8),(9,10),(11,17),(18,23),(24,31)])
+    r = _margin(ws, r)
+
+    # ER図（表の後、max_width 拡大で可読性向上）
+    r = _section_row(ws, r, "オブジェクト関連図")
+    if er_img:
+        n_img_rows = dg.embed_image_in_sheet(ws, er_img, anchor_row=r,
+                                             anchor_col=GRID_LEFT, max_width_px=1800)
+        r += n_img_rows
+    else:
+        r = _text_area(ws, r, 18, "（カタログデータなし）")
 
 
 # ── シート 5: 用語集 ────────────────────────────────────────────

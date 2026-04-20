@@ -338,7 +338,7 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
             for step in steps_in:
                 if str(step.get("lane", "")) == lane_name:
                     sid = str(step.get("id", ""))
-                    label = str(step.get("label", sid))
+                    label = str(step.get("label", "") or step.get("title", "") or step.get("name", "") or sid)
                     sg.node(
                         sid,
                         label=label,
@@ -359,7 +359,7 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
     for step in steps_in:
         if str(step.get("lane", "")) not in known_lanes:
             sid = str(step.get("id", ""))
-            g.node(sid, label=str(step.get("label", sid)),
+            g.node(sid, label=str(step.get("label", "") or step.get("title", "") or step.get("name", "") or sid),
                    shape="box", style="filled,rounded",
                    fillcolor=C_STEP_BG, fontcolor=C_STEP_FG,
                    fontname=FONT_JP, fontsize="10")
