@@ -256,6 +256,26 @@ def fill_overview(ws, data, changed_fields: set = None):
         if key in changed_fields:
             dr.apply_red(cell, size=10)
 
+    # ── 追加セクション（テンプレートの固定行以降に動的追記） ────
+    extra_row = 18  # trigger (row 16) + header(15)+data(16) = 17 → 18 から余白
+    for section_no, label, key in [
+        ("5", "5. 業務コンテキスト（このコンポーネントが担う業務上の役割）", "business_context"),
+        ("6", "6. 所属グループ", "group_name"),
+    ]:
+        val = data.get(key, "")
+        if not val:
+            continue
+        ws.row_dimensions[extra_row].height = 18
+        MW(ws, extra_row, 2, 31, label,
+           bold=True, bg=C_LABEL_BG, border=B_all())
+        extra_row += 1
+        ws.row_dimensions[extra_row].height = max(22, len(val) // 60 * 14 + 22)
+        cell = ws.cell(row=extra_row, column=2, value=val)
+        cell.alignment = _aln(wrap=True)
+        if key in changed_fields:
+            dr.apply_red(cell, size=10)
+        extra_row += 1
+
 
 def _display_len(s: str) -> int:
     """文字列の表示幅を返す。全角文字（CJK等）は2、半角は1としてカウントする。"""

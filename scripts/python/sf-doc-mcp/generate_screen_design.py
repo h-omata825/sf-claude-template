@@ -238,6 +238,49 @@ def fill_overview(ws, data, changed_fields: set = None):
         if "features" in changed_fields:
             dr.apply_red(cell, size=10)
 
+    # ── 追加セクション（transition(row 18-19) 以降に動的追記） ──
+    extra_row = 21  # transition row 18-20 の後
+
+    # 業務コンテキスト
+    bctx = data.get("business_context", "")
+    if bctx:
+        ws.row_dimensions[extra_row].height = 18
+        MW(ws, extra_row, 2, 31, "6. 業務コンテキスト（この画面が担う業務上の役割）",
+           bold=True, bg=C_LABEL_BG, border=B_all())
+        extra_row += 1
+        ws.row_dimensions[extra_row].height = max(22, len(bctx) // 60 * 14 + 22)
+        cell = ws.cell(row=extra_row, column=2, value=bctx)
+        cell.alignment = _aln(wrap=True)
+        if "business_context" in changed_fields:
+            dr.apply_red(cell, size=10)
+        extra_row += 1
+
+    # 呼び出しApex一覧
+    apex_calls = data.get("apex_calls", [])
+    if apex_calls:
+        ws.row_dimensions[extra_row].height = 18
+        MW(ws, extra_row, 2, 31, "7. 呼び出しApex一覧",
+           bold=True, bg=C_LABEL_BG, border=B_all())
+        extra_row += 1
+        # ヘッダ行
+        ws.row_dimensions[extra_row].height = 18
+        for (cs, ce), label in [
+            ((2, 9), "Apex名"),
+            ((10, 18), "呼び出し方式"),
+            ((19, 25), "処理契機"),
+            ((26, 31), "備考"),
+        ]:
+            MW(ws, extra_row, cs, ce, label,
+               bold=True, bg=C_HDR_BLUE, fg=C_FONT_W, border=B_all(), h="center")
+        extra_row += 1
+        for apex in apex_calls:
+            ws.row_dimensions[extra_row].height = 22
+            MW(ws, extra_row, 2,  9,  apex.get("name", ""),      border=B_all())
+            MW(ws, extra_row, 10, 18, apex.get("operation", ""), border=B_all())
+            MW(ws, extra_row, 19, 25, apex.get("trigger", ""),   border=B_all())
+            MW(ws, extra_row, 26, 31, apex.get("note", ""),      border=B_all())
+            extra_row += 1
+
 
 def fill_items(ws, data, changed_item_nos: set = None):
     changed_item_nos = changed_item_nos or set()
@@ -574,6 +617,66 @@ def _build_changed_params_map(diffs: dict) -> dict[str, set]:
     return out
 
 
+def _fill_events(wb, data: dict) -> None:
+    """イベント定義シートをワークブックに追加する。events[] が空の場合はスキップ。"""
+    events = data.get("events", [])
+    if not events:
+        return
+
+    sheet_name = "イベント定義"
+    if sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+    else:
+        ws = wb.create_sheet(sheet_name)
+
+    # 列幅設定
+    ws.column_dimensions["A"].width = 2
+    ws.column_dimensions["B"].width = 14  # イベント名
+    ws.column_dimensions["C"].width = 18  # 対象要素
+    ws.column_dimensions["D"].width = 22  # ハンドラ/メソッド
+    ws.column_dimensions["E"].width = 36  # 処理内容
+    ws.column_dimensions["F"].width = 18  # 備考
+
+    # タイトル行
+    ws.row_dimensions[1].height = 26
+    MW(ws, 1, 2, 6, "イベント定義",
+       bold=True, fg=C_FONT_W, bg=C_BAND_BLUE, size=12, h="center")
+
+    # ヘッダ行
+    ws.row_dimensions[2].height = 20
+    for col, label in [
+        (2, "イベント名"),
+        (3, "対象要素"),
+        (4, "ハンドラ / メソッド"),
+        (5, "処理内容"),
+        (6, "備考"),
+    ]:
+        c = ws.cell(row=2, column=col, value=label)
+        c.font = _fnt(bold=True, color=C_FONT_W)
+        c.alignment = _aln(h="center")
+        c.fill = _fill(C_HDR_BLUE)
+        c.border = B_all()
+
+    # データ行
+    for i, ev in enumerate(events):
+        r = i + 3
+        desc = ev.get("description", "")
+        ws.row_dimensions[r].height = max(22, len(desc) // 36 * 14 + 22)
+        for col, val in [
+            (2, ev.get("event", "")),
+            (3, ev.get("element", "")),
+            (4, ev.get("handler", "")),
+            (5, desc),
+            (6, ev.get("note", "")),
+        ]:
+            c = ws.cell(row=r, column=col, value=val)
+            c.font = _fnt()
+            c.alignment = _aln(wrap=True)
+            c.border = B_all()
+            if i % 2 == 1:
+                c.fill = _fill("F2F2F2")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input",      required=True)
@@ -660,6 +763,7 @@ def main():
         fill_params  (wb["パラメーター定義"], data,
                       changed_params_map=({} if is_major else changed_params),
                       changed_section_titles=(set() if is_major else changed_sections))
+        _fill_events(wb, data)
 
         # _meta 保存（次回差分判定用）
         write_meta(wb, {
