@@ -1,75 +1,26 @@
+# scripts/python/sf-doc-mcp/generate_detail_design.py
 # -*- coding: utf-8 -*-
 """
-詳細設計書.xlsx を1機能グループ分生成する（テンプレート読込方式）。
+詳細設計書.xlsx を1機能分生成する（テンプレート読込方式・新JSONスキーマ対応）。
 
   詳細設計書テンプレート.xlsx（build_detail_design_template.py で生成した「器」）を
-  コピーしてセル値を流し込む。
+  コピーしてセル値 + 図形PNGを流し込む。
 
-5シート構成:
-  1. 改版履歴                   : メタ + 履歴テーブル
-  2. グループ詳細               : 処理目的 / データ連携概要 / 前提条件
-  3. コンポーネント仕様         : 担当処理 / 入力 / 出力 / エラー処理
-  4. インターフェース定義       : メソッド/API名 / パラメータ / 返却値 / 例外
-  5. 画面仕様                   : 画面項目 / UI種別 / 型 / 必須 / バリデーション
+7シート構成:
+  1. 改版履歴           : メタ + 履歴テーブル
+  2. 概要               : 機能名 / 機能概要 / 目的 / 利用者 / 起点画面 / 操作トリガー
+  3. 業務フロー         : スイムレーン図PNG + フロー表(No/アクター/処理内容/分岐条件)
+  4. 対象オブジェクト   : ER図PNG + 項目表(オブジェクト名/項目API名/項目ラベル/読み書き区分/備考)
+  5. 処理概要           : フローチャートPNG + 処理表(ステップNo/処理内容/条件分岐/SOQL概要/DML操作)
+  6. 関連コンポーネント : コンポーネント図PNG + 一覧表(コンポーネント名/種別/役割/依存方向)
+  7. 影響範囲           : 5セクション(更新/参照オブジェクト、関連Apex等、外部連携、他機能依存)
 
 Usage:
   python generate_detail_design.py \\
     --input  detail_design.json \\
     --template "C:/.../詳細設計書テンプレート.xlsx" \\
-    --output-dir "C:/.../出力ルート"
-
-出力先: {output-dir}/detail/【GRP-001】機能グループ名.xlsx
-
-JSON スキーマ:
-{
-  "group_id": "GRP-001",
-  "name_ja": "見積依頼",
-  "name_en": "QuotationRequest",
-  "project_name": "...",
-  "author": "...",
-  "date": "YYYY-MM-DD",
-  "processing_purpose": "エンジニア向けの処理目的説明",
-  "data_flow_overview": "コンポーネント間のデータ連携の概要",
-  "prerequisites": "前提条件",
-  "notes": "備考",
-  "components": [
-    {
-      "api_name": "QuotationRequestController",
-      "type": "Apex",
-      "responsibility": "担当処理（1〜2文）",
-      "inputs": "入力データの概要",
-      "outputs": "返却データの概要",
-      "error_handling": "エラー処理の方針"
-    }
-  ],
-  "interfaces": [
-    {
-      "component": "QuotationRequestController",
-      "method": "saveQuotation",
-      "description": "処理内容",
-      "input_params": "String quotationName, Id accountId",
-      "return_value": "Id（作成されたレコードID）",
-      "exceptions": "AuraHandledException"
-    }
-  ],
-  "screens": [
-    {
-      "component": "QuotationRequestPage",
-      "screen_name": "見積依頼入力画面",
-      "items": [
-        {
-          "label": "見積件名",
-          "api_name": "Name",
-          "ui_type": "テキスト",
-          "data_type": "String",
-          "required": true,
-          "default_value": "",
-          "validation": "必須入力"
-        }
-      ]
-    }
-  ]
-}
+    --output-dir "C:/.../出力先" \\
+    [--version-increment minor]
 """
 from __future__ import annotations
 
@@ -77,13 +28,13 @@ import argparse
 import json
 import re
 import sys
+import tempfile
 from datetime import date as _date
 from pathlib import Path
 
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 
 import design_revision as dr
 from meta_store import read_meta, write_meta
@@ -95,12 +46,11 @@ C_BAND_BLUE = "0070C0"
 C_LABEL_BG  = "D9E1F2"
 C_FONT_D    = "000000"
 C_FONT_W    = "FFFFFF"
-C_FONT_GRAY = "595959"
 
-THIN = Side(style="thin",   color="8B9DC3")
-MED  = Side(style="medium", color="1F3864")
+THIN = Side(style="thin", color="8B9DC3")
 
-# ── テンプレートと一致させる定数 ────────────────────────────────────
+# ── テンプレート行番号定数 ─────────────────────────────────────────
+# build_detail_design_template.py の構造から算出
 # 改版履歴
 REV_META_ROW       = 3
 REV_META_PROJECT_V = (6, 18)
@@ -117,70 +67,73 @@ REV_COLS = {
     "備考":     (30, 31),
 }
 
-# グループ詳細
-GRP_META_ROW_1 = 3
-GRP_META_ROW_2 = 4
-GRP_META_1_V = {
-    "project_name": (6,  16),
-    "group_id":     (21, 24),
-    "author":       (28, 29),
-    "version":      (31, 31),
-}
-GRP_META_2_V = {
-    "name_ja": (6,  24),
-    "date":    (28, 31),
-}
-GRP_LABEL_VAL_CS = 7
-GRP_LABEL_VAL_CE = 31
-GRP_SECTION_ROW = {
-    "processing_purpose":  7,
-    "data_flow_overview":  10,
-    "prerequisites":       13,
-    "notes":               14,
+# 概要（row3〜row8: 機能名/機能概要/目的/利用者/起点画面/操作トリガー）
+OV_LABEL_VAL_CS = 7
+OV_LABEL_VAL_CE = 31
+OV_ROWS = {
+    "name_ja":        3,
+    "summary":        4,
+    "purpose":        5,
+    "users":          6,
+    "trigger_screen": 7,
+    "trigger":        8,
 }
 
-# コンポーネント仕様（テンプレート定数と同一）
-CM_DATA_ROW_START = 5
-CM_API_CS,  CM_API_CE  = 2,  8
-CM_TYPE_CS, CM_TYPE_CE = 9,  11
-CM_RSP_CS,  CM_RSP_CE  = 12, 20
-CM_IN_CS,   CM_IN_CE   = 21, 24
-CM_OUT_CS,  CM_OUT_CE  = 25, 28
-CM_ERR_CS,  CM_ERR_CE  = 29, 31
+# 業務フロー: diagram_area(3, ...) → 図エリア row4-33, spacer row34, 返値=35
+# テーブル: row35=セクションバンド, row36=ヘッダ, row37〜=データ
+BF_IMG_ANCHOR      = "B4"
+BF_DATA_ROW_START  = 37
+BF_STEP_CS,  BF_STEP_CE  = 2,  3
+BF_ACTOR_CS, BF_ACTOR_CE = 4,  8
+BF_ACT_CS,   BF_ACT_CE   = 9,  22
+BF_COND_CS,  BF_COND_CE  = 23, 31
 
-# インターフェース定義（テンプレート定数と同一）
-IF_DATA_ROW_START = 5
-IF_CMP_CS,  IF_CMP_CE  = 2,  6
-IF_MTD_CS,  IF_MTD_CE  = 7,  12
-IF_DSC_CS,  IF_DSC_CE  = 13, 19
-IF_PRM_CS,  IF_PRM_CE  = 20, 25
-IF_RET_CS,  IF_RET_CE  = 26, 29
-IF_EXC_CS,  IF_EXC_CE  = 30, 31
+# 対象オブジェクト: 同パターン
+OBJ_IMG_ANCHOR     = "B4"
+OBJ_DATA_ROW_START = 37
+OBJ_NAME_CS,  OBJ_NAME_CE  = 2,  7
+OBJ_FAPI_CS,  OBJ_FAPI_CE  = 8,  14
+OBJ_FLBL_CS,  OBJ_FLBL_CE  = 15, 20
+OBJ_ACC_CS,   OBJ_ACC_CE   = 21, 23
+OBJ_NOTE_CS,  OBJ_NOTE_CE  = 24, 31
 
-# 画面仕様（テンプレート定数と同一）
-SC_SEC_ROW        = 3   # 最初の画面セクション行（テンプレート上の雛形）
-SC_HEAD_ROW       = 4
-SC_DATA_ROW_START = 5
-SC_NO_CS,   SC_NO_CE   = 2,  3
-SC_LBL_CS,  SC_LBL_CE  = 4,  8
-SC_API_CS,  SC_API_CE  = 9,  14
-SC_UI_CS,   SC_UI_CE   = 15, 17
-SC_TYP_CS,  SC_TYP_CE  = 18, 19
-SC_REQ_CS,  SC_REQ_CE  = 20, 21
-SC_DEF_CS,  SC_DEF_CE  = 22, 24
-SC_VAL_CS,  SC_VAL_CE  = 25, 31
+# 処理概要: 同パターン
+PROC_IMG_ANCHOR     = "B4"
+PROC_DATA_ROW_START = 37
+PROC_STEP_CS, PROC_STEP_CE = 2,  3
+PROC_DESC_CS, PROC_DESC_CE = 4,  13
+PROC_COND_CS, PROC_COND_CE = 14, 19
+PROC_SOQL_CS, PROC_SOQL_CE = 20, 25
+PROC_DML_CS,  PROC_DML_CE  = 26, 31
+
+# 関連コンポーネント: 同パターン
+COMP_IMG_ANCHOR     = "B4"
+COMP_DATA_ROW_START = 37
+COMP_NAME_CS, COMP_NAME_CE = 2,  9
+COMP_TYPE_CS, COMP_TYPE_CE = 10, 13
+COMP_ROLE_CS, COMP_ROLE_CE = 14, 24
+COMP_DEP_CS,  COMP_DEP_CE  = 25, 31
+
+# 影響範囲: row3 から積み上がる
+# 更新オブジェクト: row3=バンド, row4=ヘッダ, row5-12=データ(8行), row13=spacer
+# 参照オブジェクト: row14=バンド, row15=ヘッダ, row16-23=データ(8行), row24=spacer
+# 関連Apex/Flow/LWC: row25=バンド, row26=ヘッダ, row27-34=データ(8行), row35=spacer
+# 外部連携影響: row36=バンド, row37=ヘッダ, row38-42=データ(5行), row43=spacer
+# 他機能依存: row44=バンド, row45=ヘッダ, row46-50=データ(5行), row51=spacer
+IMPACT_UPDATE_OBJ_START = 5
+IMPACT_REF_OBJ_START    = 16
+IMPACT_APEX_START       = 27
+IMPACT_EXT_START        = 38
+IMPACT_DEP_START        = 46
 
 GRID_RIGHT = 31
-SC_COL_GROUPS = [(SC_NO_CS, SC_NO_CE), (SC_LBL_CS, SC_LBL_CE),
-                 (SC_API_CS, SC_API_CE), (SC_UI_CS, SC_UI_CE),
-                 (SC_TYP_CS, SC_TYP_CE), (SC_REQ_CS, SC_REQ_CE),
-                 (SC_DEF_CS, SC_DEF_CE), (SC_VAL_CS, SC_VAL_CE)]
 
-SCALAR_FIELDS  = ["processing_purpose", "data_flow_overview", "prerequisites", "notes"]
+SCALAR_FIELDS  = ["summary", "purpose", "users", "trigger_screen", "trigger"]
 SECTION_SHEETS = {
-    "components":  "コンポーネント仕様",
-    "interfaces":  "インターフェース定義",
-    "screens":     "画面仕様",
+    "business_flow":    "業務フロー",
+    "related_objects":  "対象オブジェクト",
+    "process_steps":    "処理概要",
+    "components":       "関連コンポーネント",
 }
 
 
@@ -217,6 +170,27 @@ def set_h(ws, row, h):
     ws.row_dimensions[row].height = h
 
 
+# ── PNG埋め込み ────────────────────────────────────────────────────
+def _embed_image(ws, png_path: str, anchor: str,
+                 img_w: int = 840, img_h: int | None = None):
+    """PNGをExcelシートに埋め込む。img_h=Noneなら縦横比維持。"""
+    try:
+        if not Path(png_path).exists():
+            return
+        img = XLImage(png_path)
+        img.anchor = anchor
+        if img_h is None:
+            ratio = img.height / img.width if img.width else 1.0
+            img.width = img_w
+            img.height = int(img_w * ratio)
+        else:
+            img.width = img_w
+            img.height = img_h
+        ws.add_image(img)
+    except Exception as e:
+        print(f"  [WARN] 画像埋め込み失敗({anchor}): {e}")
+
+
 # ── シート埋め込み ─────────────────────────────────────────────────
 def fill_revision(ws, data: dict, history: list[dict]):
     vs, _ = REV_META_PROJECT_V
@@ -226,165 +200,208 @@ def fill_revision(ws, data: dict, history: list[dict]):
     dr.fill_revision_table(ws, history, REV_COLS, REV_DATA_ROW_START)
 
 
-def fill_group_detail(ws, data: dict, changed_fields: set):
-    for key, (cs, _) in GRP_META_1_V.items():
-        ws.cell(row=GRP_META_ROW_1, column=cs, value=data.get(key, ""))
-    for key, (cs, _) in GRP_META_2_V.items():
-        ws.cell(row=GRP_META_ROW_2, column=cs, value=data.get(key, ""))
-    for key, row in GRP_SECTION_ROW.items():
+def fill_overview(ws, data: dict, changed_fields: set):
+    """概要シートに値を書き込む。"""
+    for key, row in OV_ROWS.items():
         val = data.get(key, "")
         if val:
-            cell = ws.cell(row=row, column=GRP_LABEL_VAL_CS, value=val)
+            cell = ws.cell(row=row, column=OV_LABEL_VAL_CS, value=val)
             if key in changed_fields:
                 dr.apply_red(cell, size=10)
 
 
-def fill_component_spec(ws, data: dict, changed_keys: set):
-    components = data.get("components", [])
-    r = CM_DATA_ROW_START
-    for comp in components:
-        key = comp.get("api_name", "")
-        is_changed = key in changed_keys
-        set_h(ws, r, 36)
-        c1 = MW(ws, r, CM_API_CS,  CM_API_CE,  key,                          border=B_all(), v="top")
-        c2 = MW(ws, r, CM_TYPE_CS, CM_TYPE_CE, comp.get("type", ""),         border=B_all(), h="center")
-        c3 = MW(ws, r, CM_RSP_CS,  CM_RSP_CE,  comp.get("responsibility", ""), border=B_all(), wrap=True, v="top")
-        c4 = MW(ws, r, CM_IN_CS,   CM_IN_CE,   comp.get("inputs", ""),       border=B_all(), wrap=True, v="top")
-        c5 = MW(ws, r, CM_OUT_CS,  CM_OUT_CE,  comp.get("outputs", ""),      border=B_all(), wrap=True, v="top")
-        c6 = MW(ws, r, CM_ERR_CS,  CM_ERR_CE,  comp.get("error_handling", ""), border=B_all(), wrap=True, v="top")
+def fill_business_flow(ws, data: dict, changed_step_nos: set,
+                       png_path: str | None):
+    """業務フローシート: スイムレーン図 + テーブル。"""
+    if png_path:
+        _embed_image(ws, png_path, BF_IMG_ANCHOR, img_w=840)
+
+    flows = data.get("business_flow", [])
+    r = BF_DATA_ROW_START
+    for i, flow in enumerate(flows):
+        step_no = flow.get("step", i + 1)
+        is_changed = step_no in changed_step_nos
+        set_h(ws, r, 24)
+
+        # 分岐条件テキスト: nextのconditionを集約
+        nexts = flow.get("next", [])
+        conditions = [n.get("condition", "") for n in nexts if n.get("condition")]
+        cond_text = " / ".join(conditions)
+
+        c1 = MW(ws, r, BF_STEP_CS,  BF_STEP_CE,  step_no,
+                border=B_all(), h="center")
+        c2 = MW(ws, r, BF_ACTOR_CS, BF_ACTOR_CE, flow.get("actor", ""),
+                border=B_all(), h="center")
+        c3 = MW(ws, r, BF_ACT_CS,   BF_ACT_CE,   flow.get("action", ""),
+                border=B_all(), wrap=True, v="top")
+        c4 = MW(ws, r, BF_COND_CS,  BF_COND_CE,  cond_text,
+                border=B_all(), wrap=True, v="top")
         if is_changed:
-            for c in (c1, c2, c3, c4, c5, c6):
+            for c in (c1, c2, c3, c4):
                 dr.apply_red(c)
         r += 1
 
 
-def fill_interface_def(ws, data: dict, changed_keys: set):
-    interfaces = data.get("interfaces", [])
-    r = IF_DATA_ROW_START
-    for iface in interfaces:
-        key = iface.get("method", "")
-        is_changed = key in changed_keys
-        set_h(ws, r, 36)
-        c1 = MW(ws, r, IF_CMP_CS, IF_CMP_CE, iface.get("component", ""),    border=B_all(), v="top")
-        c2 = MW(ws, r, IF_MTD_CS, IF_MTD_CE, key,                            border=B_all(), v="top")
-        c3 = MW(ws, r, IF_DSC_CS, IF_DSC_CE, iface.get("description", ""),  border=B_all(), wrap=True, v="top")
-        c4 = MW(ws, r, IF_PRM_CS, IF_PRM_CE, iface.get("input_params", ""), border=B_all(), wrap=True, v="top")
-        c5 = MW(ws, r, IF_RET_CS, IF_RET_CE, iface.get("return_value", ""), border=B_all(), wrap=True, v="top")
-        c6 = MW(ws, r, IF_EXC_CS, IF_EXC_CE, iface.get("exceptions", ""),   border=B_all(), wrap=True, v="top")
-        if is_changed:
-            for c in (c1, c2, c3, c4, c5, c6):
-                dr.apply_red(c)
-        r += 1
+def fill_target_objects(ws, data: dict, changed_obj_keys: set,
+                        png_path: str | None):
+    """対象オブジェクトシート: ER図 + 項目テーブル。"""
+    if png_path:
+        _embed_image(ws, png_path, OBJ_IMG_ANCHOR, img_w=840)
 
-
-def _try_embed_mockup(ws, row_start: int, screen: dict, project_dir, tmp_dir) -> int:
-    """
-    画面コンポーネントのモックアップを生成してシートに埋め込む。
-    使用した行数を返す（モックアップなし=0、あり=確保した行数）。
-    """
-    import sys as _sys
-    _sys.path.insert(0, str(Path(__file__).parent))
-    import generate_screen_mock as gsm
-
-    api_name = screen.get("component", "")
-    if not api_name:
-        return 0
-
-    src = gsm.find_source_file(Path(project_dir), api_name)
-    if not src:
-        return 0
-
-    png_path = Path(tmp_dir) / f"{api_name}_mock.png"
-    try:
-        ok = gsm.generate(src, png_path)
-    except Exception:
-        return 0
-    if not ok or not png_path.exists():
-        return 0
-
-    # 画像サイズを取得してExcel上の行数を計算
-    from PIL import Image as PILImage
-    with PILImage.open(png_path) as im:
-        img_w, img_h = im.size
-
-    # キャンバス幅860pxを対象幅にスケール（Excelのグリッド幅に合わせる）
-    # 1 Excel pt ≈ 1.33 px（96dpi基準）
-    TARGET_W_PX = 800
-    scale = TARGET_W_PX / img_w
-    scaled_h_px = int(img_h * scale)
-    scaled_h_pt = scaled_h_px / 1.333
-
-    # 1行あたり18pt で必要行数を算出（最低3行、最大30行）
-    ROW_H_PT = 18
-    n_rows = max(3, min(30, int(scaled_h_pt / ROW_H_PT) + 1))
-    for r in range(row_start, row_start + n_rows):
-        ws.row_dimensions[r].height = ROW_H_PT
-
-    xl_img = XLImage(str(png_path))
-    xl_img.width = TARGET_W_PX
-    xl_img.height = int(scaled_h_px)
-
-    anchor_cell = f"{get_column_letter(2)}{row_start}"
-    ws.add_image(xl_img, anchor_cell)
-
-    return n_rows
-
-
-def fill_screen_spec(ws, data: dict, project_dir=None, tmp_dir=None):
-    """画面ごとにセクション帯+ヘッダ+データ行を積み上げる。"""
-    screens = data.get("screens", [])
-    if not screens:
-        return
-
-    r = SC_SEC_ROW  # テンプレートの雛形行から上書き開始
-
-    for screen in screens:
-        screen_name = screen.get("screen_name", screen.get("component", "画面"))
-
-        # セクション帯（画面名）
-        set_h(ws, r, 26)
-        MW(ws, r, 2, GRID_RIGHT, f"■ {screen_name}",
-           bold=True, fg=C_FONT_W, bg=C_BAND_BLUE, size=11, border=B_all())
-        r += 1
-
-        # モックアップ画像の埋め込み（project_dir が指定されている場合のみ）
-        if project_dir:
-            mock_rows = _try_embed_mockup(ws, r, screen, project_dir, tmp_dir)
-            r += mock_rows  # 画像エリアの行数分進める
-
-        # テーブルヘッダー
-        set_h(ws, r, 26)
-        hdr_cols = [
-            (SC_NO_CS,  SC_NO_CE,  "No"),
-            (SC_LBL_CS, SC_LBL_CE, "項目名"),
-            (SC_API_CS, SC_API_CE, "API名/プロパティ"),
-            (SC_UI_CS,  SC_UI_CE,  "UI種別"),
-            (SC_TYP_CS, SC_TYP_CE, "型"),
-            (SC_REQ_CS, SC_REQ_CE, "必須"),
-            (SC_DEF_CS, SC_DEF_CE, "初期値"),
-            (SC_VAL_CS, SC_VAL_CE, "バリデーション"),
-        ]
-        for cs, ce, label in hdr_cols:
-            MW(ws, r, cs, ce, label,
-               bold=True, fg=C_FONT_W, bg=C_HDR_BLUE, h="center", border=B_all())
-        r += 1
-
-        # データ行
-        items = screen.get("items", [])
-        for i, item in enumerate(items):
+    objects = data.get("related_objects", [])
+    r = OBJ_DATA_ROW_START
+    for obj in objects:
+        obj_name = f"{obj.get('label', '')} ({obj.get('api_name', '')})"
+        is_changed = obj.get("api_name", "") in changed_obj_keys
+        for field in obj.get("fields", []):
             set_h(ws, r, 22)
-            MW(ws, r, SC_NO_CS,  SC_NO_CE,  str(i + 1),                      border=B_all(), h="center")
-            MW(ws, r, SC_LBL_CS, SC_LBL_CE, item.get("label", ""),           border=B_all())
-            MW(ws, r, SC_API_CS, SC_API_CE, item.get("api_name", ""),         border=B_all())
-            MW(ws, r, SC_UI_CS,  SC_UI_CE,  item.get("ui_type", ""),          border=B_all(), h="center")
-            MW(ws, r, SC_TYP_CS, SC_TYP_CE, item.get("data_type", ""),        border=B_all(), h="center")
-            MW(ws, r, SC_REQ_CS, SC_REQ_CE, "○" if item.get("required") else "", border=B_all(), h="center")
-            MW(ws, r, SC_DEF_CS, SC_DEF_CE, item.get("default_value", ""),   border=B_all())
-            MW(ws, r, SC_VAL_CS, SC_VAL_CE, item.get("validation", ""),       border=B_all(), wrap=True)
+            c1 = MW(ws, r, OBJ_NAME_CS,  OBJ_NAME_CE,  obj_name,
+                    border=B_all())
+            c2 = MW(ws, r, OBJ_FAPI_CS,  OBJ_FAPI_CE,  field.get("api_name", ""),
+                    border=B_all())
+            c3 = MW(ws, r, OBJ_FLBL_CS,  OBJ_FLBL_CE,  field.get("label", ""),
+                    border=B_all())
+            c4 = MW(ws, r, OBJ_ACC_CS,   OBJ_ACC_CE,   field.get("access", ""),
+                    border=B_all(), h="center")
+            c5 = MW(ws, r, OBJ_NOTE_CS,  OBJ_NOTE_CE,  field.get("note", ""),
+                    border=B_all(), wrap=True)
+            if is_changed:
+                for c in (c1, c2, c3, c4, c5):
+                    dr.apply_red(c)
             r += 1
 
-        # 画面間スペーサー
-        set_h(ws, r, 10)
+
+def fill_process_overview(ws, data: dict, changed_step_nos: set,
+                          png_path: str | None):
+    """処理概要シート: フローチャート + テーブル。"""
+    if png_path:
+        _embed_image(ws, png_path, PROC_IMG_ANCHOR, img_w=840)
+
+    steps = data.get("process_steps", [])
+    r = PROC_DATA_ROW_START
+    for i, ps in enumerate(steps):
+        step_no = ps.get("step", i + 1)
+        is_changed = step_no in changed_step_nos
+        set_h(ws, r, 30)
+
+        desc_text = f"{ps.get('title', '')}\n{ps.get('description', '')}".strip()
+        branch = ps.get("branch") or ""
+
+        c1 = MW(ws, r, PROC_STEP_CS, PROC_STEP_CE, step_no,
+                border=B_all(), h="center")
+        c2 = MW(ws, r, PROC_DESC_CS, PROC_DESC_CE, desc_text,
+                border=B_all(), wrap=True, v="top")
+        c3 = MW(ws, r, PROC_COND_CS, PROC_COND_CE, branch,
+                border=B_all(), wrap=True, v="top")
+        c4 = MW(ws, r, PROC_SOQL_CS, PROC_SOQL_CE, ps.get("soql") or "",
+                border=B_all(), wrap=True, v="top")
+        c5 = MW(ws, r, PROC_DML_CS,  PROC_DML_CE,  ps.get("dml") or "",
+                border=B_all(), wrap=True, v="top")
+        if is_changed:
+            for c in (c1, c2, c3, c4, c5):
+                dr.apply_red(c)
+        r += 1
+
+
+def fill_related_components(ws, data: dict, changed_comp_keys: set,
+                            png_path: str | None):
+    """関連コンポーネントシート: コンポーネント図 + 一覧テーブル。"""
+    if png_path:
+        _embed_image(ws, png_path, COMP_IMG_ANCHOR, img_w=840)
+
+    components = data.get("components", [])
+    r = COMP_DATA_ROW_START
+    for comp in components:
+        api_name = comp.get("api_name", "")
+        is_changed = api_name in changed_comp_keys
+        set_h(ws, r, 24)
+
+        # 依存方向: callees のリストを文字列化
+        callees = comp.get("callees", [])
+        dep_text = " → ".join(callees) if callees else ""
+
+        c1 = MW(ws, r, COMP_NAME_CS, COMP_NAME_CE, api_name,
+                border=B_all())
+        c2 = MW(ws, r, COMP_TYPE_CS, COMP_TYPE_CE, comp.get("type", ""),
+                border=B_all(), h="center")
+        c3 = MW(ws, r, COMP_ROLE_CS, COMP_ROLE_CE, comp.get("role", ""),
+                border=B_all(), wrap=True, v="top")
+        c4 = MW(ws, r, COMP_DEP_CS,  COMP_DEP_CE,  dep_text,
+                border=B_all(), wrap=True, v="top")
+        if is_changed:
+            for c in (c1, c2, c3, c4):
+                dr.apply_red(c)
+        r += 1
+
+
+def fill_impact_scope(ws, data: dict):
+    """影響範囲シート: 5セクションに値を書き込む。"""
+    impact = data.get("impact", {})
+
+    def _fill_simple_list(items: list, start_row: int, name_cs: int, name_ce: int):
+        """1列だけのシンプルなリスト書き込み。"""
+        r = start_row
+        for item in items:
+            set_h(ws, r, 22)
+            MW(ws, r, name_cs, name_ce, item, border=B_all())
+            r += 1
+
+    # 更新オブジェクト: col 2-9=名前, 10-20=更新項目, 21-31=更新条件
+    r = IMPACT_UPDATE_OBJ_START
+    for obj_name in impact.get("update_objects", []):
+        set_h(ws, r, 22)
+        MW(ws, r, 2,  9,  obj_name, border=B_all())
+        MW(ws, r, 10, 20, "",       border=B_all())
+        MW(ws, r, 21, 31, "",       border=B_all())
+        r += 1
+
+    # 参照オブジェクト: col 2-9=名前, 10-20=参照項目, 21-31=参照目的
+    r = IMPACT_REF_OBJ_START
+    for obj_name in impact.get("reference_objects", []):
+        set_h(ws, r, 22)
+        MW(ws, r, 2,  9,  obj_name, border=B_all())
+        MW(ws, r, 10, 20, "",       border=B_all())
+        MW(ws, r, 21, 31, "",       border=B_all())
+        r += 1
+
+    # 関連Apex/Flow/LWC: col 2-9=名称, 10-13=種別, 14-31=関連内容
+    r = IMPACT_APEX_START
+    apex_items = impact.get("related_apex", [])
+    flow_items = impact.get("related_flow", [])
+    lwc_items  = impact.get("related_lwc", [])
+    for name in apex_items:
+        set_h(ws, r, 22)
+        MW(ws, r, 2,  9,  name,   border=B_all())
+        MW(ws, r, 10, 13, "Apex", border=B_all(), h="center")
+        MW(ws, r, 14, 31, "",     border=B_all())
+        r += 1
+    for name in flow_items:
+        set_h(ws, r, 22)
+        MW(ws, r, 2,  9,  name,   border=B_all())
+        MW(ws, r, 10, 13, "Flow", border=B_all(), h="center")
+        MW(ws, r, 14, 31, "",     border=B_all())
+        r += 1
+    for name in lwc_items:
+        set_h(ws, r, 22)
+        MW(ws, r, 2,  9,  name,  border=B_all())
+        MW(ws, r, 10, 13, "LWC", border=B_all(), h="center")
+        MW(ws, r, 14, 31, "",    border=B_all())
+        r += 1
+
+    # 外部連携影響: col 2-9=連携先, 10-31=影響内容
+    r = IMPACT_EXT_START
+    for name in impact.get("external_integrations", []):
+        set_h(ws, r, 22)
+        MW(ws, r, 2,  9,  name, border=B_all())
+        MW(ws, r, 10, 31, "",   border=B_all())
+        r += 1
+
+    # 他機能依存: col 2-9=機能名, 10-31=依存内容
+    r = IMPACT_DEP_START
+    for name in impact.get("feature_dependencies", []):
+        set_h(ws, r, 22)
+        MW(ws, r, 2,  9,  name, border=B_all())
+        MW(ws, r, 10, 31, "",   border=B_all())
         r += 1
 
 
@@ -395,55 +412,174 @@ def _compute_diffs(prev_data: dict | None, new_data: dict) -> dict:
     return {
         "scalars": dr.diff_scalars(prev_data, new_data, SCALAR_FIELDS),
         "lists": {
+            "business_flow": dr.diff_list(
+                prev_data.get("business_flow", []),
+                new_data.get("business_flow", []), "step"),
+            "related_objects": dr.diff_list(
+                prev_data.get("related_objects", []),
+                new_data.get("related_objects", []), "api_name"),
+            "process_steps": dr.diff_list(
+                prev_data.get("process_steps", []),
+                new_data.get("process_steps", []), "step"),
             "components": dr.diff_list(
                 prev_data.get("components", []),
                 new_data.get("components", []), "api_name"),
-            "interfaces": dr.diff_list(
-                prev_data.get("interfaces", []),
-                new_data.get("interfaces", []), "method"),
-            "screens": dr.diff_list(
-                prev_data.get("screens", []),
-                new_data.get("screens", []), "component"),
         },
     }
 
 
+# ── PNG生成 ────────────────────────────────────────────────────────
+def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
+    """4種の図形PNGを生成し、パスを返す。失敗したらNone。"""
+    paths: dict[str, str | None] = {
+        "swimlane":    None,
+        "er":          None,
+        "flowchart":   None,
+        "component":   None,
+    }
+
+    # 1. スイムレーン図（業務フロー）
+    flows = data.get("business_flow", [])
+    if flows:
+        try:
+            from diagram_utils import generate_swimlane_diagram
+            sl_path = str(Path(tmp_dir) / "swimlane.png")
+            if generate_swimlane_diagram(flows, sl_path):
+                paths["swimlane"] = sl_path
+                print(f"  [OK] スイムレーン図生成: {sl_path}")
+        except Exception as e:
+            print(f"  [WARN] スイムレーン図生成失敗: {e}")
+
+    # 2. ER図（対象オブジェクト）
+    objects = data.get("related_objects", [])
+    if objects:
+        try:
+            from er_utils import generate_er_image
+            er_path = str(Path(tmp_dir) / "er_diagram.png")
+            boxes, arrows = _build_er_data(objects)
+            if boxes and generate_er_image(boxes, arrows, er_path,
+                                           title="対象オブジェクト関連図"):
+                paths["er"] = er_path
+                print(f"  [OK] ER図生成: {er_path}")
+        except Exception as e:
+            print(f"  [WARN] ER図生成失敗: {e}")
+
+    # 3. フローチャート（処理概要）
+    steps = data.get("process_steps", [])
+    if steps:
+        try:
+            from diagram_utils import generate_flowchart
+            fc_path = str(Path(tmp_dir) / "flowchart.png")
+            if generate_flowchart(steps, fc_path):
+                paths["flowchart"] = fc_path
+                print(f"  [OK] フローチャート生成: {fc_path}")
+        except Exception as e:
+            print(f"  [WARN] フローチャート生成失敗: {e}")
+
+    # 4. コンポーネント図（関連コンポーネント）
+    components = data.get("components", [])
+    if components:
+        try:
+            from diagram_utils import generate_component_diagram
+            cm_path = str(Path(tmp_dir) / "component.png")
+            if generate_component_diagram(components, cm_path):
+                paths["component"] = cm_path
+                print(f"  [OK] コンポーネント図生成: {cm_path}")
+        except Exception as e:
+            print(f"  [WARN] コンポーネント図生成失敗: {e}")
+
+    return paths
+
+
+def _build_er_data(related_objects: list[dict]) -> tuple[list, list]:
+    """related_objects → er_utils用の boxes/arrows に変換する。"""
+    boxes = []
+    arrows = []
+    n = len(related_objects)
+
+    # レイアウト: 3列以下は横並び、4以上は2列
+    if n <= 3:
+        cols = n
+        rows_count = 1
+    else:
+        cols = 2
+        rows_count = (n + 1) // 2
+
+    x_gap = 3.5
+    y_gap = 3.0
+    x_start = 1.0
+    y_start = 1.5  # タイトルバー下
+
+    for idx, obj in enumerate(related_objects):
+        col_idx = idx % cols
+        row_idx = idx // cols
+        x = x_start + col_idx * x_gap
+        y = y_start + row_idx * y_gap
+
+        fields_data = []
+        for f in obj.get("fields", []):
+            fields_data.append({
+                "api_name": f["api_name"],
+                "label":    f.get("label", ""),
+                "name":     f["api_name"],
+                "is_fk":    False,  # ER図ではFK表示しない（シンプル版）
+            })
+
+        box_h = 0.62 + max(len(fields_data), 1) * 0.32
+        boxes.append({
+            "id":     obj["api_name"],
+            "label":  obj.get("label", ""),
+            "api_name": obj["api_name"],
+            "x":      x,
+            "y":      y,
+            "w":      2.8,
+            "h":      box_h,
+            "style":  "primary",
+            "fields": fields_data,
+        })
+
+        # リレーション矢印
+        for rel in obj.get("relations", []):
+            arrow_style = "master_detail" if rel.get("type") == "master-detail" else "lookup"
+            arrows.append({
+                "from":        obj["api_name"],
+                "to":          rel["to"],
+                "arrow_style": arrow_style,
+                "label":       rel.get("label", ""),
+            })
+
+    return boxes, arrows
+
+
 # ── メイン ──────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="詳細設計書 Excel 生成")
+    parser = argparse.ArgumentParser(description="詳細設計書 Excel 生成（新スキーマ対応）")
     parser.add_argument("--input",      required=True, help="詳細設計 JSON ファイルパス")
     parser.add_argument("--template",   required=True, help="詳細設計書テンプレート.xlsx パス")
     parser.add_argument("--output-dir", required=True, help="出力先ディレクトリ")
-    parser.add_argument("--source-file", default="",
-                        help="更新時: 既存の詳細設計書xlsxパス")
-    parser.add_argument("--project-dir", default="", help="プロジェクトルートパス（省略時はモックアップ生成スキップ）")
-    parser.add_argument("--tmp-dir", default="", help="一時ファイル置き場（省略時は --output-dir/.tmp）")
     parser.add_argument("--version-increment", default="minor",
                         choices=["minor", "major"])
-    parser.add_argument("--source-hash", default="",
-                        help="ソースファイルの SHA256 ハッシュ（source_hash_checker.py の出力値）")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
     today  = _date.today().strftime("%Y-%m-%d")
     author = data.get("author", "")
 
-    group_id  = data.get("group_id", "GRP-000")
-    name_ja   = data.get("name_ja", "機能グループ")
-    safe_name = re.sub(r'[\\/:*?"<>|]', "_", name_ja)
+    feature_id = data.get("feature_id", "")
+    name_ja    = data.get("name_ja", "機能")
+    safe_name  = re.sub(r'[\\/:*?"<>|]', "_", name_ja)
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"【{group_id}】{safe_name}.xlsx"
+    out_path = out_dir / f"{safe_name}_詳細設計.xlsx"
 
     # ── バージョン判定 ────────────────────────────────────────────
-    source_file = args.source_file.strip()
-    if not source_file:
-        existing = sorted(out_dir.glob(f"【{group_id}】*.xlsx"),
-                          key=lambda f: f.stat().st_mtime, reverse=True)
-        if existing:
-            source_file = str(existing[0])
-            print(f"  [AUTO] 既存ファイルを検出: {existing[0].name}")
+    source_file = ""
+    existing = sorted(out_dir.glob(f"*{safe_name}*詳細設計*.xlsx"),
+                      key=lambda f: f.stat().st_mtime, reverse=True)
+    if existing:
+        source_file = str(existing[0])
+        print(f"  [AUTO] 既存ファイルを検出: {existing[0].name}")
 
     prev_meta   = read_meta(source_file) if source_file else None
     prev_data   = prev_meta.get("data") if prev_meta else None
@@ -453,7 +589,7 @@ def main():
             prev_meta.get("version", "1.0"), args.version_increment)
         history    = prev_meta.get("history", [])
         is_initial = False
-        print(f"更新モード: {prev_meta.get('version', '?')} → {current_version}")
+        print(f"更新モード: {prev_meta.get('version', '?')} -> {current_version}")
     else:
         current_version = data.get("version") or "1.0"
         history    = []
@@ -477,52 +613,68 @@ def main():
         is_major=(args.version_increment == "major"),
         is_initial=is_initial,
         section_sheet_map=SECTION_SHEETS,
-        scalar_sheet="グループ詳細",
+        scalar_sheet="概要",
     )
     history = history + new_entries
 
-    changed_scalars = dr.changed_scalar_fields(diffs)
-    changed_comps   = dr.changed_ids(diffs, "components")
-    changed_ifaces  = dr.changed_ids(diffs, "interfaces")
-    is_major        = (args.version_increment == "major")
+    changed_scalars    = dr.changed_scalar_fields(diffs)
+    changed_flows      = dr.changed_ids(diffs, "business_flow")
+    changed_objs       = dr.changed_ids(diffs, "related_objects")
+    changed_proc_steps = dr.changed_ids(diffs, "process_steps")
+    changed_comps      = dr.changed_ids(diffs, "components")
+    is_major           = (args.version_increment == "major")
 
-    # ── テンプレ読込 → セル流し込み ──────────────────────────────
-    wb = load_workbook(args.template)
-    fill_revision(
-        wb["改版履歴"], data, history)
-    fill_group_detail(
-        wb["グループ詳細"], data,
-        changed_fields=set() if is_major else changed_scalars)
-    fill_component_spec(
-        wb["コンポーネント仕様"], data,
-        changed_keys=set() if is_major else changed_comps)
-    fill_interface_def(
-        wb["インターフェース定義"], data,
-        changed_keys=set() if is_major else changed_ifaces)
-    project_dir = Path(args.project_dir).resolve() if args.project_dir.strip() else None
-    tmp_dir_path = Path(args.tmp_dir).resolve() if args.tmp_dir.strip() else Path(args.output_dir) / ".tmp"
-    if project_dir:
-        tmp_dir_path.mkdir(parents=True, exist_ok=True)
+    # ── 図形PNG生成 ──────────────────────────────────────────────
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        png_paths = _generate_diagrams(data, tmp_dir)
 
-    fill_screen_spec(
-        wb["画面仕様"], data, project_dir=project_dir, tmp_dir=tmp_dir_path)
+        # ── テンプレ読込 -> セル流し込み ──────────────────────────
+        wb = load_workbook(args.template)
 
-    meta_payload = {
-        "version": current_version,
-        "date":    today,
-        "author":  author,
-        "data":    data,
-        "history": history,
-    }
-    if args.source_hash:
-        meta_payload["source_hash"] = args.source_hash
-    write_meta(wb, meta_payload)
+        fill_revision(wb["改版履歴"], data, history)
 
-    wb.save(str(out_path))
+        fill_overview(
+            wb["概要"], data,
+            changed_fields=set() if is_major else changed_scalars)
+
+        fill_business_flow(
+            wb["業務フロー"], data,
+            changed_step_nos=set() if is_major else changed_flows,
+            png_path=png_paths.get("swimlane"))
+
+        fill_target_objects(
+            wb["対象オブジェクト"], data,
+            changed_obj_keys=set() if is_major else changed_objs,
+            png_path=png_paths.get("er"))
+
+        fill_process_overview(
+            wb["処理概要"], data,
+            changed_step_nos=set() if is_major else changed_proc_steps,
+            png_path=png_paths.get("flowchart"))
+
+        fill_related_components(
+            wb["関連コンポーネント"], data,
+            changed_comp_keys=set() if is_major else changed_comps,
+            png_path=png_paths.get("component"))
+
+        fill_impact_scope(wb["影響範囲"], data)
+
+        meta_payload = {
+            "version": current_version,
+            "date":    today,
+            "author":  author,
+            "data":    data,
+            "history": history,
+        }
+        write_meta(wb, meta_payload)
+
+        wb.save(str(out_path))
+
     sys.stdout.buffer.write(
-        f"[OK] 詳細設計書を生成しました: v{current_version} → {out_path}\n".encode("utf-8"))
+        f"[OK] 詳細設計書を生成しました: v{current_version} -> {out_path}\n".encode("utf-8"))
 
-    for old_f in out_dir.glob(f"【{group_id}】*.xlsx"):
+    # 同名パターンの旧ファイルを削除
+    for old_f in out_dir.glob(f"*{safe_name}*詳細設計*.xlsx"):
         if old_f.resolve() != out_path.resolve():
             old_f.unlink()
             sys.stdout.buffer.write(

@@ -792,6 +792,315 @@ def generate_component_diagram(
     return True
 
 
+# ================================================================
+# 4. スイムレーン図（詳細設計書 — 業務フロー用）
+# ================================================================
+def generate_swimlane_diagram(
+    business_flow: list[dict],
+    out_path: str,
+    fig_w: float = 14,
+) -> bool:
+    """水平スイムレーン図を生成する（詳細設計書 業務フロー用）。
+
+    business_flow: [{"step": 1, "actor": "お客様", "action": "...",
+                     "system": "LWC名",
+                     "next": [{"condition": "...", "to": 2}]}]
+    """
+    if not HAS_MPL or not business_flow:
+        return False
+
+    # アクター抽出（出現順・重複除去）
+    unique_actors: list[str] = []
+    for f in business_flow:
+        actor = f.get("actor", "不明")
+        if actor not in unique_actors:
+            unique_actors.append(actor)
+
+    # アクターごとの色
+    _ACTOR_COLORS = {
+        "お客様": "#D9E1F2", "顧客": "#D9E1F2", "ユーザー": "#D9E1F2",
+        "システム": "#E2EFDA", "System": "#E2EFDA",
+    }
+    _DEFAULT_ACTOR_COLOR = "#FFF2CC"
+
+    def _actor_color(actor: str) -> str:
+        if actor in _ACTOR_COLORS:
+            return _ACTOR_COLORS[actor]
+        # 部分一致で「システム」「外部」を判定
+        if "システム" in actor or "system" in actor.lower():
+            return "#E2EFDA"
+        if "外部" in actor:
+            return "#FFF2CC"
+        return _DEFAULT_ACTOR_COLOR
+
+    lane_h = 2.0
+    n_actors = len(unique_actors)
+    fig_h = max(5, n_actors * lane_h + 1.0)
+
+    # ステップ位置
+    n_steps = len(business_flow)
+    step_x_gap = 3.5
+    x_start = 2.5
+    step_map: dict[int, dict] = {}
+    for i, f in enumerate(business_flow):
+        step_map[f.get("step", i + 1)] = f
+
+    # y_center for each actor
+    y_center: dict[str, float] = {}
+    for i, actor in enumerate(unique_actors):
+        y_center[actor] = i * lane_h + lane_h / 2 + 0.5
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=96)
+    ax.set_xlim(0, fig_w)
+    ax.set_ylim(fig_h, 0)  # Y軸反転（上が0）
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    # レーン背景
+    for i, actor in enumerate(unique_actors):
+        y_top = i * lane_h + 0.5
+        color = _actor_color(actor)
+        ax.add_patch(FancyBboxPatch(
+            (0, y_top), fig_w, lane_h,
+            boxstyle="square,pad=0",
+            facecolor=color, edgecolor="#BBBBBB", linewidth=0.5,
+            alpha=0.5,
+        ))
+        # レーン区切り線
+        ax.plot([0, fig_w], [y_top, y_top], color="#BBBBBB", linewidth=0.8)
+        # アクターラベル
+        ax.text(1.0, y_center[actor], actor,
+                ha="center", va="center",
+                color=_hex("#1F3864"),
+                **_fpkw(10.0, bold=True))
+
+    # ラベルと図エリアの区切り
+    ax.plot([2.0, 2.0], [0.5, fig_h], color="#BBBBBB", linewidth=0.8)
+
+    # ステップBox描画
+    box_w, box_h = 2.5, 1.2
+    step_positions: dict[int, tuple[float, float]] = {}
+
+    for idx, f in enumerate(business_flow):
+        step_no = f.get("step", idx + 1)
+        actor = f.get("actor", "不明")
+        action = f.get("action", "")
+        cx = x_start + idx * step_x_gap
+        cy = y_center.get(actor, lane_h / 2 + 0.5)
+        step_positions[step_no] = (cx, cy)
+
+        ax.add_patch(FancyBboxPatch(
+            (cx - box_w / 2, cy - box_h / 2), box_w, box_h,
+            boxstyle="round,pad=0.05,rounding_size=0.1",
+            facecolor="#DEEAF1", edgecolor="#4472C4", linewidth=1.2,
+        ))
+        # ラベル: step番号 + action
+        label_text = f"{step_no}. {action}"
+        ax.text(cx, cy, _dom_wrap(label_text, 16),
+                ha="center", va="center", fontsize=7.5,
+                color="black", **_fpkw(7.5))
+
+    # 矢印描画
+    for f in business_flow:
+        step_no = f.get("step", 0)
+        nexts = f.get("next", [])
+        if step_no not in step_positions:
+            continue
+        x0, y0 = step_positions[step_no]
+
+        for nxt in nexts:
+            to_step = nxt.get("to")
+            condition = nxt.get("condition", "")
+            if to_step is None or to_step not in step_positions:
+                continue
+            x1, y1 = step_positions[to_step]
+
+            # 矢印
+            ax.annotate(
+                "", xy=(x1 - box_w / 2 - 0.05, y1),
+                xytext=(x0 + box_w / 2 + 0.05, y0),
+                arrowprops=dict(
+                    arrowstyle="-|>", color="#1F3864", lw=1.5,
+                    connectionstyle="arc3,rad=0.15" if abs(y1 - y0) > 0.1 else "arc3,rad=0",
+                    mutation_scale=14,
+                ),
+            )
+            # 条件ラベル
+            if condition:
+                mx = (x0 + x1) / 2
+                my = (y0 + y1) / 2
+                ax.text(mx, my - 0.25, condition,
+                        ha="center", va="bottom", fontsize=7,
+                        color="#C55A11", **_fpkw(7.0, bold=True),
+                        bbox=dict(boxstyle="round,pad=0.15", facecolor="#FFF2CC",
+                                  edgecolor="#C55A11", linewidth=0.8, alpha=0.9))
+
+    plt.tight_layout(pad=0.3)
+    plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
+
+
+# ================================================================
+# 5. フローチャート（詳細設計書 — 処理概要用）
+# ================================================================
+def generate_flowchart(
+    process_steps: list[dict],
+    out_path: str,
+    fig_w: float = 10,
+) -> bool:
+    """処理フローチャートを生成する（詳細設計書 処理概要用）。
+
+    process_steps: [{"step": 1, "title": "処理名", "description": "説明",
+                     "branch": null, "soql": "...", "dml": "...",
+                     "next": [{"condition": null, "to": 2}]}]
+    """
+    if not HAS_MPL or not process_steps:
+        return False
+
+    from matplotlib.patches import Polygon
+
+    n_steps = len(process_steps)
+    y_gap = 2.8
+    fig_h = max(8, n_steps * y_gap + 1.5)
+    center_x = fig_w / 2
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=96)
+    ax.set_xlim(0, fig_w)
+    ax.set_ylim(fig_h, 0)  # Y軸反転
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    # ステップ位置
+    step_positions: dict[int, tuple[float, float]] = {}
+    step_is_branch: dict[int, bool] = {}
+    box_w, box_h = 4.0, 1.2
+    diamond_w, diamond_h = 3.0, 1.2
+
+    for idx, ps in enumerate(process_steps):
+        step_no = ps.get("step", idx + 1)
+        cy = idx * y_gap + 1.2
+        step_positions[step_no] = (center_x, cy)
+        step_is_branch[step_no] = bool(ps.get("branch"))
+
+    # 描画
+    for idx, ps in enumerate(process_steps):
+        step_no = ps.get("step", idx + 1)
+        title = ps.get("title", "")
+        desc = ps.get("description", "")
+        is_branch = bool(ps.get("branch"))
+        cx, cy = step_positions[step_no]
+
+        label_text = f"{step_no}. {title}"
+        if desc:
+            short_desc = desc[:40] + "..." if len(desc) > 40 else desc
+            label_text += f"\n{short_desc}"
+
+        if is_branch:
+            # 菱形（ダイヤモンド）
+            pts = [
+                [cx, cy - diamond_h / 2],  # top
+                [cx + diamond_w / 2, cy],   # right
+                [cx, cy + diamond_h / 2],   # bottom
+                [cx - diamond_w / 2, cy],   # left
+            ]
+            diamond = Polygon(pts, closed=True,
+                              facecolor="#FFF2CC", edgecolor="#C55A11",
+                              linewidth=1.5, zorder=2)
+            ax.add_patch(diamond)
+            ax.text(cx, cy, _dom_wrap(label_text, 16),
+                    ha="center", va="center", fontsize=7,
+                    color="#1F3864", **_fpkw(7.0, bold=True), zorder=3)
+        else:
+            # 長方形Box
+            ax.add_patch(FancyBboxPatch(
+                (cx - box_w / 2, cy - box_h / 2), box_w, box_h,
+                boxstyle="round,pad=0.05,rounding_size=0.1",
+                facecolor="#D9E1F2", edgecolor="#2E75B6", linewidth=1.3,
+                zorder=2,
+            ))
+            ax.text(cx, cy, _dom_wrap(label_text, 22),
+                    ha="center", va="center", fontsize=7,
+                    color="#1F3864", **_fpkw(7.0), zorder=3)
+
+    # 矢印
+    for ps in process_steps:
+        step_no = ps.get("step", 0)
+        nexts = ps.get("next", [])
+        is_branch = bool(ps.get("branch"))
+        if step_no not in step_positions:
+            continue
+        cx0, cy0 = step_positions[step_no]
+
+        for ni, nxt in enumerate(nexts):
+            to_step = nxt.get("to")
+            condition = nxt.get("condition", "")
+            if to_step is None or to_step not in step_positions:
+                continue
+            cx1, cy1 = step_positions[to_step]
+
+            if is_branch and len(nexts) > 1:
+                # 分岐矢印: 最初は右へ、2番目は左へ
+                if ni == 0:
+                    # 右分岐
+                    mid_x = cx0 + diamond_w / 2 + 0.5
+                    pts_line = [
+                        (cx0 + diamond_w / 2, cy0),
+                        (mid_x, cy0),
+                        (mid_x, cy1),
+                        (cx1 + box_w / 2 + 0.05, cy1),
+                    ]
+                else:
+                    # 左分岐
+                    mid_x = cx0 - diamond_w / 2 - 0.5
+                    pts_line = [
+                        (cx0 - diamond_w / 2, cy0),
+                        (mid_x, cy0),
+                        (mid_x, cy1),
+                        (cx1 - box_w / 2 - 0.05, cy1),
+                    ]
+                # 折れ線描画
+                xs = [p[0] for p in pts_line]
+                ys = [p[1] for p in pts_line]
+                ax.plot(xs, ys, color="#1F3864", linewidth=1.3, zorder=1)
+                # 矢印ヘッド
+                ax.annotate(
+                    "", xy=pts_line[-1], xytext=pts_line[-2],
+                    arrowprops=dict(arrowstyle="-|>", color="#1F3864",
+                                    lw=1.3, mutation_scale=12),
+                    zorder=4,
+                )
+                # 条件ラベル
+                if condition:
+                    lx = (pts_line[0][0] + pts_line[1][0]) / 2
+                    ly = pts_line[0][1] - 0.2
+                    ax.text(lx, ly, condition,
+                            ha="center", va="bottom", fontsize=6.5,
+                            color="#C55A11", **_fpkw(6.5, bold=True),
+                            bbox=dict(boxstyle="round,pad=0.12", facecolor="#FFF2CC",
+                                      edgecolor="#C55A11", linewidth=0.6, alpha=0.9))
+            else:
+                # 通常の下向き矢印
+                y_from = cy0 + (diamond_h / 2 if is_branch else box_h / 2) + 0.05
+                y_to = cy1 - box_h / 2 - 0.05
+                ax.annotate(
+                    "", xy=(cx1, y_to), xytext=(cx0, y_from),
+                    arrowprops=dict(arrowstyle="-|>", color="#1F3864",
+                                    lw=1.3, mutation_scale=12),
+                    zorder=4,
+                )
+                if condition:
+                    my = (y_from + y_to) / 2
+                    ax.text(cx0 + 0.3, my, condition,
+                            ha="left", va="center", fontsize=6.5,
+                            color="#C55A11", **_fpkw(6.5, bold=True))
+
+    plt.tight_layout(pad=0.3)
+    plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return True
+
+
 # ── LWC ワイヤーフレーム生成 ─────────────────────────────────────────────────
 import re
 
