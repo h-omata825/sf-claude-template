@@ -115,32 +115,32 @@ def label_row(ws, row, label, label_cs=2, label_ce=6, val_cs=7, val_ce=31, heigh
        bold=True, bg=C_LABEL_BG, border=B_all(), h="center")
     MW(ws, row, val_cs, val_ce, "", border=B_all())
 
-def diagram_area(ws, row_start, row_end, img_cs=2, img_ce=18,
-                 desc_cs=19, desc_ce=31, row_h=18):
-    """図形エリア: 左に画像プレースホルダー、右に説明テキストエリア。"""
-    # 画像エリア（結合）
+def diagram_area(ws, row_start, row_end, img_cs=2, img_ce=31,
+                 desc_cs=None, desc_ce=None, row_h=20):
+    """図形エリア。desc_cs/desc_ce が None の場合は全幅を画像エリアとして使う。"""
+    right = desc_ce if desc_ce else img_ce
     for r in range(row_start, row_end + 1):
         set_h(ws, r, row_h)
-        for c in range(img_cs, img_ce + 1):
+        for c in range(img_cs, right + 1):
             ws.cell(row=r, column=c).border = B_all()
             ws.cell(row=r, column=c).fill = _fill(C_PLACEHOLDER_BG)
-        for c in range(desc_cs, desc_ce + 1):
-            ws.cell(row=r, column=c).border = B_all()
 
     ws.merge_cells(start_row=row_start, start_column=img_cs,
                    end_row=row_end, end_column=img_ce)
-    ws.merge_cells(start_row=row_start, start_column=desc_cs,
-                   end_row=row_end, end_column=desc_ce)
 
-    # プレースホルダーテキスト
+    if desc_cs and desc_ce:
+        for r in range(row_start, row_end + 1):
+            for c in range(desc_cs, desc_ce + 1):
+                ws.cell(row=r, column=c).fill = _fill("FFFFFF")
+        ws.merge_cells(start_row=row_start, start_column=desc_cs,
+                       end_row=row_end, end_column=desc_ce)
+        desc_cell = ws.cell(row=row_start, column=desc_cs)
+        desc_cell.alignment = _aln(h="left", v="top", wrap=True)
+
     cell = ws.cell(row=row_start, column=img_cs)
     cell.value = "(図がここに挿入されます)"
     cell.font = _fnt(color=C_FONT_GRAY, size=9)
     cell.alignment = _aln(h="center", v="center")
-
-    # 説明テキストエリア
-    desc_cell = ws.cell(row=row_start, column=desc_cs)
-    desc_cell.alignment = _aln(h="left", v="top", wrap=True)
 
 
 # ─────────────────────────────────────────────────────────────

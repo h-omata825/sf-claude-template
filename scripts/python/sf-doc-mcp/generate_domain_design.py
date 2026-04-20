@@ -232,14 +232,9 @@ def fill_domain_overview(ws, data: dict, changed_fields: set):
 
 def fill_business_flow(ws, data: dict, changed_step_nos: set,
                        bf_png_path: str | None):
-    # 業務フロー図の説明テキスト
-    desc_text = data.get("business_flow_description", "")
-    if desc_text:
-        ws.cell(row=BF_DESC_ROW, column=BF_DESC_COL, value=desc_text)
-
-    # PNG埋め込み
+    # PNG埋め込み（全幅）
     if bf_png_path:
-        _embed_image(ws, bf_png_path, BF_IMG_ANCHOR, img_w=600)
+        _embed_image(ws, bf_png_path, BF_IMG_ANCHOR, img_w=840)
 
     # フロー説明テーブル
     flows = data.get("business_flow", [])
@@ -289,14 +284,9 @@ def fill_screens(ws, data: dict, changed_screen_keys: set,
                 dr.apply_red(c)
         r += 1
 
-    # 画面遷移図の説明テキスト
-    desc_text = data.get("screen_transition_description", "")
-    if desc_text:
-        ws.cell(row=SC_DESC_ROW, column=SC_DESC_COL, value=desc_text)
-
-    # PNG埋め込み（画面遷移図）
+    # PNG埋め込み（画面遷移図・全幅）
     if sc_png_path:
-        _embed_image(ws, sc_png_path, SC_IMG_ANCHOR, img_w=600)
+        _embed_image(ws, sc_png_path, SC_IMG_ANCHOR, img_w=840)
 
     # ── 画面ワイヤーフレーム埋め込み ──────────────────────────────
     if wireframe_paths:
@@ -316,7 +306,7 @@ def fill_screens(ws, data: dict, changed_screen_keys: set,
             ws.merge_cells(start_row=r, start_column=2,
                            end_row=r + SC_WF_ROWS_PER_IMG - 1, end_column=GRID_RIGHT)
             if wf_path and Path(wf_path).exists():
-                _embed_image(ws, wf_path, f"B{r}", img_w=700, img_h=None)
+                _embed_image(ws, wf_path, f"B{r}", img_w=840, img_h=None)
             r += SC_WF_ROWS_PER_IMG + 1  # +1 スペーサー
 
 
@@ -340,14 +330,9 @@ def fill_components(ws, data: dict, changed_comp_keys: set,
                 dr.apply_red(c)
         r += 1
 
-    # コンポーネント関連図の説明テキスト
-    desc_text = data.get("component_description", "")
-    if desc_text:
-        ws.cell(row=CM_DESC_ROW, column=CM_DESC_COL, value=desc_text)
-
-    # PNG埋め込み
+    # PNG埋め込み（全幅）
     if cm_png_path:
-        _embed_image(ws, cm_png_path, CM_IMG_ANCHOR, img_w=600)
+        _embed_image(ws, cm_png_path, CM_IMG_ANCHOR, img_w=840)
 
     # ── 使用オブジェクト ──
     objects = data.get("related_objects", [])
@@ -443,7 +428,8 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
     if screens:
         sc_path = str(Path(tmp_dir) / "screen_transition.png")
         try:
-            if generate_screen_transition_diagram(screens, sc_path):
+            trans = data.get("transitions", []) or None
+            if generate_screen_transition_diagram(screens, sc_path, transitions=trans):
                 paths["screen_transition"] = sc_path
                 print(f"  [OK] 画面遷移図生成: {sc_path}")
         except Exception as e:
@@ -470,7 +456,17 @@ def _generate_wireframes(data: dict, tmp_dir: str,
         return []
     try:
         from diagram_utils import extract_lwc_ui_elements, generate_screen_wireframe
+        has_mpl = True
     except ImportError:
+        has_mpl = False
+
+    try:
+        from diagram_utils import generate_screen_wireframe_playwright
+        has_playwright_fn = True
+    except ImportError:
+        has_playwright_fn = False
+
+    if not has_mpl and not has_playwright_fn:
         print("  [WARN] diagram_utils をインポートできません。ワイヤーフレーム生成をスキップします。")
         return []
 
@@ -493,10 +489,20 @@ def _generate_wireframes(data: dict, tmp_dir: str,
 
         try:
             html_content = html_path.read_text(encoding="utf-8")
-            elements = extract_lwc_ui_elements(html_content)
             safe = re.sub(r'[\\/:*?"<>|]', "_", name or comp)
             wf_path = str(Path(tmp_dir) / f"wireframe_{safe}.png")
-            if generate_screen_wireframe(name or comp, elements, wf_path):
+            wf_ok = False
+
+            # Playwright 優先
+            if has_playwright_fn:
+                wf_ok = generate_screen_wireframe_playwright(name or comp, html_content, wf_path)
+
+            # matplotlib fallback
+            if not wf_ok and has_mpl:
+                elements = extract_lwc_ui_elements(html_content)
+                wf_ok = generate_screen_wireframe(name or comp, elements, wf_path)
+
+            if wf_ok:
                 print(f"  [OK] ワイヤーフレーム生成: {name}")
                 results.append((name, wf_path))
             else:

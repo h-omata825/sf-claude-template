@@ -173,14 +173,31 @@ def _auto_sides(from_e: dict, to_e: dict) -> tuple[str, str]:
 
 # ── 矢印描画 ──────────────────────────────────────────────────────────────────
 
-_ARROWSTYLE_SINGLE = dict(
-    arrowstyle="-|>",
-    mutation_scale=16,
-)
-_ARROWSTYLE_BIDIR = dict(
-    arrowstyle="<|-|>",
-    mutation_scale=16,
-)
+def _route_line_d(x1: float, y1: float, side_from: str,
+                   x2: float, y2: float, side_to: str) -> list:
+    """直交折れ線ルート（L字 or Z字）を計算する。"""
+    if side_from in ("left", "right"):
+        mid_x = (x1 + x2) / 2
+        return [(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)]
+    else:
+        mid_y = (y1 + y2) / 2
+        return [(x1, y1), (x1, mid_y), (x2, mid_y), (x2, y2)]
+
+
+def _draw_arrowhead(ax, p_near: tuple, p_tip: tuple, color: str,
+                     scale: float = 14.0, zorder: int = 5):
+    """p_near → p_tip 方向に矢印ヘッドだけ描画する。"""
+    ax.annotate(
+        "", xy=p_tip, xytext=p_near,
+        arrowprops=dict(
+            arrowstyle="-|>",
+            color=_hex(color),
+            mutation_scale=scale,
+            lw=0,
+            fc=_hex(color),
+        ),
+        zorder=zorder,
+    )
 
 
 def _draw_arrow(ax, edges: dict, arrow: dict):
@@ -208,25 +225,30 @@ def _draw_arrow(ax, edges: dict, arrow: dict):
     color = "#1E3A5F" if style == "primary" else "#6080A0"
     lw    = 2.2 if style == "primary" else 1.5
 
-    arrstyle = _ARROWSTYLE_BIDIR if arrow.get("bidirectional") else _ARROWSTYLE_SINGLE
-    patch = FancyArrowPatch(
-        (x1, y1), (x2, y2),
-        **arrstyle,
-        linewidth=lw,
-        color=_hex(color),
-        zorder=4,
-        shrinkA=4, shrinkB=4,
-    )
-    ax.add_patch(patch)
+    # 直交折れ線ルート（FancyArrowPatch の代わりに折れ線 + 矢印ヘッド）
+    pts = _route_line_d(x1, y1, side_from, x2, y2, side_to)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    ax.plot(xs, ys, color=_hex(color), linewidth=lw, zorder=4,
+            solid_capstyle="round", solid_joinstyle="round")
 
-    # ラベル
+    # 矢印ヘッド（終点）
+    _draw_arrowhead(ax, pts[-2], pts[-1], color, zorder=5)
+
+    # 双方向の場合は始点にも矢印ヘッド
+    if arrow.get("bidirectional") and len(pts) >= 2:
+        _draw_arrowhead(ax, pts[1], pts[0], color, zorder=5)
+
+    # ラベル（中間セグメントの中点に配置）
     label = arrow.get("label", "")
     if label:
-        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-        if abs(x2 - x1) > abs(y2 - y1):
-            my -= 0.22
+        mi = len(pts) // 2
+        mx = (pts[mi - 1][0] + pts[mi][0]) / 2
+        my = (pts[mi - 1][1] + pts[mi][1]) / 2
+        if abs(pts[mi][1] - pts[mi - 1][1]) < 0.01:
+            my -= 0.18
         else:
-            mx += 0.22
+            mx += 0.18
         ax.text(mx, my, label,
                 ha="center", va="center",
                 color=_hex("#2D2D2D"),
@@ -455,11 +477,14 @@ def generate_screen_transition_diagram(
     screens: list[dict],
     out_path: str,
     fig_w: float = 14,
+    transitions: list[dict] | None = None,
 ) -> bool:
     """画面遷移図を生成する（スネーク型レイアウト）。
 
     screens: [{"name": "見積一覧", "component": "QuotationList",
                "transitions_to": ["見積入力画面"]}]
+    transitions: [{"from": "A", "to": "B", "label": "条件"}]
+        指定された場合、transitions_to より優先してエッジを構築する。
     transitions_to が未指定の場合、screens リストの順番通りに自動連結する。
     戻り値: True(成功) / False(失敗)
     """
@@ -471,7 +496,7 @@ def generate_screen_transition_diagram(
     # 全ノードを収集（順序維持）
     screen_map: dict[str, dict] = {}
     all_nodes: list[str] = []
-    edges: list[tuple[str, str]] = []
+    edges: list[tuple[str, str, str]] = []  # (from, to, label)
 
     for s in screens:
         name = s.get("name", "")
@@ -481,25 +506,38 @@ def generate_screen_transition_diagram(
         if name not in all_nodes:
             all_nodes.append(name)
 
-    # transitions_to が1件でも指定されているか判定
-    has_explicit_transitions = any(
-        s.get("transitions_to") for s in screens
-    )
-
-    if has_explicit_transitions:
-        # 明示的遷移を使う
-        for s in screens:
-            name = s.get("name", "")
-            for target in s.get("transitions_to", []):
-                if target:
-                    if target not in all_nodes:
-                        all_nodes.append(target)
-                    if name:
-                        edges.append((name, target))
+    if transitions:
+        # transitions パラメータが指定された場合はそれを使う
+        for t in transitions:
+            fr = t.get("from", "")
+            to = t.get("to", "")
+            label = t.get("label", "")
+            if fr and to:
+                if fr not in all_nodes:
+                    all_nodes.append(fr)
+                if to not in all_nodes:
+                    all_nodes.append(to)
+                edges.append((fr, to, label))
     else:
-        # 未指定: リスト順で自動連結
-        for i in range(len(all_nodes) - 1):
-            edges.append((all_nodes[i], all_nodes[i + 1]))
+        # transitions_to が1件でも指定されているか判定
+        has_explicit_transitions = any(
+            s.get("transitions_to") for s in screens
+        )
+
+        if has_explicit_transitions:
+            # 明示的遷移を使う
+            for s in screens:
+                name = s.get("name", "")
+                for target in s.get("transitions_to", []):
+                    if target:
+                        if target not in all_nodes:
+                            all_nodes.append(target)
+                        if name:
+                            edges.append((name, target, ""))
+        else:
+            # 未指定: リスト順で自動連結
+            for i in range(len(all_nodes) - 1):
+                edges.append((all_nodes[i], all_nodes[i + 1], ""))
 
     if not all_nodes:
         return False
@@ -537,9 +575,11 @@ def generate_screen_transition_diagram(
     ax.set_ylim(0, fig_h)
     fig.patch.set_facecolor("white")
 
-    # エッジ描画（青い矢印）
+    # エッジ描画（青い矢印 + ラベル）
     _ARROW_COLOR = "#2E75B6"
-    for u, v in edges:
+    for u, v, elabel in edges:
+        if u not in node_pos or v not in node_pos:
+            continue
         x0, y0 = node_pos[u]
         x1, y1 = node_pos[v]
         ax.annotate(
@@ -552,6 +592,14 @@ def generate_screen_transition_diagram(
                 mutation_scale=14,
             ),
         )
+        if elabel:
+            mx = (x0 + x1) / 2
+            my = (y0 + y1) / 2
+            ax.text(mx, my, elabel,
+                    ha="center", va="bottom", fontsize=7.5,
+                    color="#C55A11", **_fpkw(7.5, bold=True),
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor="#FFF2CC",
+                              edgecolor="#C55A11", linewidth=0.8, alpha=0.9))
 
     # ノード描画
     badge_r = 0.22
@@ -746,6 +794,272 @@ def generate_component_diagram(
 
 # ── LWC ワイヤーフレーム生成 ─────────────────────────────────────────────────
 import re
+
+# ── LWC HTML → SLDS 静的 HTML 変換 + Playwright ワイヤーフレーム ───────────────
+
+def _lwc_html_to_slds(html_content: str) -> tuple[str, bool]:
+    """LWC HTML を SLDS スタイルの静的 HTML に変換する。返り値は (body_html, is_modal)。"""
+    html = html_content
+
+    # 1. モーダル判定
+    is_modal = bool(re.search(r'<lightning-modal-header', html, re.I))
+
+    # 2. <template> タグを除去
+    html = re.sub(r'<template\b[^>]*>', '', html, flags=re.DOTALL)
+    html = re.sub(r'</template>', '', html)
+
+    # 3. LWC属性を除去
+    html = re.sub(r'\s+lwc:[a-zA-Z:]+(?:=[^\s>]*)?', '', html)
+    html = re.sub(r'\s+for:[a-zA-Z]+(?:=[^\s>]*)?', '', html)
+    html = re.sub(r'\s+key=\{[^}]+\}', '', html)
+
+    # 4. バインディング式の変換
+    html = re.sub(r'\s+\w[\w-]*=\{[^}]+\}', '', html)  # 属性値のバインディング
+    html = re.sub(r'\{[^}]+\}', '(データ)', html)       # テキスト内のバインディング
+
+    # 5. LWCコンポーネントの SLDS HTML 変換
+
+    # lightning-modal-header
+    def _modal_header(m):
+        label = m.group(1) or m.group(2) or ""
+        return f'<div class="slds-modal__header"><h2 class="slds-text-heading_medium">{label}</h2></div>'
+    html = re.sub(
+        r'<(?:c-)?lightning-modal-header\b[^>]*?label\s*=\s*(?:"([^"]*)"|\'([^\']*)\')[^>]*/?>',
+        _modal_header, html, flags=re.DOTALL)
+    html = re.sub(r'<(?:c-)?lightning-modal-header\b[^>]*/?\s*>', '', html)
+
+    # lightning-modal-body
+    html = re.sub(r'<(?:c-)?lightning-modal-body\b[^>]*>', '<div class="slds-modal__content slds-p-around_medium">', html)
+    html = re.sub(r'</(?:c-)?lightning-modal-body>', '</div>', html)
+
+    # lightning-modal-footer
+    html = re.sub(r'<(?:c-)?lightning-modal-footer\b[^>]*>', '<div class="slds-modal__footer">', html)
+    html = re.sub(r'</(?:c-)?lightning-modal-footer>', '</div>', html)
+
+    # lightning-card
+    def _card(m):
+        attrs = m.group(1)
+        tm = re.search(r'title\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        title = (tm.group(1) or tm.group(2)) if tm else ""
+        return (f'<div class="slds-card"><div class="slds-card__header">'
+                f'<h2 class="slds-card__header-title">{title}</h2></div>'
+                f'<div class="slds-card__body slds-card__body_inner">')
+    html = re.sub(r'<(?:c-)?lightning-card\b([^>]*)>', _card, html, flags=re.DOTALL)
+    html = re.sub(r'</(?:c-)?lightning-card>', '</div></div>', html)
+
+    # lightning-input
+    def _input(m):
+        attrs = m.group(1)
+        lm = re.search(r'label\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        label = (lm.group(1) or lm.group(2)) if lm else ""
+        tm = re.search(r'type\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        itype = (tm.group(1) or tm.group(2)) if tm else "text"
+        req = bool(re.search(r'\brequired\b', attrs))
+        req_cls = " slds-is-required" if req else ""
+        req_html = '<abbr class="slds-required">*</abbr>' if req else ""
+        return (f'<div class="slds-form-element{req_cls}">'
+                f'<label class="slds-form-element__label">{req_html}{label}</label>'
+                f'<div class="slds-form-element__control">'
+                f'<input type="{itype}" class="slds-input" placeholder=""></div></div>')
+    html = re.sub(r'<(?:c-)?lightning-input(?:-text)?\b([^>]*)/?>', _input, html, flags=re.DOTALL)
+
+    # lightning-combobox
+    def _combobox(m):
+        attrs = m.group(1)
+        lm = re.search(r'label\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        label = (lm.group(1) or lm.group(2)) if lm else ""
+        hidden = bool(re.search(r'label-hidden', attrs))
+        req = bool(re.search(r'\brequired\b', attrs))
+        select_html = '<div class="slds-form-element__control"><select class="slds-select"><option>-- 選択してください --</option></select></div>'
+        if hidden or not label:
+            return select_html
+        req_cls = " slds-is-required" if req else ""
+        req_html = '<abbr class="slds-required">*</abbr>' if req else ""
+        return (f'<div class="slds-form-element{req_cls}">'
+                f'<label class="slds-form-element__label">{req_html}{label}</label>'
+                f'{select_html}</div>')
+    html = re.sub(r'<(?:c-)?lightning-combobox\b([^>]*)/?>', _combobox, html, flags=re.DOTALL)
+
+    # lightning-textarea
+    def _textarea(m):
+        attrs = m.group(1)
+        lm = re.search(r'label\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        label = (lm.group(1) or lm.group(2)) if lm else ""
+        req = bool(re.search(r'\brequired\b', attrs))
+        req_cls = " slds-is-required" if req else ""
+        req_html = '<abbr class="slds-required">*</abbr>' if req else ""
+        return (f'<div class="slds-form-element{req_cls}">'
+                f'<label class="slds-form-element__label">{req_html}{label}</label>'
+                f'<div class="slds-form-element__control">'
+                f'<textarea class="slds-textarea" rows="3"></textarea></div></div>')
+    html = re.sub(r'<(?:c-)?lightning-textarea\b([^>]*)/?>', _textarea, html, flags=re.DOTALL)
+
+    # lightning-button
+    def _button(m):
+        attrs = m.group(1)
+        lm = re.search(r'label\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        label = (lm.group(1) or lm.group(2)) if lm else "Button"
+        vm = re.search(r'variant\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        variant = (vm.group(1) or vm.group(2)) if vm else "neutral"
+        if variant not in ("brand", "destructive", "neutral"):
+            variant = "neutral"
+        return f'<button class="slds-button slds-button_{variant}">{label}</button>'
+    html = re.sub(r'<(?:c-)?lightning-button\b([^>]*)/?>', _button, html, flags=re.DOTALL)
+
+    # lightning-record-picker
+    def _record_picker(m):
+        attrs = m.group(1)
+        lm = re.search(r'label\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        label = (lm.group(1) or lm.group(2)) if lm else ""
+        pm = re.search(r'placeholder\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        placeholder = (pm.group(1) or pm.group(2)) if pm else ""
+        return (f'<div class="slds-form-element">'
+                f'<label class="slds-form-element__label">{label}</label>'
+                f'<div class="slds-form-element__control">'
+                f'<input type="search" class="slds-input" placeholder="{placeholder}"></div></div>')
+    html = re.sub(r'<(?:c-)?lightning-record-picker\b([^>]*)/?>', _record_picker, html, flags=re.DOTALL)
+
+    # lightning-dual-listbox
+    def _dual_listbox(m):
+        attrs = m.group(1)
+        lm = re.search(r'label\s*=\s*(?:"([^"]*)"|\'([^\']*)\')' , attrs)
+        label = (lm.group(1) or lm.group(2)) if lm else ""
+        req = bool(re.search(r'\brequired\b', attrs))
+        req_cls = " slds-is-required" if req else ""
+        req_html = '<abbr class="slds-required">*</abbr>' if req else ""
+        return (f'<div class="slds-form-element{req_cls}">'
+                f'<label class="slds-form-element__label">{req_html}{label}</label>'
+                f'<div style="display:flex;gap:8px">'
+                f'<select class="slds-select" multiple style="flex:1;min-height:80px"><option>選択肢A</option><option>選択肢B</option></select>'
+                f'<select class="slds-select" multiple style="flex:1;min-height:80px"><option>選択済み</option></select>'
+                f'</div></div>')
+    html = re.sub(r'<(?:c-)?lightning-dual-listbox\b([^>]*)/?>', _dual_listbox, html, flags=re.DOTALL)
+
+    # lightning-datatable
+    html = re.sub(
+        r'<(?:c-)?lightning-datatable\b[^>]*/?>',
+        ('<table class="slds-table"><thead><tr>'
+         '<th>列1</th><th>列2</th><th>列3</th></tr></thead>'
+         '<tbody><tr><td>-</td><td>-</td><td>-</td></tr>'
+         '<tr><td>-</td><td>-</td><td>-</td></tr></tbody></table>'),
+        html, flags=re.DOTALL)
+
+    # lightning-spinner
+    html = re.sub(
+        r'<(?:c-)?lightning-spinner\b[^>]*/?>',
+        '<p style="color:#706e6b;text-align:center">\u27F3 読み込み中...</p>',
+        html, flags=re.DOTALL)
+
+    # 残りの lightning-* / c-* タグを除去
+    html = re.sub(r'</(?:c-)?lightning-[a-zA-Z-]*>', '', html)
+    html = re.sub(r'<(?:c-)?lightning-[a-zA-Z-]+\b[^>]*/?\s*>', '', html, flags=re.DOTALL)
+    html = re.sub(r'</c-[a-zA-Z-]+>', '', html)
+    html = re.sub(r'<c-[a-zA-Z-]+\b[^>]*/?\s*>', '', html, flags=re.DOTALL)
+
+    # 6. モーダルの場合はラップ
+    body_html = html.strip()
+    return body_html, is_modal
+
+
+def generate_screen_wireframe_playwright(
+    title: str,
+    html_content: str,
+    out_path: str,
+    viewport_width: int = 820,
+) -> bool:
+    """Playwright で SLDS スタイルのワイヤーフレームを生成する。"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+
+    body_html, is_modal = _lwc_html_to_slds(html_content)
+
+    if is_modal:
+        content = (f'<div class="slds-backdrop slds-backdrop_open"></div>\n'
+                   f'<div class="slds-modal slds-fade-in-open">'
+                   f'<div class="slds-modal__container">{body_html}</div></div>')
+    else:
+        content = body_html
+
+    slds_css = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Salesforce Sans', Arial, sans-serif; font-size: 13px; background: #f3f2f2; padding: 16px; color: #3e3e3c; }
+.wf-title { font-size: 16px; font-weight: 700; color: #0070d2; padding: 8px 0 12px; border-bottom: 2px solid #0070d2; margin-bottom: 12px; }
+.slds-card { background: white; border-radius: 4px; box-shadow: 0 2px 3px rgba(0,0,0,0.16); overflow: hidden; margin-bottom: 12px; }
+.slds-card__header { padding: 10px 16px; border-bottom: 1px solid #dddbda; }
+.slds-card__header-title { font-size: 15px; font-weight: 700; color: #181818; }
+.slds-card__body_inner { padding: 12px 16px; }
+.slds-form-element { margin-bottom: 10px; }
+.slds-form-element__label { display: block; font-size: 12px; color: #3e3e3c; margin-bottom: 3px; font-weight: 600; }
+.slds-required { color: #c23934; margin-right: 2px; }
+.slds-is-required .slds-form-element__label::before { content: ''; }
+.slds-form-element__control { position: relative; }
+.slds-input, .slds-textarea, .slds-select { border: 1px solid #dddbda; border-radius: 4px; padding: 6px 10px; width: 100%; font-size: 13px; color: #3e3e3c; background: white; font-family: inherit; }
+.slds-textarea { min-height: 72px; resize: vertical; }
+.slds-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23706e6b'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px; }
+.slds-button { display: inline-flex; align-items: center; padding: 7px 14px; border: 1px solid; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 700; font-family: inherit; margin-right: 6px; margin-top: 6px; }
+.slds-button_brand { background: #0070d2; color: white; border-color: #0070d2; }
+.slds-button_destructive { background: #c23934; color: white; border-color: #c23934; }
+.slds-button_neutral { background: white; color: #0070d2; border-color: #dddbda; }
+.slds-grid { display: flex; flex-wrap: wrap; align-items: flex-start; margin-bottom: 4px; }
+.slds-col { flex: 1; padding: 4px 6px; }
+.slds-size_3-of-12 { flex: 0 0 25%; max-width: 25%; display: flex; align-items: center; }
+.slds-size_9-of-12 { flex: 0 0 75%; max-width: 75%; }
+.slds-size_12-of-12 { flex: 0 0 100%; max-width: 100%; }
+.slds-p-around_medium { padding: 12px; }
+.slds-p-around_small { padding: 6px; }
+.slds-m-top_small { margin-top: 6px; }
+.slds-text-heading_small { font-size: 14px; font-weight: 700; }
+.slds-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.slds-table th, .slds-table td { border: 1px solid #dddbda; padding: 5px 8px; text-align: left; }
+.slds-table th { background: #f3f2f2; font-weight: 700; }
+label[style*="font-size"] { display: flex; align-items: center; font-size: 12px !important; font-weight: 600; color: #3e3e3c; }
+.slds-modal { position: fixed; z-index: 9000; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; }
+.slds-modal__container { background: white; border-radius: 4px; box-shadow: 0 8px 30px rgba(0,0,0,.35); width: 560px; max-width: 90%; display: flex; flex-direction: column; }
+.slds-modal__header { padding: 14px 16px; border-bottom: 1px solid #dddbda; background: #f3f2f2; border-radius: 4px 4px 0 0; }
+.slds-modal__content { padding: 16px; overflow: auto; }
+.slds-modal__footer { padding: 10px 16px; border-top: 1px solid #dddbda; display: flex; justify-content: flex-end; gap: 8px; background: #f3f2f2; border-radius: 0 0 4px 4px; }
+.slds-backdrop_open { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 8000; }
+"""
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><title>{title}</title>
+<style>{slds_css}</style></head>
+<body>
+<div class="wf-title">{title}</div>
+{content}
+</body></html>"""
+
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(suffix='.html', mode='w', encoding='utf-8', delete=False) as f:
+        f.write(html_doc)
+        tmp_html = f.name
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            if is_modal:
+                page = browser.new_page(viewport={'width': viewport_width, 'height': 700})
+                page.goto(f'file:///{tmp_html.replace(chr(92), "/")}')
+                page.wait_for_timeout(300)
+                page.screenshot(path=out_path, full_page=False)
+            else:
+                page = browser.new_page(viewport={'width': viewport_width, 'height': 900})
+                page.goto(f'file:///{tmp_html.replace(chr(92), "/")}')
+                page.wait_for_timeout(300)
+                page.screenshot(path=out_path, full_page=True)
+            browser.close()
+        return True
+    except Exception as e:
+        print(f"  [WARN] Playwright wireframe失敗({title}): {e}")
+        return False
+    finally:
+        try:
+            os.unlink(tmp_html)
+        except Exception:
+            pass
+
 
 _SLDS_BRAND  = "#0070D2"
 _SLDS_GRAY   = "#F3F2F2"
