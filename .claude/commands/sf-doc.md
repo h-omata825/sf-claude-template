@@ -1,4 +1,4 @@
-Salesforceプロジェクト資料を会話形式で作成します。
+Salesforceプロジェクト基本設計資料を会話形式で作成します。
 スクリプトは `scripts/python/sf-doc-mcp/`（プロジェクトルートからの相対パス）にあります。
 
 **AskUserQuestion のルール（厳守）:**
@@ -13,19 +13,20 @@ Salesforceプロジェクト資料を会話形式で作成します。
 各資料が使う情報源と、最新化に必要なコマンド・選択肢。  
 各 Step の冒頭でも確認を促すが、事前に把握しておくこと。
 
-| 資料 | 情報源 | 最新化コマンド | 選択肢 |
-|---|---|---|---|
-| 業務フロー図 | `docs/overview/org-profile.md`<br>`docs/requirements/requirements.md`<br>`docs/architecture/system.json`<br>`docs/flow/usecases.md`<br>`docs/flow/swimlanes.json` | `/sf-memory` | **カテゴリ1: 組織概要・環境情報** |
-| データモデル定義書 | `docs/catalog/_index.md`<br>`docs/catalog/_data-model.md`<br>`docs/catalog/custom/*.md`<br>`docs/catalog/standard/*.md`<br>（会社名のみ org-profile.md も参照） | `/sf-memory` | **カテゴリ2: オブジェクト・項目構成** |
-| オブジェクト定義書 | ① `docs/catalog/_index.md`（対象オブジェクト候補の選択のみ）<br>② **Salesforce組織に直接接続**して項目メタデータを取得（force-app/ 不要） | ① `/sf-memory` カテゴリ2<br>② 不要（実行時に接続） | カテゴリ2: オブジェクト・項目構成 |
-| プログラム設計書 | `force-app/`（Apex/Flow/LWC を直接スキャン）<br>`docs/design/`（既存設計書があれば参照・任意） | `/sf-retrieve` | standard または all |
+| 資料 | 情報源 | 最新化コマンド |
+|---|---|---|
+| プロジェクト概要書 | `docs/overview/org-profile.md`<br>`docs/requirements/requirements.md`<br>`docs/architecture/system.json`<br>`docs/catalog/_data-model.md`<br>`docs/flow/usecases.md` | `/sf-memory` カテゴリ1・2 |
+| オブジェクト定義書 | `docs/catalog/_index.md`（対象オブジェクト候補の選択のみ）<br>**Salesforce組織に直接接続**してフィールドメタデータを取得 | `/sf-memory` カテゴリ2 |
+| 機能一覧 | `force-app/`（Apex/Flow/LWC 等を直接スキャン）<br>`docs/feature_ids.yml`（ID台帳） | `/sf-retrieve` |
 
 > **新規オブジェクト追加後**: `/sf-memory` カテゴリ2 を再実行 → _index.md に反映  
 > **新規コンポーネント追加後**: `/sf-retrieve` を再実行 → force-app/ に反映
 
+**出力先**: 全ての資料は `docs/01_基本設計/` に統一して出力する。
+
 ---
 
-> 設計書（基本設計・詳細設計・プログラム設計・機能一覧）の生成は `/sf-design` を使用すること。
+> 詳細設計・プログラム設計の生成は `/sf-design` を使用すること。
 
 ## Step 0: 資料種別の選択
 
@@ -33,19 +34,20 @@ AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）
 
 AskUserQuestion のツールを使い、以下を choices に含めて提示する:
 
-- 全て — プロジェクト概要書 + オブジェクト定義書 を順番に生成（A→B→C の順）
-- プロジェクト概要書 — プロジェクト概要書 PPTX + 業務フロー図 PPTX（要 swimlanes.json）+ データモデル定義書 PPTX（Step A→B の順）
-- オブジェクト定義書 — オブジェクト・項目定義書 → Excel
+- 全て — プロジェクト概要書 + オブジェクト定義書 + 機能一覧 を順番に生成（A→B→C の順）
+- プロジェクト概要書 — プロジェクト概要書.xlsx
+- オブジェクト定義書 — オブジェクト項目定義書.xlsx
+- 機能一覧 — 機能一覧.xlsx
 
 **「全て」選択時の実行順序（この順番に従うこと）:**
 
 ```
-Step A（業務フロー図 PPTX）→ Step B（データモデル定義書 PPTX）→ Step C（オブジェクト定義書 Excel）
+Step A（プロジェクト概要書）→ Step B（オブジェクト定義書）→ Step C（機能一覧）
 ```
 
-「プロジェクト概要書」→ Step A 完了後そのまま Step B を実行する。
+「プロジェクト概要書」→ Step A のみ実行して終了。
 
-> 設計書（基本設計・詳細設計・プログラム設計・機能一覧）の生成は `/sf-design` を使用すること。
+> 詳細設計・プログラム設計の生成は `/sf-design` を使用すること。
 
 ### Step 0-2: 共通情報の取得（資料種別選択後に一度だけ聞く）
 
@@ -64,51 +66,14 @@ try:
     if p.exists():
         d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
         print('author:' + str(d.get('author', '')))
-        print('output_dir:' + str(d.get('output_dir', '')))
     else:
         print('author:')
-        print('output_dir:')
 except Exception:
     print('author:')
-    print('output_dir:')
 "
 ```
 
-出力から `author`（前回の作成者名）と `output_dir`（前回の管理フォルダ）を控える。
-
-#### 管理フォルダ
-
-**前回値がある場合:** AskUserQuestion で提示（1択+Other自動）:
-- label: "前回: {last_output_dir}"、description: "前回と同じ管理フォルダを使用"
-
-Other が選ばれた場合はチャットで入力:
-```
-資料の管理フォルダパスを入力してください:
-```
-
-**前回値がない場合:** チャットで直接聞く:
-```
-資料の管理フォルダパスを入力してください:
-```
-
-入力後、ROOT 解決スクリプトを実行:
-```bash
-python -c "
-import pathlib, sys
-p = pathlib.Path(r'{入力値}')
-# 既知のサブフォルダ名が入力パスの途中に含まれていたら、その親をROOTとする
-# 例: 'C:/work/プロジェクト概要書' → ROOT = 'C:/work'
-# 例: 'C:/work/output/' → ROOT = 'C:/work/output' (調整なし)
-known = ['プロジェクト概要書', 'オブジェクト定義書']
-for part in [p] + list(p.parents):
-    if part.name in known:
-        root = part.parent
-        print('ADJUSTED:' + str(root))
-        sys.exit()
-print('ROOT:' + str(p))
-"
-```
-出力が `ADJUSTED:` で始まる場合は、その値を ROOT として使用し「{調整後パス} を管理フォルダとして使用します」と伝える。`ROOT:` の場合はそのまま ROOT として使用する。
+出力から `author`（前回の作成者名）を控える。
 
 #### 作成者名
 
@@ -131,14 +96,14 @@ try:
     import yaml
     p = pathlib.Path('docs/.sf/sf_doc_config.yml')
     p.parent.mkdir(parents=True, exist_ok=True)
-    data = {'author': r'{author}', 'output_dir': r'{ROOT}'}
+    data = {'author': r'{author}'}
     p.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding='utf-8')
 except Exception as e:
     print('設定の保存に失敗:', e)
 "
 ```
 
-> 以降の各Stepでは管理フォルダ・作成者名を再度聞かない。
+> 以降の各Stepでは作成者名を再度聞かない。
 
 ---
 
@@ -153,13 +118,12 @@ python -c "
 import pathlib
 docs = pathlib.Path('docs')
 checks = {
-    'カテゴリ1（Step A用）': [
+    'Step A用（プロジェクト概要書）': [
         docs / 'overview' / 'org-profile.md',
         docs / 'requirements' / 'requirements.md',
     ],
-    'カテゴリ2（Step B/C用）': [
+    'Step B用（オブジェクト定義書）': [
         docs / 'catalog' / '_index.md',
-        docs / 'catalog' / '_data-model.md',
     ],
 }
 for label, paths in checks.items():
@@ -168,10 +132,15 @@ for label, paths in checks.items():
         print(f'MISSING {label}: {missing}')
     else:
         print(f'OK {label}')
+# force-app チェック
+fa = pathlib.Path('force-app')
+print(f'force-app: {fa.exists()}')
 "
 ```
 
-`MISSING` が出た場合は「先に `/sf-memory` を実行してください」と伝えて終了する。全て `OK` なら続ける。
+- `MISSING Step A用` が出た場合は「先に `/sf-memory` カテゴリ1 を実行してください」と伝えて終了。
+- `MISSING Step B用` が出た場合は「先に `/sf-memory` カテゴリ2 を実行してください」と伝えて終了。
+- `force-app: False` の場合: Step C（機能一覧）をスキップする旨を伝え、A→B のみ実行。
 
 ### /sf-memory 最新化確認（カテゴリ1・カテゴリ2 まとめて）
 
@@ -181,9 +150,9 @@ AskUserQuestion で確認:
 
 「先に実行する」が選ばれた場合: `/sf-memory` を実行してから改めて本コマンドを実行するよう案内して終了。
 
-### Step C 事前設定（オブジェクト定義書の設定）
+### Step B 事前設定（オブジェクト定義書の設定）
 
-**C-1: 接続先組織の確認**
+**B-1: 接続先組織の確認**
 
 `.sf/config.json` から target-org を取得:
 ```bash
@@ -216,15 +185,15 @@ AskUserQuestion で提示（1択＋Other自動）:
 - target-org が取得できた場合: label: "{alias}（{system_name}）"、description: "このプロジェクトのデフォルト組織"
 - 取得できなかった場合: label: "ブラウザでログインする"
 
-`SF_ALIAS` として保持する（`（` より前の alias 部分のみ）。ブラウザログインを選択した場合は後述の一時エイリアス処理を Step C 冒頭で実行。
+`SF_ALIAS` として保持する（`（` より前の alias 部分のみ）。ブラウザログインを選択した場合は後述の一時エイリアス処理を Step B 冒頭で実行。
 
-**C-2: バージョン種別**
+**B-2: バージョン種別**
 
-`{ROOT}/オブジェクト定義書/` 内の `オブジェクト項目定義書_v*.xlsx` を確認:
+`docs/01_基本設計/` 内の `オブジェクト項目定義書_v*.xlsx` を確認:
 ```bash
 python -c "
 import pathlib, glob
-files = sorted(glob.glob(r'{ROOT}/オブジェクト定義書/オブジェクト項目定義書_v*.xlsx'))
+files = sorted(glob.glob('docs/01_基本設計/オブジェクト項目定義書_v*.xlsx'))
 for f in files:
     print(f)
 "
@@ -236,14 +205,14 @@ for f in files:
 
 既存ファイルがない場合: `version_increment = minor`（新規）として続行。
 
-**C-3: システム名称**
+**B-3: システム名称**
 
 新規の場合は `org-profile.md` から、更新の場合は既存ファイルの `_meta` シートから取得してAskUserQuestion で確認:
 - label: "{値}（前回/自動取得）"
 
 Other の場合はチャットで入力。結果を `システム名称` として保持（`（前回/自動取得）` を除去した値のみ）。
 
-**C-4: 対象オブジェクトの選択**
+**B-4: 対象オブジェクトの選択**
 
 `docs/catalog/_index.md` からオブジェクト一覧を取得:
 ```bash
@@ -267,21 +236,22 @@ Other の場合はチャットで入力。結果を `オブジェクトリスト
 
 ### 確定・開始
 
-「確認完了。プロジェクト概要書 → データモデル定義書 → オブジェクト定義書の順に自動生成を開始します。以降は完了まで待機してください。」と伝える。
+「確認完了。プロジェクト概要書 → オブジェクト定義書 → 機能一覧の順に自動生成を開始します。以降は完了まで待機してください。」と伝える。
 
 ---
 
-## Step A: 業務フロー図・システム構成図（PPTX）
+## Step A: プロジェクト概要書（Excel）
 
-> - 本書の中身は **docs/ 配下の精度に完全依存** する。docs が薄いと骨組みだけのスライドになる。
-> - 図（システム構成図・業務フロー図）は自動配置のため、位置・重なりに限界がある。手直しを想定すること。
+> - 本書の中身は **docs/ 配下の精度に完全依存** する。docs が薄いと骨組みだけになる。
+> - 図エリア（システム構成図・業務フロー図・ER図）はプレースホルダーのみ。手動貼り付けを想定。
 
 **【使用する情報源】**
 - `docs/overview/org-profile.md`, `docs/requirements/requirements.md` — 組織・要件情報
-- `docs/architecture/system.json` — システム構成図
-- `docs/flow/usecases.md`, `docs/flow/swimlanes.json` — 業務フロー図
+- `docs/architecture/system.json` — システム構成図（外部連携先）
+- `docs/catalog/_data-model.md` — オブジェクト関連情報
+- `docs/flow/usecases.md` — 用語集・UC情報
 
-**【最新化手順】** `/sf-memory` → カテゴリ1「組織概要・環境情報」を選択
+**【最新化手順】** `/sf-memory` → カテゴリ1・2 を選択
 
 **「全て」モードの場合**: Step 0-3 で確認済み。スキップして A-1 へ進む。
 
@@ -290,18 +260,6 @@ Other の場合はチャットで入力。結果を `オブジェクトリスト
 - label: "先に /sf-memory を実行する（ここで終了）"
 
 「先に /sf-memory を実行する」が選ばれた場合: `/sf-memory` を実行してから改めて本コマンドを実行するよう案内して終了。
-
-### 生成されるスライド構成
-
-| # | スライド | 必須/条件 | ソース |
-|---|---|---|---|
-| 1 | 表紙・目次 | 必須 | 自動 |
-| 2 | プロジェクト概要 | 必須 | `docs/overview/org-profile.md` + `docs/requirements/requirements.md` |
-| 3 | システム構成図 | 必須 | `docs/architecture/system.json` |
-| 4 | 業務フロー図（全体） | 必須 | `docs/flow/swimlanes.json`（flow_type: "overall"） |
-| 5 | 業務フロー図（UC別） | 必須 | `docs/flow/swimlanes.json`（flow_type: "usecase"、UCごと1枚） |
-| 6 | 業務フロー図（例外・承認） | 任意 | `docs/flow/swimlanes.json`（flow_type: "exception"） |
-| 7 | データの流れ図 | 任意 | `docs/flow/swimlanes.json`（flow_type: "dataflow"） |
 
 ### A-1: docs/ フォルダの確認
 
@@ -315,7 +273,7 @@ paths = {
     'profile':   docs / 'overview'     / 'org-profile.md',
     'req':       docs / 'requirements' / 'requirements.md',
     'system':    docs / 'architecture' / 'system.json',
-    'swimlanes': docs / 'flow'         / 'swimlanes.json',
+    'model':     docs / 'catalog'      / '_data-model.md',
     'usecases':  docs / 'flow'         / 'usecases.md',
 }
 for k, p in paths.items():
@@ -323,90 +281,29 @@ for k, p in paths.items():
 "
 ```
 
-- `profile` / `req` が両方ない場合:「先に `/sf-memory` を実行してください。」と伝えて終了。
-- `system.json` がない場合: 「システム構成図がスキップされます。/sf-memory でシステム構成情報を追加してください。」と表示して続行。
-- `swimlanes.json` がない場合: 「業務フロー図がスキップされます。/sf-memory で業務フロー情報を追加してください。」と表示して続行。
+- `profile` / `req` が両方ない場合:「先に `/sf-memory` カテゴリ1 を実行してください。」と伝えて終了。
+- その他が存在しない場合: 「{ファイル名} が見つかりません。該当シートはスキップ/空欄になります。」と表示して続行。
 
 ### A-2: 生成
 
-出力先サブフォルダを作成してから実行:
+出力先フォルダを作成してから実行:
 ```bash
-mkdir -p "{ROOT}/プロジェクト概要書"
+mkdir -p "docs/01_基本設計"
 ```
 
-**① プロジェクト概要書**（表紙・概要・システム構成図を含む PPTX）:
 ```bash
-python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_project_doc.py" \
+python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_basic_doc.py" \
   --docs-dir "{カレントディレクトリ}/docs" \
-  --output-dir "{ROOT}/プロジェクト概要書" \
-  --author "{作成者名}"
-```
-
-**② 業務フロー図**（Mermaid ベース・フロー別スライド PPTX）:
-```bash
-python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_flow_pptx.py" \
-  --docs-dir "{カレントディレクトリ}/docs" \
-  --output-dir "{ROOT}/プロジェクト概要書" \
-  --author "{作成者名}"
-```
-
-`swimlanes.json` が存在しない場合は ② をスキップし、その旨をユーザーに伝える。
-
-完了後、出力パスを表示:
-- `{ROOT}/プロジェクト概要書/プロジェクト概要書.pptx`
-- `{ROOT}/プロジェクト概要書/業務フロー図.pptx`（`swimlanes.json` が存在する場合のみ）
-
----
-
-## Step B: データモデル定義書
-
-> - オブジェクト・項目・リレーション等の**事実情報はメタデータから正確に取得できる**。一方で「なぜこの項目が必要か」「オブジェクトの業務的意味」「論理ER図」は**メタデータから復元不可**。
-> - 既存のデータモデル設計資料がない場合、**物理ER図と項目一覧のドラフトまで**が現実的な到達点。
-> - 図は自動配置のため、オブジェクト数が多いと重なり・レイアウト崩れが出やすい。最終調整は手作業を想定。
-
-**【使用する情報源】**
-- `docs/catalog/_index.md`, `docs/catalog/_data-model.md` — オブジェクト一覧・ER図
-- `docs/catalog/custom/*.md`, `docs/catalog/standard/*.md` — 各オブジェクト定義
-
-**【最新化手順】** `/sf-memory` → カテゴリ2「オブジェクト・項目構成」を選択
-
-**「全て」モードの場合**: Step 0-3 で確認済み。スキップして B-1 へ進む。
-
-**単独実行の場合**: AskUserQuestion で確認:
-- label: "最新化済み・このまま続ける"
-- label: "先に /sf-memory を実行する（ここで終了）"
-
-### B-1: docs/catalog/ フォルダの確認
-
-```bash
-python -c "
-import pathlib
-catalog = pathlib.Path('docs/catalog')
-index = catalog / '_index.md'
-model = catalog / '_data-model.md'
-print('index:', index.exists())
-print('model:', model.exists())
-"
-```
-
-- `_index.md` が存在しない場合: 「`docs/catalog/_index.md` が見つかりません。先に `/sf-memory` を実行してください。」と伝えて終了。
-- `_data-model.md` が存在しない場合: 「`docs/catalog/_data-model.md` が見つかりません。先に `/sf-memory` カテゴリ2 を実行してください。」と伝えて終了。
-
-### B-2: 生成
-
-```bash
-python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_data_model.py" \
-  --docs-dir "{カレントディレクトリ}/docs" \
-  --output-dir "{ROOT}/プロジェクト概要書" \
+  --output "{カレントディレクトリ}/docs/01_基本設計/プロジェクト概要書.xlsx" \
   --author "{作成者名}"
 ```
 
 完了後、出力パスを表示:
-- `{ROOT}/プロジェクト概要書/データモデル定義書.pptx`
+- `docs/01_基本設計/プロジェクト概要書.xlsx`
 
 ---
 
-## Step C: オブジェクト定義書
+## Step B: オブジェクト定義書
 
 **【使用する情報源】**
 - `docs/catalog/_index.md` — 対象オブジェクトの候補リスト表示に使用（フィールド情報には使わない）
@@ -416,13 +313,13 @@ python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_data
 - `_index.md` が古い（新規オブジェクトが未反映）場合: `/sf-memory` → カテゴリ2「オブジェクト・項目構成」
 - フィールドメタデータは実行時に Salesforce組織から直接取得するため、別途最新化不要
 
-**「全て」モードの場合**: Step 0-3 で設定済み（`SF_ALIAS` / `version_increment` / `システム名称` / `オブジェクトリスト`）。C-1〜C-4 をスキップして C-5 へ進む。
+**「全て」モードの場合**: Step 0-3 で設定済み（`SF_ALIAS` / `version_increment` / `システム名称` / `オブジェクトリスト`）。B-1〜B-4 をスキップして B-5 へ進む。
 
 **単独実行の場合**: AskUserQuestion で確認:
 - label: "このまま続ける"
 - label: "/sf-memory カテゴリ2 を実行してから続ける（終了）"
 
-### C-1: 接続先の選択（単独実行時のみ）
+### B-1: 接続先の選択（単独実行時のみ）
 
 まずカレントディレクトリの `.sf/config.json` から target-org を取得する:
 ```bash
@@ -437,7 +334,7 @@ if p.exists():
 
 **target-org が取得できた場合:**
 
-`docs/overview/org-profile.md` からシステム名を取得する（C-5 と同じ処理）:
+`docs/overview/org-profile.md` からシステム名を取得する（B-3 と同じ処理）:
 ```bash
 python -c "
 import re, pathlib, sys
@@ -467,9 +364,9 @@ sf org login web --alias _doc-tmp
 ブラウザが開くのでログインしてもらう。完了後 `SF_ALIAS=_doc-tmp` として控える。
 （生成完了後に `sf org logout --target-org _doc-tmp --no-prompt` で一時エイリアスを削除する）
 
-### C-2: 新規 or 更新の自動判定（単独実行時のみ）
+### B-2: 新規 or 更新の自動判定（単独実行時のみ）
 
-`{ROOT}/オブジェクト定義書/` 内の `オブジェクト項目定義書_v*.xlsx` を確認する:
+`docs/01_基本設計/` 内の `オブジェクト項目定義書_v*.xlsx` を確認する:
 
 **既存ファイルがある場合:**
 ファイル名を表示したあと、AskUserQuestion でバージョン種別を選択:
@@ -477,9 +374,9 @@ sf org login web --alias _doc-tmp
 - label: "メジャー更新（vX.Y → vX+1.0）"、description: "赤字をリセットして黒字化"
 
 **既存ファイルがない場合:**
-「新規作成モード（v1.0）で進めます」と表示して C-3 へ。
+「新規作成モード（v1.0）で進めます」と表示して B-3 へ。
 
-### C-3: システム名称（単独実行時のみ）
+### B-3: システム名称（単独実行時のみ）
 
 **新規作成の場合:** `docs/overview/org-profile.md` からシステム名を取得する（`組織名`・`システム名`・`プロジェクト名` の順で検索）。
 **更新の場合:** 既存ファイルの `_meta` シートから前回値を読む（`read_meta()` の `system_name` フィールド）。
@@ -492,7 +389,7 @@ Other が選ばれた場合はチャットで入力してもらう。
 
 > **重要**: 選択結果を後工程に渡す際は、label から `（前回/自動取得）` を除去した **元の値だけ** を `system_name` として使用する。ラベルの付記文字列は UI 表示用であり、資料には含めない。
 
-### C-4: 対象オブジェクトの選択（単独実行時のみ）
+### B-4: 対象オブジェクトの選択（単独実行時のみ）
 
 **新規作成の場合:**
 
@@ -533,7 +430,7 @@ if m:
 "
 ```
 
-取得した一覧（例: `Account Opportunity Contact Knowledge__kav`）を表示したうえで、AskUserQuestion で提示（Other は自動表示）:
+取得した一覧を表示したうえで、AskUserQuestion で提示（Other は自動表示）:
 - label: "既存と同じ（{オブジェクト一覧}）" description: "前回と同じオブジェクトで再生成"
 - label: "既存＋追加" description: "テキストで追加するオブジェクトを入力"
 
@@ -541,14 +438,14 @@ if m:
 **「既存＋追加」選択時:** テキストで追加オブジェクトを入力してもらい、既存リストに結合する。
 **Other 選択時:** テキストで全オブジェクトを入力してもらう。
 
-> 誤ってオブジェクトを消してしまわないよう、通常は「既存と同じ」または「既存＋追加」を使うこと。オブジェクト自体を削除したい場合は C-8 完了後に手動で行い、改版履歴に記録する（後述）。
+> 誤ってオブジェクトを消してしまわないよう、通常は「既存と同じ」または「既存＋追加」を使うこと。オブジェクト自体を削除したい場合は B-5 完了後に手動で行い、改版履歴に記録する（後述）。
 
 区切り文字は何でもOK（スペース・カンマ・全角スペース等）。
 入力内容を `--objects` に渡す（generate.py 内で名前解決する）。
 
 **スペルチェック:** オブジェクト名に明らかなタイポ（例: Oppotunity → Opportunity）があれば、生成前に確認を取る。
 
-### C-5: 生成
+### B-5: 生成
 
 **「全て」モードの場合**: Step 0-3 で確認済み。確認なしでそのまま生成を開始する。
 
@@ -558,20 +455,20 @@ if m:
 
 「キャンセル」が選ばれた場合は終了する。
 
-出力先サブフォルダを作成してから実行:
+出力先フォルダを作成してから実行:
 
 ```bash
-mkdir -p "{ROOT}/オブジェクト定義書"
+mkdir -p "docs/01_基本設計"
 ```
 
 ```bash
 python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate.py" \
   --sf-alias {SF_ALIAS} \
   --objects {オブジェクトリスト} \
-  --output-dir "{ROOT}/オブジェクト定義書" \
+  --output-dir "{カレントディレクトリ}/docs/01_基本設計" \
   --author "{作成者名}" \
   --system-name "{システム名称}" \
-  --source-file "{ROOT}/オブジェクト定義書/{既存ファイル名（新規は省略）}" \
+  --source-file "{カレントディレクトリ}/docs/01_基本設計/{既存ファイル名（新規は省略）}" \
   --version-increment {minor または major}
 ```
 
@@ -580,7 +477,7 @@ python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate.py" 
 > sf org logout --target-org _doc-tmp --no-prompt
 > ```
 
-### C-6: 完了案内
+### B-6: 完了案内
 
 出力パスを表示する。
 
@@ -595,6 +492,97 @@ python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate.py" 
 
 > 改版履歴への自動記録が行われていない場合は、完了後に手動で改版履歴シートに追記すること。
 
+---
+
+## Step C: 機能一覧
+
+**【使用する情報源】**
+- `force-app/`（Apex/Trigger/Flow/LWC/Aura 等を直接スキャン）
+- `docs/feature_ids.yml`（機能ID台帳 — 初回実行時に自動生成）
+
+**【最新化手順】** `/sf-retrieve` を実行して force-app/ を最新化
+
+**「全て」モードの場合**: Step 0-3 で force-app/ の存在確認済み。存在しない場合はスキップ。
+
+**単独実行の場合**: `force-app/` の存在を確認:
+
+```bash
+python -c "
+import pathlib
+fa = pathlib.Path('force-app')
+print(fa.exists())
+"
+```
+
+`False` の場合: 「`force-app/` が見つかりません。先に `/sf-retrieve` を実行してください。」と伝えて終了。
+
+### C-1: バージョン種別（単独実行時のみ）
+
+`docs/01_基本設計/` 内の `機能一覧_v*.xlsx` を確認:
+```bash
+python -c "
+import pathlib, glob
+files = sorted(glob.glob('docs/01_基本設計/機能一覧_v*.xlsx'))
+for f in files:
+    print(f)
+"
+```
+
+既存ファイルがある場合は AskUserQuestion で選択:
+- label: "マイナー更新（vX.Y → vX.Y+1）"、description: "変更箇所を赤字表示"
+- label: "メジャー更新（vX.Y → vX+1.0）"、description: "赤字をリセットして黒字化"
+
+既存ファイルがない場合: 新規（v1.0）として続行。
+
+### C-2: プロジェクト名の取得
+
+`docs/overview/org-profile.md` からプロジェクト名を取得:
+```bash
+python -c "
+import re, pathlib, sys
+sys.stdout.reconfigure(encoding='utf-8')
+p = pathlib.Path('docs/overview/org-profile.md')
+if p.exists():
+    text = p.read_text(encoding='utf-8')
+    for pat in [r'プロジェクト名[^\n:：]*[:：]\s*(.+)', r'\|\s*組織名\s*\|\s*(.+?)\s*\|', r'システム名[^\n:：]*[:：]\s*(.+)']:
+        m = re.search(pat, text)
+        if m:
+            print(m.group(1).strip())
+            break
+"
+```
+
+取得できない場合は空文字として扱う。
+
+### C-3: スキャン & 生成
+
+出力先フォルダを作成してからスキャンを実行:
+```bash
+mkdir -p "docs/01_基本設計"
+```
+
+```bash
+python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/scan_features.py" \
+  --project-dir "{カレントディレクトリ}" \
+  --output "{カレントディレクトリ}/docs/01_基本設計/.features_tmp.json"
+```
+
+スキャン完了後、機能一覧を生成:
+```bash
+python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
+  --input "{カレントディレクトリ}/docs/01_基本設計/.features_tmp.json" \
+  --output-dir "{カレントディレクトリ}/docs/01_基本設計" \
+  --author "{作成者名}" \
+  --project-name "{プロジェクト名}" \
+  --source-file "{カレントディレクトリ}/docs/01_基本設計/{既存ファイル名（新規は省略）}" \
+  --version-increment {minor または major}
+```
+
+生成完了後、一時ファイルを削除:
+```bash
+python -c "import pathlib; p = pathlib.Path('{カレントディレクトリ}/docs/01_基本設計/.features_tmp.json'); p.unlink(missing_ok=True)"
+```
+
 内容について質問があれば対応する。
 
 ---
@@ -606,17 +594,18 @@ python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate.py" 
 ```
 ✅ 資料生成完了
 
+【生成先】docs/01_基本設計/
+
 【プロジェクト概要書】（生成した場合）
-  生成先: {ROOT}/プロジェクト概要書/
-  - プロジェクト概要書.pptx
-  - 業務フロー図.pptx（swimlanes.json がある場合のみ）
-  - データモデル定義書.pptx（Step B が実行された場合）
+  - プロジェクト概要書.xlsx
 
 【オブジェクト定義書】（生成した場合）
-  生成先: {ROOT}/オブジェクト定義書/
   - オブジェクト項目定義書_v{version}.xlsx
+
+【機能一覧】（生成した場合）
+  - 機能一覧_v{version}.xlsx
 
 ⚠️ 要確認: ...
 ```
 
-> 設計書（プログラム設計・基本設計・詳細設計・機能一覧）の生成は `/sf-design` を使用すること。
+> 詳細設計・プログラム設計の生成は `/sf-design` を使用すること。
