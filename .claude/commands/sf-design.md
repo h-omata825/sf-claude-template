@@ -13,9 +13,9 @@ Salesforce プロジェクトの設計書を生成します。
 
 | 層 | 対象読者 | 内容 | 出力先 |
 |---|---|---|---|
-| ドメイン設計 | 経営者・PM・業務担当者 | 業務ドメイン単位の目的・業務フロー・画面構成・コンポーネント全体像（5〜20件） | `{ROOT}/ドメイン設計書/` |
-| 詳細設計 | エンジニア | 機能グループ単位のコンポーネント仕様・インターフェース・画面項目 | `{ROOT}/詳細設計書/` |
-| プログラム設計 | 実装者 | コンポーネント単位の処理フロー・SOQL・DML | `{ROOT}/プログラム設計書/` |
+| ドメイン設計 | 経営者・PM・業務担当者 | 業務ドメイン単位の目的・業務フロー・画面構成・コンポーネント全体像（5〜20件） | `{ROOT}/02_詳細設計/ドメイン設計書/` |
+| 詳細設計 | エンジニア | 機能グループ単位のコンポーネント仕様・インターフェース・画面項目 | `{ROOT}/02_詳細設計/` |
+| プログラム設計 | 実装者 | コンポーネント単位の処理フロー・SOQL・DML | `{ROOT}/03_プログラム設計/` |
 
 ---
 
@@ -49,7 +49,7 @@ Other が選ばれた場合またはチャットで直接聞く:
 python -c "
 import pathlib, sys
 p = pathlib.Path(r'{入力値}')
-known = ['基本設計書', '詳細設計書', 'プログラム設計書']
+known = ['01_基本設計', '02_詳細設計', '03_プログラム設計']
 for part in [p] + list(p.parents):
     if part.name in known:
         print('ROOT:' + str(part.parent))
@@ -230,10 +230,10 @@ for e in errors:
 ## Step 1: ドメイン設計（選択した場合）
 
 ```bash
-mkdir -p "{ROOT}/ドメイン設計書" && mkdir -p "{ROOT}/ドメイン設計書/.tmp"
+mkdir -p "{ROOT}/02_詳細設計/ドメイン設計書" && mkdir -p "{ROOT}/02_詳細設計/ドメイン設計書/.tmp"
 ```
 
-`output_dir` = `{ROOT}/ドメイン設計書`、`tmp_dir` = `{ROOT}/ドメイン設計書/.tmp`
+`output_dir` = `{ROOT}/02_詳細設計/ドメイン設計書`、`tmp_dir` = `{ROOT}/02_詳細設計/ドメイン設計書/.tmp`
 
 **「全て」モードの場合**: feature_groups.yml は Step 0-3 で生成済み。ドメイン定義は sf-domain-design-writer が `domain_groups.yml` から読み取る。選択をスキップして委譲へ進む。
 
@@ -280,8 +280,8 @@ AskUserQuestion で対象を選択する:
 
 ```
 project_dir:        {project_dir}
-output_dir:         {ROOT}/ドメイン設計書
-tmp_dir:            {ROOT}/ドメイン設計書/.tmp
+output_dir:         {ROOT}/02_詳細設計/ドメイン設計書
+tmp_dir:            {ROOT}/02_詳細設計/ドメイン設計書/.tmp
 author:             {author}
 project_name:       {project_name}
 target_domain_ids:  {target_domain_ids_1}  # 全ドメインの場合は空リスト []
@@ -293,10 +293,10 @@ version_increment:  minor
 ## Step 2: 詳細設計（選択した場合）
 
 ```bash
-mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
+mkdir -p "{ROOT}/02_詳細設計" && mkdir -p "{ROOT}/02_詳細設計/.tmp"
 ```
 
-`output_dir` = `{ROOT}/詳細設計書`、`tmp_dir` = `{ROOT}/詳細設計書/.tmp`
+`output_dir` = `{ROOT}/02_詳細設計`、`tmp_dir` = `{ROOT}/02_詳細設計/.tmp`
 
 ### 対象グループの選択
 
@@ -308,7 +308,7 @@ mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
 
 「グループIDを指定」の場合は Step 0-3 と同じグループ解決スクリプトで GRP-XXX に変換して `target_group_ids_2` とする。
 
-**ドメイン設計 JSON の参照**: Step 1 完了後は `{ROOT}/ドメイン設計書/.tmp` に domain JSON が存在する。sf-detail-design-writer はこれを自動参照できる。
+**ドメイン設計 JSON の参照**: Step 1 完了後は `{ROOT}/02_詳細設計/ドメイン設計書/.tmp` に domain JSON が存在する。sf-detail-design-writer はこれを自動参照できる。
 
 ### sf-detail-design-writer に委譲
 
@@ -316,8 +316,8 @@ mkdir -p "{ROOT}/詳細設計書" && mkdir -p "{ROOT}/詳細設計書/.tmp"
 
 ```
 project_dir:           {project_dir}
-output_dir:            {ROOT}/詳細設計書
-tmp_dir:               {ROOT}/詳細設計書/.tmp
+output_dir:            {ROOT}/02_詳細設計
+tmp_dir:               {ROOT}/02_詳細設計/.tmp
 author:                {author}
 project_name:          {project_name}
 target_group_ids:      {target_group_ids_2}  # 全グループの場合は空リスト []
@@ -331,10 +331,10 @@ version_increment:     minor
 > プログラム設計書と合わせて **機能一覧**（全コンポーネントの索引 Excel）も自動生成される。
 
 ```bash
-mkdir -p "{ROOT}/プログラム設計書" && mkdir -p "{ROOT}/プログラム設計書/.tmp"
+mkdir -p "{ROOT}/03_プログラム設計" && mkdir -p "{ROOT}/03_プログラム設計/.tmp"
 ```
 
-`output_dir` = `{ROOT}/プログラム設計書`、`tmp_dir` = `{ROOT}/プログラム設計書/.tmp`
+`output_dir` = `{ROOT}/03_プログラム設計`、`tmp_dir` = `{ROOT}/03_プログラム設計/.tmp`
 
 ### 機能スキャン
 
@@ -406,19 +406,19 @@ print(f'画面系（sf-screen-writer対象）: {len(screen_list)}件')
 
 > **実行順序は必ず守ること**: sf-design-writer の機能一覧生成は sf-screen-writer が出力した design JSON も収集するため、sf-screen-writer を先に完了させてから sf-design-writer を起動する。
 
-**上位設計 JSON の参照**: `{ROOT}/基本設計書/.tmp/` と `{ROOT}/詳細設計書/.tmp/` に JSON が存在する場合は、その旨を**エージェント起動時に明示する**（エージェント内で自動参照する）。
+**上位設計 JSON の参照**: `{ROOT}/基本設計書/.tmp/` と `{ROOT}/02_詳細設計/.tmp/` に JSON が存在する場合は、その旨を**エージェント起動時に明示する**（エージェント内で自動参照する）。
 
 **① LWC・画面フロー・Visualforce・Aura → sf-screen-writer に委譲（先に実行）:**
 ```
 project_dir:       {project_dir}
-output_dir:        {ROOT}/プログラム設計書
-tmp_dir:           {ROOT}/プログラム設計書/.tmp
+output_dir:        {ROOT}/03_プログラム設計
+tmp_dir:           {ROOT}/03_プログラム設計/.tmp
 author:            {author}
 project_name:      {project_name}
 feature_list:      {feature_list}（画面系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
 target_ids:        {target_ids}
 version_increment: minor
-上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/詳細設計書/.tmp/ に存在する JSON（なければ省略）
+上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/02_詳細設計/.tmp/ に存在する JSON（なければ省略）
 ```
 
 sf-screen-writer の完了を確認してから次へ進む。
@@ -426,14 +426,14 @@ sf-screen-writer の完了を確認してから次へ進む。
 **② Apex・Batch・Flow(非画面)・Integration → sf-design-writer に委譲（sf-screen-writer 完了後）:**
 ```
 project_dir:       {project_dir}
-output_dir:        {ROOT}/プログラム設計書
-tmp_dir:           {ROOT}/プログラム設計書/.tmp
+output_dir:        {ROOT}/03_プログラム設計
+tmp_dir:           {ROOT}/03_プログラム設計/.tmp
 author:            {author}
 project_name:      {project_name}
 feature_list:      {feature_list}（Apex系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
 target_ids:        {target_ids}
 version_increment: minor
-上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/詳細設計書/.tmp/ に存在する JSON（なければ省略）
+上位設計参照:      {ROOT}/基本設計書/.tmp/ および {ROOT}/02_詳細設計/.tmp/ に存在する JSON（なければ省略）
 ```
 
 sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生成する。sf-screen-writer の design JSON が `{tmp_dir}` に揃っている状態で起動すること。
@@ -451,7 +451,7 @@ sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生
 ```bash
 python -c "
 import shutil, pathlib
-for subdir in ['ドメイン設計書', '詳細設計書', 'プログラム設計書']:
+for subdir in ['02_詳細設計/ドメイン設計書', '02_詳細設計', '03_プログラム設計']:
     tmp = pathlib.Path(r'{ROOT}') / subdir / '.tmp'
     if tmp.exists():
         shutil.rmtree(tmp, ignore_errors=True)
@@ -468,15 +468,15 @@ print('クリーンアップ完了')
 ✅ 設計書生成完了
 
 【ドメイン設計】（生成した場合）
-  生成先: {ROOT}/ドメイン設計書/
+  生成先: {ROOT}/02_詳細設計/ドメイン設計書/
   生成数: {n} ドメイン
 
 【詳細設計】（生成した場合）
-  生成先: {ROOT}/詳細設計書/
+  生成先: {ROOT}/02_詳細設計/
   生成数: {n} グループ
 
 【プログラム設計】（生成した場合）
-  生成先: {ROOT}/プログラム設計書/
+  生成先: {ROOT}/03_プログラム設計/
   生成数: {n} 件
 
 ⚠️ 要確認: ...
