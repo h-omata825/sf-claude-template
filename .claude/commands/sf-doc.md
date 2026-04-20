@@ -25,14 +25,16 @@ Salesforceプロジェクト資料を会話形式で作成します。
 
 ---
 
+> 設計書（基本設計・詳細設計・プログラム設計・機能一覧）の生成は `/sf-design` を使用すること。
+
 ## Step 0: 資料種別の選択
 
 AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）:
 
-AskUserQuestion のツールを使い、以下の **3つ** を choices に含めて提示する:
+AskUserQuestion のツールを使い、以下を choices に含めて提示する:
 
 - 全て — プロジェクト概要書 + オブジェクト定義書 を順番に生成（A→B→C の順）
-- プロジェクト概要書 — 業務フロー図 + データモデル定義書（ER図）→ PPTX 2ファイル（Step A→B の順）
+- プロジェクト概要書 — プロジェクト概要書 PPTX + 業務フロー図 PPTX（要 swimlanes.json）+ データモデル定義書 PPTX（Step A→B の順）
 - オブジェクト定義書 — オブジェクト・項目定義書 → Excel
 
 **「全て」選択時の実行順序（この順番に従うこと）:**
@@ -94,16 +96,19 @@ Other が選ばれた場合はチャットで入力:
 python -c "
 import pathlib, sys
 p = pathlib.Path(r'{入力値}')
+# 既知のサブフォルダ名が入力パスの途中に含まれていたら、その親をROOTとする
+# 例: 'C:/work/プロジェクト概要書' → ROOT = 'C:/work'
+# 例: 'C:/work/output/' → ROOT = 'C:/work/output' (調整なし)
 known = ['プロジェクト概要書', 'オブジェクト定義書']
 for part in [p] + list(p.parents):
     if part.name in known:
-        print('ROOT:' + str(part.parent))
+        root = part.parent
+        print('ADJUSTED:' + str(root))
         sys.exit()
 print('ROOT:' + str(p))
 "
 ```
-出力の `ROOT:` 以降を `ROOT` として控える。  
-指定値が調整された場合は「{調整後パス} を管理フォルダとして使用します」と伝える。
+出力が `ADJUSTED:` で始まる場合は、その値を ROOT として使用し「{調整後パス} を管理フォルダとして使用します」と伝える。`ROOT:` の場合はそのまま ROOT として使用する。
 
 #### 作成者名
 
@@ -200,7 +205,7 @@ mkdir -p "{ROOT}/プロジェクト概要書"
 
 **① プロジェクト概要書**（表紙・概要・システム構成図を含む PPTX）:
 ```bash
-python scripts/python/sf-doc-mcp/generate_project_doc.py \
+python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_project_doc.py" \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{ROOT}/プロジェクト概要書" \
   --author "{作成者名}"
@@ -208,7 +213,7 @@ python scripts/python/sf-doc-mcp/generate_project_doc.py \
 
 **② 業務フロー図**（Mermaid ベース・フロー別スライド PPTX）:
 ```bash
-python scripts/python/sf-doc-mcp/generate_flow_pptx.py \
+python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_flow_pptx.py" \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{ROOT}/プロジェクト概要書" \
   --author "{作成者名}"
@@ -234,8 +239,7 @@ python scripts/python/sf-doc-mcp/generate_flow_pptx.py \
 
 **【最新化手順】** `/sf-memory` → カテゴリ2「オブジェクト・項目構成」を選択
 
-「全て」の流れで来た場合はこの確認をスキップする（Step A の確認で判断済みのため）。  
-単独実行の場合のみ AskUserQuestion で確認:
+AskUserQuestion で確認（「全て」の流れで来た場合も必ず確認する。Step A はカテゴリ1、Step B はカテゴリ2 で対象が異なるため）:
 - label: "最新化済み・このまま続ける"
 - label: "先に /sf-memory を実行する（ここで終了）"
 
@@ -258,7 +262,7 @@ print('model:', model.exists())
 ### B-2: 生成
 
 ```bash
-python scripts/python/sf-doc-mcp/generate_data_model.py \
+python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate_data_model.py" \
   --docs-dir "{カレントディレクトリ}/docs" \
   --output-dir "{ROOT}/プロジェクト概要書" \
   --author "{作成者名}"
@@ -424,7 +428,7 @@ mkdir -p "{ROOT}/オブジェクト定義書"
 ```
 
 ```bash
-python scripts/python/sf-doc-mcp/generate.py \
+python "{カレントディレクトリ}/scripts/python/sf-doc-mcp/generate.py" \
   --sf-alias {SF_ALIAS} \
   --objects {オブジェクトリスト} \
   --output-dir "{ROOT}/オブジェクト定義書" \
@@ -452,7 +456,7 @@ python scripts/python/sf-doc-mcp/generate.py \
 |---|---|---|---|
 | YYYY-MM-DD | 削除 | オブジェクト名 / 項目名 | — |
 
-> generate.py 側でこの記録が未実装の場合は、完了後に手動で改版履歴シートに追記すること。
+> 改版履歴への自動記録が行われていない場合は、完了後に手動で改版履歴シートに追記すること。
 
 内容について質問があれば対応する。
 
