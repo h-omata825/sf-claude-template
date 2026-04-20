@@ -160,15 +160,15 @@ def parse_relations(path: Path) -> list:
         if len(cols) < 4:
             continue
         parent_raw, child_raw, rel_kind, fk_field = cols[0], cols[1], cols[2], cols[3]
+        # バッククォート・マークダウンを除去してから判定
+        parent = re.sub(r'[\*`]', '', parent_raw).strip()
+        child  = re.sub(r'[\*`]', '', child_raw).strip()
+        fk     = re.sub(r'[\*`]', '', fk_field).strip()
         # ヘッダー・セパレーターをスキップ
-        if not re.match(r'\w', parent_raw) or parent_raw == "親オブジェクト":
+        if not re.match(r'\w', parent) or parent == "親オブジェクト":
             continue
-        # **主従...** のマークダウンを除去
-        parent = re.sub(r'\*+', '', parent_raw).strip()
-        child  = re.sub(r'\*+', '', child_raw).strip()
-        fk     = re.sub(r'\*+', '', fk_field).strip()
         # FKフィールドが複数ある場合は最初だけ（括弧内の説明を除く）
-        fk = re.split(r'[（(、,]', fk)[0].strip()
+        fk = re.split(r'[（(、,/ ]', fk)[0].strip()
         if parent and child and fk and re.match(r'\w', fk):
             fk_map[(parent, child)] = fk
 

@@ -254,7 +254,7 @@ def _build_pptx(
         return txb
 
     from pptx.enum.text import PP_ALIGN
-    _add_text(cover, '業務フロー図', 1, 2.5, 11.33, 1.2, 32, bold=True, align=PP_ALIGN.CENTER)
+    _add_text(cover, 'シーケンス図', 1, 2.5, 11.33, 1.2, 32, bold=True, align=PP_ALIGN.CENTER)
     _add_text(cover, company or '', 1, 3.9, 11.33, 0.6, 16, align=PP_ALIGN.CENTER)
     _add_text(cover, f'{date_str}　作成: {author}', 1, 5.5, 11.33, 0.5, 12,
               color=RGBColor(0xCC, 0xD6, 0xFF), align=PP_ALIGN.CENTER)
@@ -380,7 +380,7 @@ def main() -> None:
             print('ERROR: 生成できたスライドが 0 件です', file=sys.stderr)
             sys.exit(1)
 
-        output_path = output_dir / '業務フロー図.pptx'
+        output_path = output_dir / 'シーケンス図.pptx'
         _build_pptx(slides_data, output_path, args.author, company, date_str)
 
     print(f'出力: {output_path}', file=sys.stderr)

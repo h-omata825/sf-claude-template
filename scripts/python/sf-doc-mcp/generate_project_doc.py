@@ -168,65 +168,83 @@ def build_system_slide(system: dict) -> dict:
     touchpoints    = system.get("touchpoints", [])[:3]
 
     boxes, arrows = [], []
-    # Slide canvas: x 0.3..13.0, y 1.2..7.0
-    CENTER_X, CENTER_Y = 6.65, 4.0
+    # Slide canvas: title bar goes y=0..1.10, content area y=1.20..7.38
+    TITLE_H   = 1.10
+    CONTENT_Y0 = TITLE_H + 0.12   # 1.22
+    CONTENT_Y1 = 7.38
+    AVAIL_H    = CONTENT_Y1 - CONTENT_Y0
+    CENTER_X   = 6.65
+    CENTER_Y   = (CONTENT_Y0 + CONTENT_Y1) / 2   # ≈ 4.30
     CORE_W, CORE_H = 3.0, 1.3
 
-    # Core box
-    core_label = core.get("name", "Salesforce")
+    # Core box — 括弧前の名称のみ使い、ロールを2行目に
+    core_name = core.get("name", "Salesforce")
+    short_name = core_name.split("(")[0].split("（")[0].strip() or core_name[:20]
+    core_label = short_name
     if core.get("role"):
-        core_label += f"\n{core['role'][:30]}"
+        core_label += f"\n{core['role'][:22]}"
     boxes.append({
         "id": "core", "label": core_label,
         "x": CENTER_X - CORE_W / 2, "y": CENTER_Y - CORE_H / 2,
         "w": CORE_W, "h": CORE_H, "style": "primary",
     })
 
-    # Actors (left column)
+    # Actors (left column) — dynamic gap to stay within content area
     if actors:
-        ax = 0.6
+        ax = 0.45
         aw = 2.3
-        ah = 0.8
-        total_h = len(actors) * ah + (len(actors) - 1) * 0.2
-        ay0 = CENTER_Y - total_h / 2
+        ah = 0.78
+        n_act = len(actors)
+        ideal_h = n_act * ah + (n_act - 1) * 0.20
+        if ideal_h > AVAIL_H:
+            a_gap = max(0.06, (AVAIL_H - n_act * ah) / max(n_act - 1, 1))
+            ay0 = CONTENT_Y0
+        else:
+            a_gap = 0.20
+            ay0 = CENTER_Y - ideal_h / 2
+        ay0 = max(ay0, CONTENT_Y0)
         for i, a in enumerate(actors):
             aid = f"actor{i}"
             label = a.get("name", f"利用者{i+1}")
-            if a.get("count"):
-                label += f"\n({a['count']}名)"
-            y = ay0 + i * (ah + 0.2)
+            y = ay0 + i * (ah + a_gap)
             boxes.append({
                 "id": aid, "label": label,
-                "x": ax, "y": y, "w": aw, "h": ah, "style": "secondary",
+                "x": ax, "y": round(y, 3), "w": aw, "h": ah, "style": "secondary",
             })
             arrows.append({
                 "from": aid, "to": "core",
                 "side_from": "right", "side_to": "left",
-                "label": (a.get("channels") or [""])[0] if a.get("channels") else "",
+                "label": "",
             })
 
-    # External systems (right column)
+    # External systems (right column) — dynamic gap to fill content area
     if external_syss:
-        ex_x = 10.0
-        ex_w = 2.7
-        ex_h = 0.9
-        total_h = len(external_syss) * ex_h + (len(external_syss) - 1) * 0.2
-        ey0 = CENTER_Y - total_h / 2
+        ex_x = 9.95
+        ex_w = 3.0
+        ex_h = 0.88
+        n_ext = len(external_syss)
+        ideal_h = n_ext * ex_h + (n_ext - 1) * 0.20
+        if ideal_h > AVAIL_H:
+            # Compress gap to fit exactly
+            e_gap = max(0.06, (AVAIL_H - n_ext * ex_h) / max(n_ext - 1, 1))
+            ey0 = CONTENT_Y0
+        else:
+            e_gap = 0.20
+            ey0 = CENTER_Y - ideal_h / 2
+        ey0 = max(ey0, CONTENT_Y0)
         for i, ex in enumerate(external_syss):
             eid = f"ext{i}"
-            label = ex.get("name", f"外部{i+1}")
-            if ex.get("purpose"):
-                label += f"\n{ex['purpose'][:24]}"
-            y = ey0 + i * (ex_h + 0.2)
+            raw = ex.get("name", f"外部{i+1}")
+            # 括弧前の主名称だけ使う（短く読みやすくする）
+            label = raw.split("（")[0].split("(")[0].strip()[:22] or raw[:22]
+            y = ey0 + i * (ex_h + e_gap)
             boxes.append({
                 "id": eid, "label": label,
-                "x": ex_x, "y": y, "w": ex_w, "h": ex_h, "style": "light",
+                "x": ex_x, "y": round(y, 3), "w": ex_w, "h": ex_h, "style": "light",
             })
             direction = ex.get("direction", "out")
-            proto = _SYS_PROTOCOL_SHORT.get(ex.get("protocol", ""), ex.get("protocol", ""))
-            freq = ex.get("frequency", "")
-            lbl_parts = [x for x in [proto, freq] if x]
-            arrow_label = " / ".join(lbl_parts)
+            # 矢印ラベルは省略（箱の名前で十分、ラベルが重なって見づらいため）
+            arrow_label = ""
             if direction == "in":
                 arrows.append({
                     "from": eid, "to": "core",
@@ -246,47 +264,27 @@ def build_system_slide(system: dict) -> dict:
                     "label": arrow_label,
                 })
 
-    # Data stores (bottom)
+    # Data stores (bottom) — below core with adequate gap
     if data_stores:
         ds_w = 2.2
-        ds_h = 0.7
-        total_w = len(data_stores) * ds_w + (len(data_stores) - 1) * 0.3
+        ds_h = 0.68
+        ds_gap = 0.28
+        total_w = len(data_stores) * ds_w + (len(data_stores) - 1) * ds_gap
         dx0 = CENTER_X - total_w / 2
-        dy = CENTER_Y + CORE_H / 2 + 0.9
+        dy = CENTER_Y + CORE_H / 2 + 0.75
+        # Keep within content area
+        if dy + ds_h > CONTENT_Y1:
+            dy = CONTENT_Y1 - ds_h
         for i, ds in enumerate(data_stores):
             did = f"ds{i}"
-            label = ds.get("name", f"データ{i+1}")
-            if ds.get("purpose"):
-                label += f"\n{ds['purpose'][:20]}"
-            x = dx0 + i * (ds_w + 0.3)
+            label = ds.get("name", f"データ{i+1}")[:22]
+            x = dx0 + i * (ds_w + ds_gap)
             boxes.append({
                 "id": did, "label": label,
-                "x": x, "y": dy, "w": ds_w, "h": ds_h, "style": "light",
+                "x": round(x, 3), "y": round(dy, 3), "w": ds_w, "h": ds_h, "style": "light",
             })
             arrows.append({
                 "from": "core", "to": did,
-                "side_from": "bottom", "side_to": "top", "label": "",
-            })
-
-    # Touchpoints (top)
-    if touchpoints:
-        tp_w = 2.0
-        tp_h = 0.6
-        total_w = len(touchpoints) * tp_w + (len(touchpoints) - 1) * 0.3
-        tx0 = CENTER_X - total_w / 2
-        ty = CENTER_Y - CORE_H / 2 - 0.9
-        for i, tp in enumerate(touchpoints):
-            tid = f"tp{i}"
-            label = tp.get("name", f"接点{i+1}")
-            if tp.get("platform"):
-                label += f"\n{tp['platform'][:20]}"
-            x = tx0 + i * (tp_w + 0.3)
-            boxes.append({
-                "id": tid, "label": label,
-                "x": x, "y": ty, "w": tp_w, "h": tp_h, "style": "accent",
-            })
-            arrows.append({
-                "from": tid, "to": "core",
                 "side_from": "bottom", "side_to": "top", "label": "",
             })
 
