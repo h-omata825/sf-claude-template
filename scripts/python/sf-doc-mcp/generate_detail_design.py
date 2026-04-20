@@ -130,13 +130,11 @@ PROC_COL_GROUPS = [
 COMP_DATA_ROW_START = 5
 COMP_NAME_CS, COMP_NAME_CE = 2,  9
 COMP_TYPE_CS, COMP_TYPE_CE = 10, 13
-COMP_ROLE_CS, COMP_ROLE_CE = 14, 24
-COMP_DEP_CS,  COMP_DEP_CE  = 25, 31
+COMP_ROLE_CS, COMP_ROLE_CE = 14, 31  # 依存方向列廃止のため役割を31まで拡張
 COMP_COL_GROUPS = [
     (COMP_NAME_CS, COMP_NAME_CE),
     (COMP_TYPE_CS, COMP_TYPE_CE),
     (COMP_ROLE_CS, COMP_ROLE_CE),
-    (COMP_DEP_CS, COMP_DEP_CE),
 ]
 
 GRID_RIGHT_C = 31
@@ -144,8 +142,8 @@ GRID_RIGHT_C = 31
 SCALAR_FIELDS  = ["summary", "purpose", "users", "trigger_screen", "trigger"]
 SECTION_SHEETS = {
     "business_flow":    "業務フロー",
-    "related_objects":  "対象オブジェクト",
     "process_steps":    "処理概要",
+    "related_objects":  "対象オブジェクト",
     "components":       "関連コンポーネント",
 }
 
@@ -385,44 +383,13 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
         _embed_image(ws, png_path, img_anchor, img_w=880)
 
 
-def _compute_dep_direction(api_name: str, components: list[dict]) -> str:
-    """依存方向テキストを計算する。
-
-    - callees があれば「呼び出す」
-    - 他コンポーネントの callees に含まれていれば「呼ばれる」
-    - 両方なら「双方向」
-    """
-    has_callees = False
-    has_callers = False
-
-    for comp in components:
-        if comp.get("api_name", "") == api_name:
-            if comp.get("callees", []):
-                has_callees = True
-        else:
-            if api_name in comp.get("callees", []):
-                has_callers = True
-
-    if has_callees and has_callers:
-        return "双方向"
-    if has_callees:
-        return "呼び出す"
-    if has_callers:
-        return "呼ばれる"
-    return ""
-
-
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
                             png_path: str | None):
-    """関連コンポーネントシート: テーブル(動的行) + コンポーネント図。
-
-    依存方向列に callees/callers 情報を吸収。
-    """
+    """関連コンポーネントシート: テーブル(動的行) + コンポーネント図。"""
     components = data.get("components", [])
     n_data = len(components)
     total_rows = n_data + DYNAMIC_EMPTY_ROWS
 
-    # データ行 + 空行の枠を作成
     r = COMP_DATA_ROW_START
     data_rows(ws, r, r + total_rows - 1, COMP_COL_GROUPS, row_h=24)
 
@@ -431,18 +398,14 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
         is_changed = api_name in changed_comp_keys
         set_h(ws, r, 24)
 
-        dep_text = _compute_dep_direction(api_name, components)
-
         c1 = MW(ws, r, COMP_NAME_CS, COMP_NAME_CE, api_name,
                 border=B_all())
         c2 = MW(ws, r, COMP_TYPE_CS, COMP_TYPE_CE, comp.get("type", ""),
                 border=B_all(), h="center")
         c3 = MW(ws, r, COMP_ROLE_CS, COMP_ROLE_CE, comp.get("role", ""),
                 border=B_all(), wrap=True, v="top")
-        c4 = MW(ws, r, COMP_DEP_CS,  COMP_DEP_CE,  dep_text,
-                border=B_all(), wrap=True, v="top")
         if is_changed:
-            for c in (c1, c2, c3, c4):
+            for c in (c1, c2, c3):
                 dr.apply_red(c)
         r += 1
 
@@ -505,23 +468,30 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
         except Exception as e:
             print(f"  [WARN] スイムレーン図: {e}")
 
-    # 2. ER図（対象オブジェクト）— er_utils の matplotlib 版を使用
+    # 2. オブジェクト参照マトリクス（対象オブジェクト）
     objects = data.get("related_objects", [])
+    object_access = data.get("object_access", [])
+    components = data.get("components", [])
     if objects:
         try:
-            from er_utils import generate_er_image
             er_path = str(Path(tmp_dir) / "er.png")
-            boxes, arrows = _related_objects_to_er_boxes(objects)
-            n_obj = len(boxes)
-            er_w = min(14, max(8, n_obj * 3.0))
-            er_h = min(10, max(6, n_obj * 2.0))
-            generate_er_image(boxes, arrows, er_path,
-                              title="オブジェクト関連図",
-                              slide_w=er_w, slide_h=er_h)
+            if object_access:
+                dg.render_object_access_matrix(
+                    object_access, components, objects, er_path)
+            else:
+                # object_access がない場合は従来のER図にフォールバック
+                from er_utils import generate_er_image
+                boxes, arrows = _related_objects_to_er_boxes(objects)
+                n_obj = len(boxes)
+                er_w = min(14, max(8, n_obj * 3.0))
+                er_h = min(10, max(6, n_obj * 2.0))
+                generate_er_image(boxes, arrows, er_path,
+                                  title="オブジェクト関連図",
+                                  slide_w=er_w, slide_h=er_h)
             paths["er"] = er_path
-            print("  [OK] ER図")
+            print("  [OK] オブジェクト参照マトリクス")
         except Exception as e:
-            print(f"  [WARN] ER図: {e}")
+            print(f"  [WARN] オブジェクト参照マトリクス: {e}")
 
     # 3. フローチャート（処理概要）
     steps = data.get("process_steps", [])
@@ -766,15 +736,15 @@ def main():
             changed_step_nos=set() if is_major else changed_flows,
             png_path=png_paths.get("swimlane"))
 
-        fill_target_objects(
-            wb["対象オブジェクト"], data,
-            changed_obj_keys=set() if is_major else changed_objs,
-            png_path=png_paths.get("er"))
-
         fill_process_overview(
             wb["処理概要"], data,
             changed_step_nos=set() if is_major else changed_proc_steps,
             png_path=png_paths.get("flowchart"))
+
+        fill_target_objects(
+            wb["対象オブジェクト"], data,
+            changed_obj_keys=set() if is_major else changed_objs,
+            png_path=png_paths.get("er"))
 
         fill_related_components(
             wb["関連コンポーネント"], data,

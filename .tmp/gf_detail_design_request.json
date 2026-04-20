@@ -212,5 +212,15 @@
     "related_lwc": ["preCheck", "preCheckModal", "consultation", "consultationModal", "request", "requestModal"],
     "external_integrations": ["GF社通知メール（見積依頼後）"],
     "feature_dependencies": []
-  }
+  },
+
+  "object_access": [
+    {"component": "PreCheckController",    "object": "BusinessTravelerHeader__c", "operation": "R"},
+    {"component": "PreCheckController",    "object": "BusinessTraveler__c",       "operation": "W"},
+    {"component": "ConsultationController","object": "BusinessTraveler__c",       "operation": "W"},
+    {"component": "ConsultationController","object": "ConsultingMemo__c",         "operation": "W"},
+    {"component": "RequestController",     "object": "BusinessTraveler__c",       "operation": "R"},
+    {"component": "RequestController",     "object": "Quote__c",                  "operation": "INSERT"},
+    {"component": "RequestController",     "object": "QuoteDetail__c",            "operation": "INSERT"}
+  ]
 }

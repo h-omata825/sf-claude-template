@@ -265,8 +265,7 @@ def build_process_overview(wb):
 COMP_COLS = [
     (2,  9,  "コンポーネント名"),
     (10, 13, "種別"),
-    (14, 24, "役割"),
-    (25, 31, "依存方向"),
+    (14, 31, "役割"),
 ]
 
 def build_related_components(wb):
@@ -293,8 +292,8 @@ def main():
     build_revision(wb)
     build_overview(wb)
     build_business_flow(wb)
+    build_process_overview(wb)   # 業務フロー直後
     build_target_objects(wb)
-    build_process_overview(wb)
     build_related_components(wb)
 
     out = Path(args.output)

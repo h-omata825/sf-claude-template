@@ -404,10 +404,10 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "bgcolor": "white",
             "rankdir": "TB",
             "splines": "polyline",
-            "nodesep": "0.4",
-            "ranksep": "0.5",
+            "nodesep": "0.8",
+            "ranksep": "0.8",
             "fontname": FONT_JP,
-            "pad": "0.3",
+            "pad": "1.5",  # 余白を大きくして画像幅をスイムレーンと揃える
             "dpi": str(DPI),
         },
     )
@@ -416,23 +416,17 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         sid   = str(step.get("step", ""))
         title = step.get("title", "") or step.get("description", "")
         branch = step.get("branch", "")
-        soql   = step.get("soql", "")
-        dml    = step.get("dml", "")
-
-        note = ""
-        if soql: note += "\n[SOQL]"
-        if dml:  note += f"\n[DML: {dml[:20]}]"
 
         if branch:
             g.node(sid, label=f"{sid}. {title}",
                    shape="diamond", style="filled",
                    fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=FONT_JP, fontsize="9", width="2.0")
+                   fontname=FONT_JP, fontsize="9", width="1.5")
         else:
-            g.node(sid, label=f"{sid}. {title}{note}",
+            g.node(sid, label=f"{sid}. {title}",
                    shape="box", style="filled,rounded",
                    fillcolor=C_STEP_BG, fontcolor=C_STEP_FG,
-                   fontname=FONT_JP, fontsize="9", width="2.0")
+                   fontname=FONT_JP, fontsize="9", width="1.5")
 
     for i, step in enumerate(steps[:-1]):
         src = str(step.get("step", ""))
@@ -506,6 +500,119 @@ def render_component_diagram(components: list[dict], out_path: str) -> tuple[int
                        fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
                        fontname=FONT_JP, fontsize="9")
             g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
+
+    png_bytes = g.pipe(format="png")
+    with open(out_path, "wb") as f:
+        f.write(png_bytes)
+    if _HAS_PIL:
+        return _PILImage.open(out_path).size
+    return (0, 0)
+
+
+# ════════════════════════════════════════════════════════════════
+# 6. コンポーネント×オブジェクト参照マトリクス
+# ════════════════════════════════════════════════════════════════
+
+def render_object_access_matrix(
+    object_access: list[dict],
+    components: list[dict],
+    related_objects: list[dict],
+    out_path: str,
+) -> tuple[int, int]:
+    """コンポーネント×オブジェクト参照マトリクス図を生成する。
+
+    object_access: [{"component": "X", "object": "Y", "operation": "R|W|RW|INSERT"}]
+    components:    [{"api_name": "X", "type": "Apex", ...}]
+    related_objects: [{"api_name": "Y", "label": "Z", ...}]
+    """
+    if not _HAS_GV:
+        raise RuntimeError("graphviz が利用できません")
+
+    # Apex コンポーネントのみを列に使う
+    apex_comps = [c for c in components if c.get("type") == "Apex"]
+    comp_names = [c.get("api_name", "") for c in apex_comps]
+    if not comp_names:
+        comp_names = [c.get("api_name", "") for c in components]
+
+    obj_names  = [o.get("api_name", "") for o in related_objects]
+    obj_labels = {o.get("api_name", ""): o.get("label", o.get("api_name", ""))
+                  for o in related_objects}
+
+    # アクセスマトリクス構築
+    matrix: dict[str, dict[str, str]] = {o: {c: "" for c in comp_names} for o in obj_names}
+    for entry in object_access:
+        obj  = entry.get("object", "")
+        comp = entry.get("component", "")
+        op   = entry.get("operation", "")
+        if obj in matrix and comp in matrix[obj]:
+            matrix[obj][comp] = op
+
+    # 操作種別の色
+    _OP_COLOR = {
+        "R":      "#D9E1F2",
+        "W":      "#FFC7CE",
+        "RW":     "#FFEB9C",
+        "INSERT": "#C6EFCE",
+    }
+    HDR_BG = "#1F3864"
+    HDR_FG = "white"
+
+    def _td(content: str, bg: str = "white", bold: bool = False, align: str = "CENTER",
+            fsize: str = "9") -> str:
+        inner = f"<B>{content}</B>" if bold else content
+        return (f'<TD BGCOLOR="{bg}" ALIGN="{align}" '
+                f'CELLPADDING="4"><FONT POINT-SIZE="{fsize}">{inner}</FONT></TD>')
+
+    # ヘッダ行
+    header_cells = [_td("オブジェクト", bg=HDR_BG, bold=True,
+                        align="LEFT", fsize="9").replace(f'COLOR="{HDR_BG}"',
+                        f'COLOR="{HDR_BG}"').replace("<FONT", f'<FONT COLOR="{HDR_FG}"')]
+    for comp in comp_names:
+        header_cells.append(
+            f'<TD BGCOLOR="{HDR_BG}" ALIGN="CENTER" CELLPADDING="4">'
+            f'<FONT POINT-SIZE="8" COLOR="{HDR_FG}"><B>{comp}</B></FONT></TD>'
+        )
+    rows = [f'<TR>{"".join(header_cells)}</TR>']
+
+    # データ行
+    for obj in obj_names:
+        label = obj_labels.get(obj, obj)
+        cells = [
+            f'<TD BGCOLOR="#F2F2F2" ALIGN="LEFT" CELLPADDING="4">'
+            f'<FONT POINT-SIZE="9"><B>{label}</B></FONT><BR/>'
+            f'<FONT POINT-SIZE="7" COLOR="#666666">{obj}</FONT></TD>'
+        ]
+        for comp in comp_names:
+            op = matrix[obj][comp]
+            bg = _OP_COLOR.get(op, "white")
+            if op:
+                cells.append(
+                    f'<TD BGCOLOR="{bg}" ALIGN="CENTER" CELLPADDING="4">'
+                    f'<FONT POINT-SIZE="9"><B>{op}</B></FONT></TD>'
+                )
+            else:
+                cells.append(
+                    '<TD ALIGN="CENTER" CELLPADDING="4">'
+                    '<FONT POINT-SIZE="9" COLOR="#AAAAAA">-</FONT></TD>'
+                )
+        rows.append(f'<TR>{"".join(cells)}</TR>')
+
+    table_html = (
+        '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" BGCOLOR="white">'
+        + "".join(rows)
+        + "</TABLE>>"
+    )
+
+    g = _gv.Digraph(
+        "obj_matrix",
+        graph_attr={
+            "bgcolor": "white",
+            "fontname": FONT_JP,
+            "pad": "0.3",
+            "dpi": str(DPI),
+        },
+    )
+    g.node("matrix", label=table_html, shape="none", margin="0")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
