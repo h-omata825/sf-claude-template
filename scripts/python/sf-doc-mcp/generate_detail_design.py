@@ -431,124 +431,110 @@ def _compute_diffs(prev_data: dict | None, new_data: dict) -> dict:
 # ── PNG生成 ────────────────────────────────────────────────────────
 def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
     """4種の図形PNGを生成し、パスを返す。失敗したらNone。"""
+    import diagram_gen as dg
+
     paths: dict[str, str | None] = {
-        "swimlane":    None,
-        "er":          None,
-        "flowchart":   None,
-        "component":   None,
+        "swimlane":  None,
+        "er":        None,
+        "flowchart": None,
+        "component": None,
     }
 
     # 1. スイムレーン図（業務フロー）
     flows = data.get("business_flow", [])
     if flows:
         try:
-            from diagram_utils import generate_swimlane_diagram
             sl_path = str(Path(tmp_dir) / "swimlane.png")
-            if generate_swimlane_diagram(flows, sl_path):
-                paths["swimlane"] = sl_path
-                print(f"  [OK] スイムレーン図生成: {sl_path}")
+            dg.render_swimlane(_business_flow_to_swimlane(flows), sl_path)
+            paths["swimlane"] = sl_path
+            print("  [OK] スイムレーン図")
         except Exception as e:
-            print(f"  [WARN] スイムレーン図生成失敗: {e}")
+            print(f"  [WARN] スイムレーン図: {e}")
 
     # 2. ER図（対象オブジェクト）
     objects = data.get("related_objects", [])
     if objects:
         try:
-            from er_utils import generate_er_image
-            er_path = str(Path(tmp_dir) / "er_diagram.png")
-            boxes, arrows = _build_er_data(objects)
-            if boxes and generate_er_image(boxes, arrows, er_path,
-                                           title="対象オブジェクト関連図"):
-                paths["er"] = er_path
-                print(f"  [OK] ER図生成: {er_path}")
+            er_path = str(Path(tmp_dir) / "er.png")
+            obj_list, rels = _related_objects_to_er(objects)
+            dg.render_er_diagram(obj_list, rels, er_path)
+            paths["er"] = er_path
+            print("  [OK] ER図")
         except Exception as e:
-            print(f"  [WARN] ER図生成失敗: {e}")
+            print(f"  [WARN] ER図: {e}")
 
     # 3. フローチャート（処理概要）
     steps = data.get("process_steps", [])
     if steps:
         try:
-            from diagram_utils import generate_flowchart
             fc_path = str(Path(tmp_dir) / "flowchart.png")
-            if generate_flowchart(steps, fc_path):
-                paths["flowchart"] = fc_path
-                print(f"  [OK] フローチャート生成: {fc_path}")
+            dg.render_flowchart(steps, fc_path)
+            paths["flowchart"] = fc_path
+            print("  [OK] フローチャート")
         except Exception as e:
-            print(f"  [WARN] フローチャート生成失敗: {e}")
+            print(f"  [WARN] フローチャート: {e}")
 
     # 4. コンポーネント図（関連コンポーネント）
     components = data.get("components", [])
     if components:
         try:
-            from diagram_utils import generate_component_diagram
             cm_path = str(Path(tmp_dir) / "component.png")
-            if generate_component_diagram(components, cm_path):
-                paths["component"] = cm_path
-                print(f"  [OK] コンポーネント図生成: {cm_path}")
+            dg.render_component_diagram(components, cm_path)
+            paths["component"] = cm_path
+            print("  [OK] コンポーネント図")
         except Exception as e:
-            print(f"  [WARN] コンポーネント図生成失敗: {e}")
+            print(f"  [WARN] コンポーネント図: {e}")
 
     return paths
 
 
-def _build_er_data(related_objects: list[dict]) -> tuple[list, list]:
-    """related_objects → er_utils用の boxes/arrows に変換する。"""
-    boxes = []
-    arrows = []
-    n = len(related_objects)
+def _business_flow_to_swimlane(flows: list[dict]) -> dict:
+    """business_flow リストを render_swimlane 用のフロー dict に変換する。"""
+    lane_names = list(dict.fromkeys(f.get("actor", "不明") for f in flows))
+    steps = [
+        {"id": str(f.get("step", i + 1)), "lane": f.get("actor", "不明"),
+         "label": f.get("action", "")}
+        for i, f in enumerate(flows)
+    ]
+    transitions = []
+    for i, f in enumerate(flows):
+        nexts = f.get("next", [])
+        src = str(f.get("step", i + 1))
+        if nexts:
+            for n in nexts:
+                dst_step = n.get("step") or (flows[i + 1].get("step", i + 2) if i + 1 < len(flows) else None)
+                if dst_step:
+                    transitions.append({"from": src, "to": str(dst_step),
+                                        "condition": n.get("condition", "")})
+        elif i + 1 < len(flows):
+            transitions.append({"from": src, "to": str(flows[i + 1].get("step", i + 2))})
+    return {
+        "title": "業務フロー",
+        "lanes": [{"name": n} for n in lane_names],
+        "steps": steps,
+        "transitions": transitions,
+    }
 
-    # レイアウト: 3列以下は横並び、4以上は2列
-    if n <= 3:
-        cols = n
-        rows_count = 1
-    else:
-        cols = 2
-        rows_count = (n + 1) // 2
 
-    x_gap = 3.5
-    y_gap = 3.0
-    x_start = 1.0
-    y_start = 1.5  # タイトルバー下
-
-    for idx, obj in enumerate(related_objects):
-        col_idx = idx % cols
-        row_idx = idx // cols
-        x = x_start + col_idx * x_gap
-        y = y_start + row_idx * y_gap
-
-        fields_data = []
-        for f in obj.get("fields", []):
-            fields_data.append({
-                "api_name": f["api_name"],
-                "label":    f.get("label", ""),
-                "name":     f["api_name"],
-                "is_fk":    False,  # ER図ではFK表示しない（シンプル版）
+def _related_objects_to_er(objects: list[dict]) -> tuple[list, list]:
+    """related_objects を render_er_diagram 用の (objects, relations) に変換する。"""
+    obj_list = [
+        {"api": o.get("api_name", ""), "label": o.get("label", ""),
+         "type": "カスタム" if "__c" in o.get("api_name", "") else "標準"}
+        for o in objects
+    ]
+    rels = []
+    for o in objects:
+        for r in o.get("relations", []):
+            rels.append({
+                "parent": o.get("api_name", ""),
+                "rel":    r.get("type", "lookup"),
+                "child":  r.get("to", ""),
+                "field":  r.get("field", ""),
             })
+    return obj_list, rels
 
-        box_h = 0.62 + max(len(fields_data), 1) * 0.32
-        boxes.append({
-            "id":     obj["api_name"],
-            "label":  obj.get("label", ""),
-            "api_name": obj["api_name"],
-            "x":      x,
-            "y":      y,
-            "w":      2.8,
-            "h":      box_h,
-            "style":  "primary",
-            "fields": fields_data,
-        })
 
-        # リレーション矢印
-        for rel in obj.get("relations", []):
-            arrow_style = "master_detail" if rel.get("type") == "master-detail" else "lookup"
-            arrows.append({
-                "from":        obj["api_name"],
-                "to":          rel["to"],
-                "arrow_style": arrow_style,
-                "label":       rel.get("label", ""),
-            })
-
-    return boxes, arrows
 
 
 # ── メイン ──────────────────────────────────────────────────────────

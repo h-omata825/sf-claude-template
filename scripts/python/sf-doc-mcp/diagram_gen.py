@@ -48,6 +48,7 @@ C_DS_BG     = "#FFF2CC"   # データストア（薄黄）
 C_DS_FG     = "#7F6000"
 C_EDGE      = "#5A5A5A"
 C_LANE_HDR  = "#1F3864"
+C_HDR_BLUE    = "#2E75B6"
 C_STEP_BG     = "#2E75B6"
 C_STEP_FG     = "#FFFFFF"
 C_STEP_BORDER = "#1F3864"
@@ -375,6 +376,136 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
                fontsize="8",
                fontcolor=C_EDGE,
                arrowsize="0.8")
+
+    png_bytes = g.pipe(format="png")
+    with open(out_path, "wb") as f:
+        f.write(png_bytes)
+    if _HAS_PIL:
+        return _PILImage.open(out_path).size
+    return (0, 0)
+
+
+# ════════════════════════════════════════════════════════════════
+# 4. フローチャート（graphviz）
+# ════════════════════════════════════════════════════════════════
+
+def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
+    """
+    process_steps からフローチャートPNGを生成する。
+
+    steps: [{step, title, description, branch, soql, dml}]
+    """
+    if not _HAS_GV:
+        raise RuntimeError("graphviz が利用できません")
+
+    g = _gv.Digraph(
+        "flowchart",
+        graph_attr={
+            "bgcolor": "white",
+            "rankdir": "TB",
+            "splines": "polyline",
+            "nodesep": "0.4",
+            "ranksep": "0.5",
+            "fontname": FONT_JP,
+            "pad": "0.3",
+            "dpi": str(DPI),
+        },
+    )
+
+    for step in steps:
+        sid   = str(step.get("step", ""))
+        title = step.get("title", "") or step.get("description", "")
+        branch = step.get("branch", "")
+        soql   = step.get("soql", "")
+        dml    = step.get("dml", "")
+
+        note = ""
+        if soql: note += "\n[SOQL]"
+        if dml:  note += f"\n[DML: {dml[:20]}]"
+
+        if branch:
+            g.node(sid, label=f"{sid}. {title}",
+                   shape="diamond", style="filled",
+                   fillcolor="#FFF2CC", fontcolor="#7F6000",
+                   fontname=FONT_JP, fontsize="9", width="2.0")
+        else:
+            g.node(sid, label=f"{sid}. {title}{note}",
+                   shape="box", style="filled,rounded",
+                   fillcolor=C_STEP_BG, fontcolor=C_STEP_FG,
+                   fontname=FONT_JP, fontsize="9", width="2.0")
+
+    for i, step in enumerate(steps[:-1]):
+        src = str(step.get("step", ""))
+        dst = str(steps[i + 1].get("step", ""))
+        branch = step.get("branch", "")
+        g.edge(src, dst,
+               label=branch,
+               color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE)
+
+    png_bytes = g.pipe(format="png")
+    with open(out_path, "wb") as f:
+        f.write(png_bytes)
+    if _HAS_PIL:
+        return _PILImage.open(out_path).size
+    return (0, 0)
+
+
+# ════════════════════════════════════════════════════════════════
+# 5. コンポーネント依存図（graphviz）
+# ════════════════════════════════════════════════════════════════
+
+_COMP_COLORS: dict[str, tuple[str, str]] = {
+    "Apex":    (C_SF_CORE,  C_SF_LABEL),
+    "LWC":     (C_HDR_BLUE, C_SF_LABEL),
+    "Flow":    ("#00B0F0",  "#000000"),
+    "Trigger": ("#1F3864",  "#FFFFFF"),
+    "Batch":   ("#5A5A5A",  "#FFFFFF"),
+}
+
+def render_component_diagram(components: list[dict], out_path: str) -> tuple[int, int]:
+    """
+    コンポーネント一覧から依存関係図PNGを生成する。
+
+    components: [{api_name, type, role, callees:[str]}]
+    """
+    if not _HAS_GV:
+        raise RuntimeError("graphviz が利用できません")
+
+    g = _gv.Digraph(
+        "components",
+        graph_attr={
+            "bgcolor": "white",
+            "rankdir": "LR",
+            "splines": "polyline",
+            "nodesep": "0.5",
+            "ranksep": "0.8",
+            "fontname": FONT_JP,
+            "pad": "0.3",
+            "dpi": str(DPI),
+        },
+    )
+
+    known = {c.get("api_name", "") for c in components}
+
+    for comp in components:
+        name  = comp.get("api_name", "")
+        ctype = comp.get("type", "Apex")
+        fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
+        g.node(name,
+               label=f"{name}\n[{ctype}]",
+               shape="box", style="filled,rounded",
+               fillcolor=fill, fontcolor=fg,
+               fontname=FONT_JP, fontsize="9", width="1.8")
+
+    for comp in components:
+        src = comp.get("api_name", "")
+        for callee in comp.get("callees", []):
+            if callee not in known:
+                g.node(callee, label=callee,
+                       shape="box", style="filled,rounded",
+                       fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
+                       fontname=FONT_JP, fontsize="9")
+            g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
