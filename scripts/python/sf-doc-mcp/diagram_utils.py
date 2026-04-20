@@ -449,23 +449,24 @@ def generate_business_flow_diagram(
 
 
 # ================================================================
-# 2. 画面遷移図（純matplotlib実装・networkx不要）
+# 2. 画面遷移図（スネーク型レイアウト・番号バッジ付き）
 # ================================================================
 def generate_screen_transition_diagram(
     screens: list[dict],
     out_path: str,
-    fig_w: float = 12,
+    fig_w: float = 14,
 ) -> bool:
-    """画面遷移図を生成する（円形レイアウト）。
+    """画面遷移図を生成する（スネーク型レイアウト）。
 
     screens: [{"name": "見積一覧", "component": "QuotationList",
                "transitions_to": ["見積入力画面"]}]
+    transitions_to が未指定の場合、screens リストの順番通りに自動連結する。
     戻り値: True(成功) / False(失敗)
     """
     if not HAS_MPL or not screens:
         return False
 
-    import math as _math
+    from matplotlib.patches import Circle as _Circle
 
     # 全ノードを収集（順序維持）
     screen_map: dict[str, dict] = {}
@@ -480,31 +481,55 @@ def generate_screen_transition_diagram(
         if name not in all_nodes:
             all_nodes.append(name)
 
-    for s in screens:
-        name = s.get("name", "")
-        for target in s.get("transitions_to", []):
-            if target:
-                if target not in all_nodes:
-                    all_nodes.append(target)
-                if name:
-                    edges.append((name, target))
+    # transitions_to が1件でも指定されているか判定
+    has_explicit_transitions = any(
+        s.get("transitions_to") for s in screens
+    )
+
+    if has_explicit_transitions:
+        # 明示的遷移を使う
+        for s in screens:
+            name = s.get("name", "")
+            for target in s.get("transitions_to", []):
+                if target:
+                    if target not in all_nodes:
+                        all_nodes.append(target)
+                    if name:
+                        edges.append((name, target))
+    else:
+        # 未指定: リスト順で自動連結
+        for i in range(len(all_nodes) - 1):
+            edges.append((all_nodes[i], all_nodes[i + 1]))
 
     if not all_nodes:
         return False
 
-    # 円形レイアウト
+    # スネーク型レイアウト（1行最大3画面、左→右→左→右）
     n = len(all_nodes)
-    fig_h = max(6, fig_w * 0.75)
-    cx_fig, cy_fig = fig_w / 2, fig_h / 2
-    radius = min(fig_w, fig_h) * 0.38
+    cols_per_row = 3
+    n_rows = (n + cols_per_row - 1) // cols_per_row
+
+    box_w_sc, box_h_sc = 3.0, 0.85
+    margin_x = 1.5
+    margin_top = 0.8
+    row_step = 2.0
+    usable_w = fig_w - 2 * margin_x
+    col_step = usable_w / max(cols_per_row - 1, 1) if cols_per_row > 1 else 0
+
+    fig_h = margin_top + n_rows * row_step + 0.8
 
     node_pos: dict[str, tuple[float, float]] = {}
+    node_order: dict[str, int] = {}
     for i, name in enumerate(all_nodes):
-        angle = _math.pi / 2 + 2 * _math.pi * i / max(n, 1)
-        node_pos[name] = (
-            cx_fig + radius * _math.cos(angle),
-            cy_fig + radius * _math.sin(angle),
-        )
+        row_idx = i // cols_per_row
+        col_idx = i % cols_per_row
+        # 偶数行: 左→右、奇数行: 右→左
+        if row_idx % 2 == 1:
+            col_idx = cols_per_row - 1 - col_idx
+        cx = margin_x + col_step * col_idx
+        cy = fig_h - margin_top - row_step * row_idx
+        node_pos[name] = (cx, cy)
+        node_order[name] = i + 1
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     ax.axis("off")
@@ -512,37 +537,56 @@ def generate_screen_transition_diagram(
     ax.set_ylim(0, fig_h)
     fig.patch.set_facecolor("white")
 
-    box_w_sc, box_h_sc = 2.2, 0.72
-
-    # エッジ描画
+    # エッジ描画（青い矢印）
+    _ARROW_COLOR = "#2E75B6"
     for u, v in edges:
         x0, y0 = node_pos[u]
         x1, y1 = node_pos[v]
         ax.annotate(
             "", xy=(x1, y1), xytext=(x0, y0),
             arrowprops=dict(
-                arrowstyle="-|>", color="#666666", lw=1.2,
-                connectionstyle="arc3,rad=0.15",
-                shrinkA=max(box_w_sc, box_h_sc) * 16,
-                shrinkB=max(box_w_sc, box_h_sc) * 16,
+                arrowstyle="-|>", color=_ARROW_COLOR, lw=1.5,
+                connectionstyle="arc3,rad=0.12",
+                shrinkA=max(box_w_sc, box_h_sc) * 18,
+                shrinkB=max(box_w_sc, box_h_sc) * 18,
+                mutation_scale=14,
             ),
         )
 
     # ノード描画
+    badge_r = 0.22
     for name, (cx, cy) in node_pos.items():
+        # 角丸四角形
         ax.add_patch(FancyBboxPatch(
             (cx - box_w_sc / 2, cy - box_h_sc / 2), box_w_sc, box_h_sc,
-            boxstyle="round,pad=0.05,rounding_size=0.1",
-            facecolor="#DEEAF1", edgecolor="#4472C4", linewidth=1.2,
+            boxstyle="round,pad=0.06,rounding_size=0.12",
+            facecolor="#DEEAF1", edgecolor="#4472C4", linewidth=1.3,
         ))
-        ax.text(cx, cy + 0.1, _dom_wrap(name, 12),
-                ha="center", va="center", fontsize=8,
-                color=_hex("#1F3864"), **_fpkw(8.0, bold=True))
+        # 画面名
+        ax.text(cx, cy + 0.08, _dom_wrap(name, 14),
+                ha="center", va="center", fontsize=8.5,
+                color=_hex("#1F3864"), **_fpkw(8.5, bold=True))
+        # コンポーネント名（小さくグレー）
         comp = screen_map.get(name, {}).get("component", "")
         if comp:
-            ax.text(cx, cy - 0.2, comp,
+            ax.text(cx, cy - 0.22, comp,
                     ha="center", va="center", fontsize=6.5, color="#808080",
                     **_fpkw(6.5))
+
+        # 番号バッジ（左上に青丸+白数字）
+        num = node_order.get(name, 0)
+        badge_cx = cx - box_w_sc / 2 - badge_r * 0.3
+        badge_cy = cy + box_h_sc / 2 + badge_r * 0.3
+        badge = _Circle((badge_cx, badge_cy), badge_r,
+                         facecolor=_ARROW_COLOR, edgecolor="white",
+                         linewidth=1.2, zorder=10)
+        ax.add_patch(badge)
+        # 丸数字（unicode）または番号テキスト
+        num_labels = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+        num_text = num_labels[num - 1] if 1 <= num <= 20 else str(num)
+        ax.text(badge_cx, badge_cy, num_text,
+                ha="center", va="center", fontsize=8,
+                color="white", zorder=11, **_fpkw(8.0, bold=True))
 
     plt.tight_layout(pad=0.3)
     plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
@@ -558,16 +602,14 @@ def generate_component_diagram(
     out_path: str,
     fig_w: float = 12,
 ) -> bool:
-    """コンポーネント依存関係図を生成する（グリッドレイアウト）。
+    """コンポーネント依存関係図を生成する（LWC上段・Apex下段レイアウト）。
 
     components: [{"api_name": "QuotationCtrl", "type": "Apex",
-                  "role": "...", "calls": ["QuotationService"]}]
+                  "role": "...", "callees": ["QuotationService"]}]
     戻り値: True(成功) / False(失敗)
     """
     if not HAS_MPL or not components:
         return False
-
-    import math as _math
 
     # ノード収集
     comp_type_map: dict[str, str] = {}
@@ -582,7 +624,7 @@ def generate_component_diagram(
         comp_type_map[api] = ctype
         if api not in all_nodes:
             all_nodes.append(api)
-        for target in c.get("calls", []):
+        for target in c.get("callees", []):
             if target:
                 if target not in all_nodes:
                     all_nodes.append(target)
@@ -593,15 +635,20 @@ def generate_component_diagram(
     if not all_nodes:
         return False
 
-    # グリッドレイアウト（呼び出し元を上、呼び出し先を下に配置）
-    caller_set = {u for u, _ in edges}
-    callee_set = {v for _, v in edges}
-    top_nodes = [n for n in all_nodes if n in caller_set]
-    bot_nodes = [n for n in all_nodes if n not in caller_set]
+    # LWC/Aura を上段、Apex/Trigger/Flow/Other を下段に分類
+    _TOP_TYPES = {"LWC", "Aura"}
+    top_nodes = [n for n in all_nodes if comp_type_map.get(n, "") in _TOP_TYPES]
+    bot_nodes = [n for n in all_nodes if comp_type_map.get(n, "") not in _TOP_TYPES]
+
+    # どちらかが空なら caller/callee で分割にフォールバック
+    if not top_nodes or not bot_nodes:
+        caller_set = {u for u, _ in edges}
+        top_nodes = [n for n in all_nodes if n in caller_set]
+        bot_nodes = [n for n in all_nodes if n not in caller_set]
 
     fig_h = max(6, fig_w * 0.7)
     margin = 1.2
-    box_w_cp, box_h_cp = 2.0, 0.6
+    box_w_cp, box_h_cp = 2.8, 0.8
 
     def _row_positions(nodes: list[str], y: float) -> dict[str, tuple[float, float]]:
         n = len(nodes)
@@ -616,7 +663,7 @@ def generate_component_diagram(
         return result
 
     node_pos: dict[str, tuple[float, float]] = {}
-    node_pos.update(_row_positions(top_nodes, fig_h * 0.65))
+    node_pos.update(_row_positions(top_nodes, fig_h * 0.68))
     node_pos.update(_row_positions(bot_nodes, fig_h * 0.28))
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
@@ -625,6 +672,22 @@ def generate_component_diagram(
     ax.set_ylim(0, fig_h)
     fig.patch.set_facecolor("white")
 
+    # 段ラベル（上段/下段の分類名を表示）
+    if top_nodes:
+        top_y = fig_h * 0.68
+        ax.text(0.3, top_y, "LWC / Aura",
+                ha="left", va="center", fontsize=8, color="#555555",
+                **_fpkw(8.0, bold=True))
+    if bot_nodes:
+        bot_y = fig_h * 0.28
+        ax.text(0.3, bot_y, "Apex / Flow",
+                ha="left", va="center", fontsize=8, color="#555555",
+                **_fpkw(8.0, bold=True))
+
+    # 分割線
+    ax.plot([0.2, fig_w - 0.2], [fig_h * 0.48, fig_h * 0.48],
+            color="#CCCCCC", linewidth=0.8, linestyle="--")
+
     # エッジ描画
     for u, v in edges:
         x0, y0 = node_pos[u]
@@ -632,10 +695,10 @@ def generate_component_diagram(
         ax.annotate(
             "", xy=(x1, y1), xytext=(x0, y0),
             arrowprops=dict(
-                arrowstyle="-|>", color="#666666", lw=1.1,
+                arrowstyle="-|>", color="#666666", lw=1.2,
                 connectionstyle="arc3,rad=0.12",
-                shrinkA=max(box_w_cp, box_h_cp) * 15,
-                shrinkB=max(box_w_cp, box_h_cp) * 15,
+                shrinkA=max(box_w_cp, box_h_cp) * 16,
+                shrinkB=max(box_w_cp, box_h_cp) * 16,
             ),
         )
 
@@ -645,15 +708,15 @@ def generate_component_diagram(
         color = _COMP_COLORS.get(ctype, _COMP_DEFAULT_COLOR)
         ax.add_patch(FancyBboxPatch(
             (cx - box_w_cp / 2, cy - box_h_cp / 2), box_w_cp, box_h_cp,
-            boxstyle="round,pad=0.05,rounding_size=0.08",
-            facecolor=color, edgecolor="#333333", linewidth=1.0,
-            alpha=0.85,
+            boxstyle="round,pad=0.06,rounding_size=0.10",
+            facecolor=color, edgecolor="#333333", linewidth=1.1,
+            alpha=0.88,
         ))
-        ax.text(cx, cy, _dom_wrap(name, 16),
-                ha="center", va="center", fontsize=7,
-                color="white", **_fpkw(7.0, bold=True))
+        ax.text(cx, cy, _dom_wrap(name, 18),
+                ha="center", va="center", fontsize=7.5,
+                color="white", **_fpkw(7.5, bold=True))
 
-    # 凡例（右下）
+    # 凡例（左下、見やすく）
     legend_items = [
         ("Apex", _COMP_COLORS["Apex"]),
         ("LWC", _COMP_COLORS["LWC"]),
@@ -661,19 +724,19 @@ def generate_component_diagram(
         ("Aura", _COMP_COLORS["Aura"]),
         ("Other", _COMP_DEFAULT_COLOR),
     ]
-    legend_x = fig_w - 1.8
-    legend_y = 0.5
+    legend_x = 0.5
+    legend_y = 0.4
     for i, (label, color) in enumerate(legend_items):
-        ly = legend_y + i * 0.35
+        lx = legend_x + i * 1.6
         ax.add_patch(FancyBboxPatch(
-            (legend_x, ly - 0.1), 0.4, 0.22,
+            (lx, legend_y - 0.12), 0.45, 0.24,
             boxstyle="round,pad=0.02",
             facecolor=color, edgecolor="#333333", linewidth=0.6,
-            alpha=0.85,
+            alpha=0.88,
         ))
-        ax.text(legend_x + 0.55, ly, label,
-                ha="left", va="center", fontsize=7, color="#333333",
-                **_fpkw(7.0))
+        ax.text(lx + 0.58, legend_y, label,
+                ha="left", va="center", fontsize=7.5, color="#333333",
+                **_fpkw(7.5))
 
     plt.tight_layout(pad=0.3)
     plt.savefig(out_path, dpi=140, bbox_inches="tight", facecolor="white")
@@ -709,17 +772,77 @@ _LWC_TAG_MAP: dict[str, tuple[str, list[str]]] = {
 }
 
 
+def _is_binding_expr(s: str | None) -> bool:
+    """バインディング式 ({xxx}) かどうか判定。"""
+    if not s:
+        return False
+    return bool(re.match(r"^\{.*\}$", s.strip()))
+
+
 def extract_lwc_ui_elements(html_content: str) -> list[dict]:
-    """LWC HTML から UI エレメント情報を抽出する。"""
+    """LWC HTML から UI エレメント情報を抽出する。
+
+    - lightning-card の title を section_header として収集
+    - <label> タグのテキストを収集し、label 属性が空の要素の補完に使う
+    - 全要素を HTML 内の出現位置順にソートして返す
+    """
     elements: list[dict] = []
     if not html_content:
         return elements
 
+    # ── 1. <lightning-card title="..."> → section_header ──
+    for m in re.finditer(
+        r"<lightning-card\b([^>]*?)(/?>)", html_content, re.DOTALL
+    ):
+        attr_str = m.group(1)
+        tm = re.search(
+            r"""title\s*=\s*(?:"([^"]*)"|'([^']*)')""", attr_str, re.DOTALL
+        )
+        if tm:
+            title_val = tm.group(1) if tm.group(1) is not None else tm.group(2)
+            if title_val and not _is_binding_expr(title_val):
+                elements.append({
+                    "type": "section_header",
+                    "label": title_val,
+                    "required": False,
+                    "subtype": "",
+                    "_pos": m.start(),
+                })
+
+    # ── 2. <label> タグのテキスト収集 ──
+    label_tags: list[tuple[int, str]] = []  # (position, text)
+    for m in re.finditer(
+        r"<label\b[^>]*>(.*?)</label>", html_content, re.DOTALL
+    ):
+        raw_text = m.group(1)
+        # HTMLタグを除去してテキストのみ取得
+        clean = re.sub(r"<[^>]+>", "", raw_text).strip()
+        # 先頭の * や NBSP を除去（required マーカー由来）
+        clean = clean.lstrip("*\u00a0 \t")
+        if clean and not _is_binding_expr(clean) and len(clean) < 60:
+            label_tags.append((m.start(), clean))
+
+    def _find_nearby_label(pos: int, search_range: int = 500) -> str:
+        """pos の直前 search_range 文字以内にある <label> テキストを返す。"""
+        best_label = ""
+        best_dist = search_range + 1
+        for lpos, ltext in label_tags:
+            dist = pos - lpos
+            if 0 < dist <= search_range and dist < best_dist:
+                # 先頭の * や空白を除去（span required マーカー由来）
+                clean = ltext.lstrip("*\u00a0 \t")
+                if clean:
+                    best_label = clean
+                    best_dist = dist
+        return best_label
+
+    # ── 3. lightning-* 要素の抽出 ──
     for tag_name, (elem_type, _attrs) in _LWC_TAG_MAP.items():
         # 自己終了タグ・通常タグ両方にマッチ
         pattern = rf"<{re.escape(tag_name)}\b([^>]*?)(/?>)"
         for m in re.finditer(pattern, html_content, re.DOTALL):
             attr_str = m.group(1)
+            tag_pos = m.start()
 
             # --- 属性値の抽出ヘルパー ---
             def _attr(name: str, _attr_str: str = attr_str) -> str | None:
@@ -736,6 +859,9 @@ def extract_lwc_ui_elements(html_content: str) -> list[dict]:
                 label = _attr("label")
                 if not label:
                     continue
+                # バインディング式のラベルは空文字扱い
+                if _is_binding_expr(label):
+                    label = ""
                 variant = _attr("variant") or "neutral"
                 if variant not in ("brand", "destructive", "neutral"):
                     continue
@@ -744,6 +870,7 @@ def extract_lwc_ui_elements(html_content: str) -> list[dict]:
                     "label": label,
                     "required": False,
                     "subtype": variant,
+                    "_pos": tag_pos,
                 })
                 continue
 
@@ -755,6 +882,14 @@ def extract_lwc_ui_elements(html_content: str) -> list[dict]:
                 label = _attr("title") or _attr("label") or "データテーブル"
             elif elem_type == "record_form":
                 label = _attr("object-api-name") or label or "RecordForm"
+
+            # バインディング式は空文字扱い
+            if _is_binding_expr(label):
+                label = ""
+
+            # label が空の場合、直前の <label> タグで補完
+            if not label:
+                label = _find_nearby_label(tag_pos)
 
             if label is None:
                 label = ""
@@ -768,7 +903,15 @@ def extract_lwc_ui_elements(html_content: str) -> list[dict]:
                 "label": label,
                 "required": required,
                 "subtype": subtype,
+                "_pos": tag_pos,
             })
+
+    # ── 4. 出現位置順にソート ──
+    elements.sort(key=lambda e: e.get("_pos", 0))
+
+    # _pos は内部用なので除去
+    for e in elements:
+        e.pop("_pos", None)
 
     return elements
 
@@ -783,15 +926,17 @@ def generate_screen_wireframe(
     if not HAS_MPL:
         return False
 
-    # ── ボタンとフィールドを分離 ───────────────────────────────────────────
+    # ── ボタン・セクション見出し・フィールドを分離 ──────────────────────────
     buttons = [e for e in elements if e["type"] == "button"]
-    fields  = [e for e in elements if e["type"] != "button"]
+    fields  = [e for e in elements if e["type"] not in ("button",)]
 
     # ── フィールド高さ計算 ─────────────────────────────────────────────────
     _FIELD_H = {
         "input": 0.38, "picklist": 0.38, "textarea": 0.7,
         "table": 1.2, "record_form": 0.38,
+        "section_header": 0.0,  # section_header は _LABEL_H 不使用、独自高さ
     }
+    _SECTION_H = 0.35  # セクション見出しの高さ
     _LABEL_H   = 0.28   # ラベル行の高さ
     _GAP       = 0.12   # フィールド間の余白
     _CARD_PAD  = 0.30   # カード内の上下左右余白
@@ -810,7 +955,10 @@ def generate_screen_wireframe(
     def _col_height(col: list[dict]) -> float:
         h = 0.0
         for f in col:
-            h += _LABEL_H + _FIELD_H.get(f["type"], 0.38) + _GAP
+            if f["type"] == "section_header":
+                h += _SECTION_H + _GAP
+            else:
+                h += _LABEL_H + _FIELD_H.get(f["type"], 0.38) + _GAP
         return h
 
     body_h = max(_col_height(col_left), _col_height(col_right)) if col_right else _col_height(col_left)
@@ -875,6 +1023,24 @@ def generate_screen_wireframe(
             req   = f.get("required", False)
             fh    = _FIELD_H.get(ftype, 0.38)
             fw    = col_w - 0.2  # フィールド幅
+
+            # セクション見出し（section_header）
+            if ftype == "section_header":
+                # SLDS 青の帯 + テキスト
+                ax.add_patch(FancyBboxPatch(
+                    (x_start - 0.05, y), fw + 0.1, _SECTION_H,
+                    boxstyle="square,pad=0",
+                    facecolor=_SLDS_BRAND, edgecolor="none",
+                    alpha=0.12,
+                ))
+                ax.plot([x_start - 0.05, x_start + fw + 0.05],
+                        [y + _SECTION_H, y + _SECTION_H],
+                        color=_SLDS_BRAND, linewidth=1.2)
+                ax.text(x_start, y + _SECTION_H / 2, label,
+                        ha="left", va="center", color=_hex("#1F3864"),
+                        **_fpkw(9.5, bold=True))
+                y += _SECTION_H + _GAP
+                continue
 
             # ラベル
             if req:

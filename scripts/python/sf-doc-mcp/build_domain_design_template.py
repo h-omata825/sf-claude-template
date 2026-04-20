@@ -305,14 +305,14 @@ def build_screen_layout(wb):
     # row 16: section_band
     section_band(ws, 16, "■ 2. 画面遷移図")
 
-    # row 17〜36: 図形エリア (20行)
-    diagram_area(ws, 17, 36)
+    # row 17〜46: 図形エリア (30行)
+    diagram_area(ws, 17, 46)
 
-    # row 37: スペーサー
-    set_h(ws, 37, 10)
+    # row 47: スペーサー
+    set_h(ws, 47, 10)
 
-    # row 38: section_band for wireframes
-    section_band(ws, 38, "■ 3. 画面ワイヤーフレーム")
+    # row 48: section_band for wireframes
+    section_band(ws, 48, "■ 3. 画面ワイヤーフレーム")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -352,23 +352,23 @@ def build_component_layout(wb):
 
     # ── 2. コンポーネント関連図 ──
     section_band(ws, 21, "■ 2. コンポーネント関連図")
-    diagram_area(ws, 22, 41)
+    diagram_area(ws, 22, 45)
 
-    # row 42: スペーサー
-    set_h(ws, 42, 10)
+    # row 46: スペーサー
+    set_h(ws, 46, 10)
 
     # ── 3. 使用オブジェクト ──
-    section_band(ws, 43, "■ 3. 使用オブジェクト")
-    table_header(ws, 44, OB_COLS)
-    data_rows(ws, 45, 54, [(cs, ce) for cs, ce, _ in OB_COLS])
+    section_band(ws, 47, "■ 3. 使用オブジェクト")
+    table_header(ws, 48, OB_COLS)
+    data_rows(ws, 49, 58, [(cs, ce) for cs, ce, _ in OB_COLS])
 
-    # row 55: スペーサー
-    set_h(ws, 55, 10)
+    # row 59: スペーサー
+    set_h(ws, 59, 10)
 
     # ── 4. 外部連携・バッチ定義 ──
-    section_band(ws, 56, "■ 4. 外部連携・バッチ定義")
-    table_header(ws, 57, EX_COLS)
-    data_rows(ws, 58, 63, [(cs, ce) for cs, ce, _ in EX_COLS])
+    section_band(ws, 60, "■ 4. 外部連携・バッチ定義")
+    table_header(ws, 61, EX_COLS)
+    data_rows(ws, 62, 67, [(cs, ce) for cs, ce, _ in EX_COLS])
 
 
 # ─────────────────────────────────────────────────────────────

@@ -111,8 +111,8 @@ SC_DESC_CS,  SC_DESC_CE  = 19, 31
 SC_IMG_ANCHOR      = "B17"
 SC_DESC_COL        = 19
 SC_DESC_ROW        = 17
-SC_WF_DATA_ROW_START = 39   # ワイヤーフレーム開始行（テンプレート row38 がセクション帯）
-SC_WF_ROWS_PER_IMG   = 16   # 1画面あたりの行数（画像エリア）
+SC_WF_DATA_ROW_START = 49   # ワイヤーフレーム開始行（テンプレート row48 がセクション帯）
+SC_WF_ROWS_PER_IMG   = 22   # 1画面あたりの行数（画像エリア）
 
 # コンポーネント構成
 CM_DATA_ROW_START  = 5
@@ -123,12 +123,12 @@ CM_IMG_ANCHOR      = "B22"
 CM_DESC_COL        = 19
 CM_DESC_ROW        = 22
 
-OB_DATA_ROW_START  = 45
+OB_DATA_ROW_START  = 49
 OB_API_CS,   OB_API_CE   = 2,  7
 OB_LABEL_CS, OB_LABEL_CE = 8,  14
 OB_USE_CS,   OB_USE_CE   = 15, 31
 
-EX_DATA_ROW_START  = 58
+EX_DATA_ROW_START  = 62
 EX_NAME_CS,  EX_NAME_CE  = 2,  7
 EX_SCHED_CS, EX_SCHED_CE = 8,  12
 EX_DESC_CS,  EX_DESC_CE  = 13, 22
@@ -181,17 +181,25 @@ def set_h(ws, row, h):
 
 # ── PNG埋め込み ────────────────────────────────────────────────────
 def _embed_image(ws, png_path: str, anchor: str,
-                 img_w: int = 440, img_h: int = 330):
-    """PNGをExcelシートに埋め込む。失敗時は警告のみ。"""
+                 img_w: int = 440, img_h: int | None = None):
+    """PNGをExcelシートに埋め込む。
+
+    img_h が None の場合は縦横比を維持。指定された場合はそのサイズで設定。
+    失敗時は警告のみ。
+    """
     try:
         if not Path(png_path).exists():
             return
         img = XLImage(png_path)
         img.anchor = anchor
-        # 縦横比を維持
-        ratio = img.height / img.width if img.width else 1.0
-        img.width = img_w
-        img.height = int(img_w * ratio)
+        if img_h is None:
+            # 縦横比を維持
+            ratio = img.height / img.width if img.width else 1.0
+            img.width = img_w
+            img.height = int(img_w * ratio)
+        else:
+            img.width = img_w
+            img.height = img_h
         ws.add_image(img)
     except Exception as e:
         print(f"  [WARN] 画像埋め込み失敗({anchor}): {e}")
@@ -231,7 +239,7 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
 
     # PNG埋め込み
     if bf_png_path:
-        _embed_image(ws, bf_png_path, BF_IMG_ANCHOR)
+        _embed_image(ws, bf_png_path, BF_IMG_ANCHOR, img_w=600)
 
     # フロー説明テーブル
     flows = data.get("business_flow", [])
@@ -288,7 +296,7 @@ def fill_screens(ws, data: dict, changed_screen_keys: set,
 
     # PNG埋め込み（画面遷移図）
     if sc_png_path:
-        _embed_image(ws, sc_png_path, SC_IMG_ANCHOR)
+        _embed_image(ws, sc_png_path, SC_IMG_ANCHOR, img_w=600)
 
     # ── 画面ワイヤーフレーム埋め込み ──────────────────────────────
     if wireframe_paths:
@@ -308,7 +316,7 @@ def fill_screens(ws, data: dict, changed_screen_keys: set,
             ws.merge_cells(start_row=r, start_column=2,
                            end_row=r + SC_WF_ROWS_PER_IMG - 1, end_column=GRID_RIGHT)
             if wf_path and Path(wf_path).exists():
-                _embed_image(ws, wf_path, f"B{r}", img_w=480)
+                _embed_image(ws, wf_path, f"B{r}", img_w=700, img_h=None)
             r += SC_WF_ROWS_PER_IMG + 1  # +1 スペーサー
 
 
@@ -339,7 +347,7 @@ def fill_components(ws, data: dict, changed_comp_keys: set,
 
     # PNG埋め込み
     if cm_png_path:
-        _embed_image(ws, cm_png_path, CM_IMG_ANCHOR)
+        _embed_image(ws, cm_png_path, CM_IMG_ANCHOR, img_w=600)
 
     # ── 使用オブジェクト ──
     objects = data.get("related_objects", [])
