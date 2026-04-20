@@ -65,7 +65,7 @@ python -c "
 import pathlib
 try:
     import yaml
-    p = pathlib.Path(r'{ROOT}') / 'docs' / 'sf_design_config.yml'
+    p = pathlib.Path(r'{ROOT}') / 'docs' / '.sf' / 'sf_design_config.yml'
     if p.exists():
         d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
         print('author:' + str(d.get('author', '')))
@@ -120,7 +120,7 @@ python -c "
 import pathlib
 try:
     import yaml
-    p = pathlib.Path(r'{ROOT}') / 'docs' / 'sf_design_config.yml'
+    p = pathlib.Path(r'{ROOT}') / 'docs' / '.sf' / 'sf_design_config.yml'
     p.parent.mkdir(parents=True, exist_ok=True)
     data = {'author': r'{author}', 'output_dir': r'{ROOT}'}
     p.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding='utf-8')
@@ -145,7 +145,7 @@ mkdir -p "{ROOT}/基本設計書" && mkdir -p "{ROOT}/基本設計書/.tmp"
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
   --project-dir "{project_dir}" \
-  --output "{project_dir}/docs/feature_groups.yml"
+  --output "{project_dir}/docs/.sf/feature_groups.yml"
 ```
 
 ### 対象グループの選択
@@ -154,7 +154,7 @@ feature_groups.yml の内容を表示して確認してもらう:
 ```bash
 python -c "
 import yaml, json
-with open(r'{project_dir}/docs/feature_groups.yml', encoding='utf-8') as f:
+with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
     groups = yaml.safe_load(f)
 for g in groups:
     print(f\"{g['group_id']}: {g['name_ja']} ({len(g.get('feature_ids', []))}コンポーネント)\")
@@ -183,7 +183,7 @@ import yaml, sys, pathlib
 inputs = [x.strip() for x in '{入力値}'.split(',')]
 
 # feature_ids.yml から api_name → F-XXX マッピングを構築
-fids_path = pathlib.Path(r'{project_dir}') / 'docs' / 'feature_ids.yml'
+fids_path = pathlib.Path(r'{project_dir}') / 'docs' / '.sf' / 'feature_ids.yml'
 api_to_fid = {}
 if fids_path.exists():
     data = yaml.safe_load(fids_path.read_text(encoding='utf-8')) or {}
@@ -192,7 +192,7 @@ if fids_path.exists():
             api_to_fid[feat['api_name']] = feat['id']
 
 # feature_groups.yml から F-XXX → GRP-XXX マッピングを構築
-with open(r'{project_dir}/docs/feature_groups.yml', encoding='utf-8') as f:
+with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
     groups = yaml.safe_load(f)
 fid_to_group = {}
 for g in groups:
@@ -323,7 +323,7 @@ AskUserQuestion で対象を選択する:
 ```bash
 python -c "
 import yaml, json, pathlib
-with open(r'{project_dir}/docs/feature_groups.yml', encoding='utf-8') as f:
+with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
     groups = yaml.safe_load(f)
 target_groups = {r'{target_group_ids_2}'.replace(\"'\", '').split(',')} if r'{target_group_ids_2}' else set()
 fids = []

@@ -121,7 +121,7 @@ SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
 | システム構成図データ | `docs/architecture/system.json` | システム・利用者・外部連携・データストアの関係 |
 | 業務ユースケース一覧 | `docs/flow/usecases.md` | 新規申込・解約申込・見積依頼等の業務UC一覧 |
 | 業務フロー図データ | `docs/flow/swimlanes.json` | 全体／UC別／例外／データフローのスイムレーン |
-| 変更履歴 | `docs/changelog.md` | 実行履歴・変更点の記録 |
+| 変更履歴 | `docs/logs/changelog.md` | 実行履歴・変更点の記録 |
 
 ### Phase 0: 実行モード判定
 
@@ -384,7 +384,7 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Acti
 
 ### Phase 6: 変更履歴の記録
 
-`docs/changelog.md` に追記する。
+`docs/logs/changelog.md` に追記する。
 
 ---
 
@@ -586,7 +586,7 @@ docs/design/
 └── config/         # 宣言的設定（入力規則・数式・ページレイアウト等）
 ```
 
-> **_index.md は生成しない。** 機能一覧の正本は `機能一覧.xlsx`、機能 ID の正本は `docs/feature_ids.yml`。_index.md は冗長かつ ID が TBD のまま残るリスクがあるため廃止。
+> **_index.md は生成しない。** 機能一覧の正本は `機能一覧.xlsx`、機能 ID の正本は `docs/.sf/feature_ids.yml`。_index.md は冗長かつ ID が TBD のまま残るリスクがあるため廃止。
 
 **重要: 1コンポーネント1ファイルの原則**（flow-overview.md のような統合ファイルは作らない）
 
@@ -644,7 +644,7 @@ sf data query -q "SELECT ApiName, ProcessType, Label FROM FlowDefinitionView WHE
 docs/design/{種別フォルダ}/【{機能ID}】{機能名-kebab-case}.md
 ```
 
-- `機能ID` は `docs/feature_ids.yml`（台帳）を参照して決定する。台帳は `scripts/python/sf-doc-mcp/scan_features.py` のみが書き込み可能で、このエージェントは **読み取り専用**。
+- `機能ID` は `docs/.sf/feature_ids.yml`（台帳）を参照して決定する。台帳は `scripts/python/sf-doc-mcp/scan_features.py` のみが書き込み可能で、このエージェントは **読み取り専用**。
 - 台帳に該当APIが存在する場合はそのIDを使用する（例: `F-017`）。
 - 台帳に存在しない新規機能（要件定義のみ存在し実装前の場合等）は `機能ID` を `TBD` とし、実装後に scan_features.py で採番される。
 - 採番は scan_features.py が一元管理するため、このエージェント側で番号を独自に振ってはならない。
@@ -667,7 +667,7 @@ docs/design/{種別フォルダ}/【{機能ID}】{機能名-kebab-case}.md
 
 | 項目 | 内容 |
 |---|---|
-| 機能ID | F-XXX（`docs/feature_ids.yml` より取得。未実装時は TBD） |
+| 機能ID | F-XXX（`docs/.sf/feature_ids.yml` より取得。未実装時は TBD） |
 | 要件番号 | FR-XXX（紐づく要件がない場合は空欄） |
 | 実装種別 | Apex / Flow / LWC / Integration / Batch / Config |
 | 担当オブジェクト | |

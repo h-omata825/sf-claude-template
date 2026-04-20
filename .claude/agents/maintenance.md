@@ -109,7 +109,7 @@ sf data query --target-org project-dev --query "SELECT Id, Status, NumberOfError
 1. docs/catalog/{対象オブジェクト}.md → 項目構成・入力規則・自動化の把握
 2. docs/design/{種別}/ → 該当機能の設計意図（仕様なのかバグなのかの判断材料）
 3. docs/requirements/requirements.md → ビジネスルール（BR-XXX）を確認
-4. docs/changelog.md → 最近の変更履歴（変更が原因のことが多い）
+4. docs/logs/changelog.md → 最近の変更履歴（変更が原因のことが多い）
 5. docs/data/data-statistics.md → レコード件数の急増がないか（パフォーマンス問題時）
   ↓
 調査開始
@@ -122,6 +122,6 @@ sf data query --target-org project-dev --query "SELECT Id, Status, NumberOfError
 3. エラーログ・スタックトレースをユーザーから取得する
 4. 再現手順を特定してからデバッグログを取得する
 5. **暫定回避策を先に提案**してから根本対応に移る
-6. 最近のデプロイ・設定変更履歴を確認する（docs/changelog.md + git log）
+6. 最近のデプロイ・設定変更履歴を確認する（docs/logs/changelog.md + git log）
 7. 修正後は回帰確認手順を必ず提示する
 8. 本番への緊急修正デプロイは必ずユーザー確認を取ってから実行する

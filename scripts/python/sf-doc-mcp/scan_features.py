@@ -132,7 +132,7 @@ def get_design_doc(docs_design_dir: Path, name: str) -> str | None:
 def scan(project_dir: Path) -> list[dict]:
     force_app = project_dir / "force-app" / "main" / "default"
     docs_design = project_dir / "docs" / "design"
-    ledger_path = project_dir / "docs" / "feature_ids.yml"
+    ledger_path = project_dir / "docs" / ".sf" / "feature_ids.yml"
     ledger = load_ledger(ledger_path)
 
     features = []

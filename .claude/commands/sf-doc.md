@@ -60,7 +60,7 @@ python -c "
 import pathlib
 try:
     import yaml
-    p = pathlib.Path('docs/sf_doc_config.yml')
+    p = pathlib.Path('docs/.sf/sf_doc_config.yml')
     if p.exists():
         d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
         print('author:' + str(d.get('author', '')))
@@ -129,7 +129,7 @@ python -c "
 import pathlib
 try:
     import yaml
-    p = pathlib.Path('docs/sf_doc_config.yml')
+    p = pathlib.Path('docs/.sf/sf_doc_config.yml')
     p.parent.mkdir(parents=True, exist_ok=True)
     data = {'author': r'{author}', 'output_dir': r'{ROOT}'}
     p.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding='utf-8')

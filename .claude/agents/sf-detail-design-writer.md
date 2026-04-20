@@ -87,7 +87,7 @@ feature_groups.yml を読む:
 ```bash
 python -c "
 import yaml, json, sys
-with open(r'{project_dir}/docs/feature_groups.yml', encoding='utf-8') as f:
+with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
     data = yaml.safe_load(f)
 print(json.dumps(data, ensure_ascii=False, indent=2))
 "
@@ -97,7 +97,7 @@ print(json.dumps(data, ensure_ascii=False, indent=2))
 > ```bash
 > python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
 >   --project-dir "{project_dir}" \
->   --output "{project_dir}/docs/feature_groups.yml"
+>   --output "{project_dir}/docs/.sf/feature_groups.yml"
 > ```
 
 `target_group_ids` が指定されている場合は該当グループのみ処理する。
