@@ -1,26 +1,24 @@
 """
-プロジェクト概要書.xlsx を生成する（テンプレート読込方式）。
-
-テンプレート: プロジェクト概要書テンプレート.xlsx（build_basic_doc_template.py で生成）
+プロジェクト概要書.xlsx を生成する（直接生成方式 + 高品質図埋め込み）。
 
 入力 (docs/ 配下):
-  docs/overview/org-profile.md         — 組織・プロジェクト基本情報
-  docs/requirements/requirements.md    — 目的・背景
-  docs/architecture/system.json        — 外部連携先情報
-  docs/catalog/_data-model.md          — オブジェクト関連情報（ER図用）
-  docs/flow/usecases.md                — 用語集・UC情報
+  docs/overview/org-profile.md         — 組織・プロジェクト基本情報・用語集
+  docs/requirements/requirements.md    — 導入背景・目的
+  docs/architecture/system.json        — システム構成図データ
+  docs/flow/swimlanes.json             — 業務フロー（As-Is/To-Be）
+  docs/catalog/_index.md               — オブジェクト一覧
+  docs/catalog/_data-model.md          — オブジェクト関連定義（ER図）
 
 出力:
   プロジェクト概要書.xlsx（5シート: 表紙/システム概要/業務フロー図/ER図/用語集）
-  ※ 図エリアは手動貼り付け用プレースホルダー。テキスト情報のみ自動入力。
+  ※ 図は diagram_gen.py (graphviz/drawsvg) で高品質PNG生成して埋め込み
 
 Usage:
   python generate_basic_doc.py \\
     --docs-dir <path/to/project/docs> \\
     --output <output/プロジェクト概要書.xlsx> \\
     --author "作成者名" \\
-    [--project-name "プロジェクト名"] \\
-    [--template <path/to/プロジェクト概要書テンプレート.xlsx>]
+    [--project-name "プロジェクト名"]
 """
 from __future__ import annotations
 
@@ -28,292 +26,481 @@ import argparse
 import json
 import re
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
-from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Font
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
-DEFAULT_TEMPLATE = Path(__file__).parent / "プロジェクト概要書テンプレート.xlsx"
-FONT_NAME = "游ゴシック"
-C_FONT_D = "000000"
+import diagram_gen as dg
+
+# ── デザインシステム（build_basic_doc_template.py と統一）────────
+C_TITLE_DARK = "1F3864"
+C_HDR_BLUE   = "2E75B6"
+C_BAND_BLUE  = "0070C0"
+C_LABEL_BG   = "D9E1F2"
+C_FONT_W     = "FFFFFF"
+C_FONT_D     = "000000"
+FONT_NAME    = "游ゴシック"
+THIN = Side(style="thin",   color="8B9DC3")
+MED  = Side(style="medium", color="1F3864")
+GRID_LEFT  = 2
+GRID_RIGHT = 31
 
 
-# ── セル書き込みヘルパー ──────────────────────────────────────────
+def _fill(c):   return PatternFill("solid", fgColor=c)
+def _fnt(bold=False, color=C_FONT_D, size=10):
+    return Font(name=FONT_NAME, bold=bold, color=color, size=size)
+def _aln(h="left", v="center", wrap=True):
+    return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+def B_all(): return Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+def B_med(): return Border(left=MED,  right=MED,  top=MED,  bottom=MED)
 
-def _set(ws, row: int, col: int, value: str, wrap: bool = True, size: int = 10):
-    c = ws.cell(row=row, column=col, value=value)
-    c.font = Font(name=FONT_NAME, color=C_FONT_D, size=size)
-    c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=wrap)
+def _set_h(ws, row, h): ws.row_dimensions[row].height = h
+def _setup_grid(ws):
+    ws.column_dimensions["A"].width = 2.0
+    for i in range(GRID_LEFT, GRID_RIGHT + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 4.2
+    ws.sheet_view.showGridLines = False
 
+def _MW(ws, row, cs, ce, value="", bold=False, fg=C_FONT_D, bg=None,
+        h="left", v="center", wrap=True, border=None, size=10):
+    if border:
+        for c in range(cs, ce + 1): ws.cell(row=row, column=c).border = border
+    if bg:
+        for c in range(cs, ce + 1): ws.cell(row=row, column=c).fill = _fill(bg)
+    ws.merge_cells(start_row=row, start_column=cs, end_row=row, end_column=ce)
+    cell = ws.cell(row=row, column=cs, value=value)
+    cell.font = _fnt(bold=bold, color=fg, size=size)
+    cell.alignment = _aln(h=h, v=v, wrap=wrap)
+    if bg:     cell.fill = _fill(bg)
+    if border: cell.border = border
+    return cell
 
-def _set_row(ws, row: int, col_start: int, cols: list[tuple[int, int]], values: list[str]):
-    """data行: cols=[(cs,ce),...], values=[str,...] を対応させてセル書き込み"""
-    for (cs, _ce), val in zip(cols, values):
-        _set(ws, row, cs, val or "")
+def _title_row(ws, row, text):
+    _MW(ws, row, GRID_LEFT, GRID_RIGHT, text,
+        bold=True, fg=C_FONT_W, bg=C_TITLE_DARK,
+        h="center", size=14, border=B_med())
+    _set_h(ws, row, 28)
+    return row + 1
+
+def _section_row(ws, row, text):
+    _MW(ws, row, GRID_LEFT, GRID_RIGHT, text,
+        bold=True, fg=C_FONT_W, bg=C_BAND_BLUE, border=B_all())
+    _set_h(ws, row, 18)
+    return row + 1
+
+def _sub_section_row(ws, row, text):
+    _MW(ws, row, GRID_LEFT, GRID_RIGHT, text,
+        bold=True, fg=C_FONT_D, bg=C_LABEL_BG, border=B_all())
+    _set_h(ws, row, 16)
+    return row + 1
+
+def _meta_row(ws, row, label, value="", col_label_end=8):
+    _MW(ws, row, GRID_LEFT, col_label_end, label,
+        bold=True, bg=C_LABEL_BG, border=B_all())
+    _MW(ws, row, col_label_end + 1, GRID_RIGHT, value, border=B_all())
+    _set_h(ws, row, 16)
+    return row + 1
+
+def _hdr_row(ws, row, cols: list[tuple[int, int, str]]):
+    for cs, ce, label in cols:
+        _MW(ws, row, cs, ce, label,
+            bold=True, fg=C_FONT_W, bg=C_HDR_BLUE, h="center", border=B_all())
+    _set_h(ws, row, 18)
+    return row + 1
+
+def _data_row(ws, row, cols_vals: list[tuple[int, int, str]], row_h=16):
+    for cs, ce, val in cols_vals:
+        _MW(ws, row, cs, ce, val or "", border=B_all())
+    _set_h(ws, row, row_h)
+    return row + 1
+
+def _empty_rows(ws, row, count, col_groups: list[tuple[int, int]], row_h=16):
+    for r in range(row, row + count):
+        for cs, ce in col_groups:
+            for c in range(cs, ce + 1):
+                ws.cell(row=r, column=c).border = B_all()
+            ws.merge_cells(start_row=r, start_column=cs, end_row=r, end_column=ce)
+        _set_h(ws, r, row_h)
+    return row + count
+
+def _text_area(ws, row, n_rows, value="", row_h=18):
+    for r in range(row, row + n_rows):
+        for c in range(GRID_LEFT, GRID_RIGHT + 1):
+            ws.cell(row=r, column=c).border = B_all()
+        _set_h(ws, r, row_h)
+    ws.merge_cells(start_row=row, start_column=GRID_LEFT,
+                   end_row=row + n_rows - 1, end_column=GRID_RIGHT)
+    cell = ws.cell(row=row, column=GRID_LEFT, value=value)
+    cell.font = _fnt()
+    cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    cell.border = B_all()
+    return row + n_rows
+
+def _margin(ws, row, h=6):
+    _set_h(ws, row, h)
+    return row + 1
 
 
 # ── docs パーサー ─────────────────────────────────────────────────
-
-def _section(text: str, heading: str) -> str:
-    m = re.search(rf'##\s+{re.escape(heading)}\s*\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
-    return m.group(1).strip() if m else ""
-
 
 def _table_val(text: str, key: str) -> str:
     m = re.search(rf'\|\s*{re.escape(key)}\s*\|\s*(.+?)\s*\|', text)
     return m.group(1).strip() if m else ""
 
+def _section_text(text: str, heading: str) -> str:
+    m = re.search(rf'##\s+{re.escape(heading)}\s*\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    return m.group(1).strip() if m else ""
 
-def parse_org_profile(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    text = path.read_text(encoding="utf-8")
+
+def parse_org(path: Path) -> dict:
+    if not path.exists(): return {}
+    t = path.read_text(encoding="utf-8")
+    def tv(k): return _table_val(t, k)
+    # 用語集
+    glossary = []
+    sec = _section_text(t, "用語集") or _section_text(t, "Glossary")
+    for line in sec.splitlines():
+        if not line.strip().startswith("|"): continue
+        cols = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cols) >= 2 and cols[0] and cols[0] not in ("業務用語", "---", "用語"):
+            glossary.append({"biz": cols[0], "sf": cols[1] if len(cols) > 1 else "",
+                             "desc": cols[2] if len(cols) > 2 else ""})
+    # 体制
+    stakeholders = []
+    for sec_name in ("ステークホルダー", "体制", "関係者"):
+        sec = _section_text(t, sec_name)
+        for line in sec.splitlines():
+            if not line.strip().startswith("|"): continue
+            cols = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cols) >= 2 and cols[0] and cols[0] not in ("役割", "---"):
+                stakeholders.append({"role": cols[0], "name": cols[1] if len(cols)>1 else "",
+                                     "area": cols[2] if len(cols)>2 else "",
+                                     "note": cols[3] if len(cols)>3 else ""})
+        if stakeholders: break
     return {
-        "system_name":   _table_val(text, "システム名") or _table_val(text, "会社名"),
-        "project_name":  _table_val(text, "プロジェクト名"),
-        "sf_edition":    _table_val(text, "Salesforce Edition") or _table_val(text, "Edition"),
-        "start_date":    _table_val(text, "開始日") or _table_val(text, "プロジェクト開始日"),
-        "end_date":      _table_val(text, "終了予定日") or _table_val(text, "リリース予定日"),
-        "go_live_date":  _table_val(text, "本番公開日"),
-        "target_biz":    _table_val(text, "対象業務"),
-        "users":         _parse_users(text),
-        "stakeholders":  _parse_stakeholders(text),
+        "project_name": tv("プロジェクト名"),
+        "system_name":  tv("システム名") or tv("会社名"),
+        "sf_edition":   tv("Salesforce Edition") or tv("Edition"),
+        "start_date":   tv("開始日") or tv("プロジェクト開始日"),
+        "end_date":     tv("終了予定日") or tv("リリース予定日"),
+        "go_live_date": tv("本番公開日"),
+        "target_biz":   tv("対象業務"),
+        "stakeholders": stakeholders[:6],
+        "glossary":     glossary[:30],
     }
-
-
-def _parse_users(text: str) -> list[dict]:
-    sec = _section(text, "利用ユーザー")
-    if not sec:
-        sec = _section(text, "ユーザー")
-    rows = []
-    for line in sec.splitlines():
-        if not line.strip().startswith("|"):
-            continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 2 and cols[0] and cols[0] not in ("ユーザー区分", "---", "区分"):
-            rows.append({
-                "category":    cols[0],
-                "profile":     cols[1] if len(cols) > 1 else "",
-                "count":       cols[2] if len(cols) > 2 else "",
-                "main_feature": cols[3] if len(cols) > 3 else "",
-            })
-    return rows[:8]
-
-
-def _parse_stakeholders(text: str) -> list[dict]:
-    sec = _section(text, "ステークホルダー") or _section(text, "関係者")
-    rows = []
-    for line in sec.splitlines():
-        if not line.strip().startswith("|"):
-            continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 2 and cols[0] and cols[0] not in ("役割", "---"):
-            rows.append({
-                "role":   cols[0],
-                "name":   cols[1] if len(cols) > 1 else "",
-                "note":   cols[2] if len(cols) > 2 else "",
-            })
-    return rows[:5]
 
 
 def parse_requirements(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    text = path.read_text(encoding="utf-8")
-    bg = _section(text, "背景・目的") or _section(text, "目的")
-    intro_m = re.match(r'^([^\n\-\*].+?)(?=\n\n|\n[-*]|\Z)', bg, re.DOTALL) if bg else None
-    return {
-        "purpose": intro_m.group(1).strip() if intro_m else bg[:200],
-    }
+    if not path.exists(): return {}
+    t = path.read_text(encoding="utf-8")
+    bg = _section_text(t, "背景・目的") or _section_text(t, "目的") or ""
+    scope_in  = _section_text(t, "対象")
+    scope_out = _section_text(t, "対象外")
+    return {"background": bg[:600], "scope_in": scope_in[:300], "scope_out": scope_out[:300]}
 
 
 def parse_system_json(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        d = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return {
-        "org_id":      d.get("org_id", ""),
-        "instance_url": d.get("instance_url", ""),
-        "edition":     d.get("edition") or (d.get("core") or {}).get("name", ""),
-        "api_version": d.get("api_version", ""),
-        "login_user":  d.get("login_user", ""),
-        "externals":   d.get("external_systems", [])[:10],
-        "named_creds": d.get("named_credentials", [])[:6],
-    }
+    if not path.exists(): return {}
+    try: return json.loads(path.read_text(encoding="utf-8"))
+    except Exception: return {}
 
+
+def parse_swimlanes(path: Path) -> dict:
+    if not path.exists(): return {}
+    try: return json.loads(path.read_text(encoding="utf-8"))
+    except Exception: return {}
+
+
+def parse_catalog_index(path: Path) -> list[dict]:
+    if not path.exists(): return []
+    t = path.read_text(encoding="utf-8")
+    objs = []
+    for line in t.splitlines():
+        if not line.strip().startswith("|"): continue
+        cols = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cols) >= 2 and cols[0] and cols[0] not in ("API名", "---"):
+            objs.append({"api": cols[0], "label": cols[1] if len(cols)>1 else "",
+                         "type": cols[2] if len(cols)>2 else ""})
+    return objs[:30]
 
 
 def parse_data_model(path: Path) -> list[dict]:
-    """_data-model.md からオブジェクト関連（ER図用）を抽出"""
-    if not path.exists():
-        return []
-    text = path.read_text(encoding="utf-8")
+    if not path.exists(): return []
+    t = path.read_text(encoding="utf-8")
     rels = []
-    for line in text.splitlines():
-        if not line.strip().startswith("|"):
-            continue
+    for line in t.splitlines():
+        if not line.strip().startswith("|"): continue
         cols = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cols) >= 3 and cols[0] and cols[0] not in ("親オブジェクト", "---"):
-            rels.append({
-                "parent":  cols[0],
-                "rel":     cols[1] if len(cols) > 1 else "",
-                "child":   cols[2] if len(cols) > 2 else "",
-                "field":   cols[3] if len(cols) > 3 else "",
-                "note":    cols[4] if len(cols) > 4 else "",
-            })
-    return rels[:15]
+            rels.append({"parent": cols[0], "rel": cols[1] if len(cols)>1 else "",
+                         "child": cols[2] if len(cols)>2 else "",
+                         "field": cols[3] if len(cols)>3 else ""})
+    return rels[:20]
 
 
-def parse_glossary(org_profile_path: Path) -> list[dict]:
-    """org-profile.md の用語集セクションから用語を抽出"""
-    if not org_profile_path.exists():
-        return []
-    text = org_profile_path.read_text(encoding="utf-8")
-    sec = _section(text, "用語集") or _section(text, "Glossary")
-    terms = []
-    for line in sec.splitlines():
-        if not line.strip().startswith("|"):
-            continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 2 and cols[0] and cols[0] not in ("業務用語", "---", "用語"):
-            terms.append({
-                "biz_term": cols[0],
-                "sf_term":  cols[1] if len(cols) > 1 else "",
-                "desc":     cols[2] if len(cols) > 2 else "",
-            })
-    return terms[:30]
+def _pick_flows(swimlanes: dict) -> tuple[dict | None, dict | None]:
+    """swimlanes.json から As-Is / To-Be フローを抽出"""
+    flows = swimlanes.get("flows", [])
+    asis = tobe = overall = None
+    for f in flows:
+        title = (f.get("title") or "").lower()
+        if "as-is" in title or "現状" in title or "asis" in title:
+            asis = f
+        elif "to-be" in title or "導入後" in title or "tobe" in title:
+            tobe = f
+        elif f.get("flow_type") == "overall" and overall is None:
+            overall = f
+    # As-Is が未設定なら overall を当てる
+    if asis is None and overall is not None:
+        asis = overall
+    return asis, tobe
 
 
-# ── シート書き込み ────────────────────────────────────────────────
-# 新テンプレート: 表紙 / システム概要 / 業務フロー図 / ER図 / 用語集
-# 図エリアはプレースホルダーのため書き込み不要。テキスト情報のみ自動入力。
+# ── シート 1: 表紙 ─────────────────────────────────────────────
+def _build_cover(ws, org: dict, req: dict, author: str):
+    _setup_grid(ws)
+    r = 2  # row 1 は余白
+    _set_h(ws, 1, 8)
+    r = _title_row(ws, r, "プロジェクト概要書")
+    r = _margin(ws, r)
+    r = _section_row(ws, r, "プロジェクト基本情報")
+    for label, key in [
+        ("プロジェクト名", "project_name"), ("システム名", "system_name"),
+        ("導入目的・背景", ""),           ("スコープ（対象）", ""),
+        ("スコープ（対象外）", ""),        ("開始日", "start_date"),
+        ("終了予定日", "end_date"),       ("本番公開日", "go_live_date"),
+    ]:
+        r = _meta_row(ws, r, label, org.get(key, "") if key else "")
 
-_META_VAL_COL = 9  # meta_row: col_label_end+1 = 8+1
+    r = _margin(ws, r)
+    r = _section_row(ws, r, "体制")
+    r = _hdr_row(ws, r, [(2,6,"役割"),(7,16,"氏名 / 組織"),(17,22,"担当領域"),(23,31,"備考")])
+    for s in org.get("stakeholders", []):
+        r = _data_row(ws, r, [(2,6,s["role"]),(7,16,s["name"]),(17,22,s.get("area","")),
+                               (23,31,s.get("note",""))])
+    if len(org.get("stakeholders", [])) < 6:
+        r = _empty_rows(ws, r, 6 - len(org.get("stakeholders", [])), [(2,6),(7,16),(17,22),(23,31)])
+
+    r = _margin(ws, r)
+    r = _section_row(ws, r, "改版履歴")
+    r = _hdr_row(ws, r, [(2,3,"版"),(4,7,"改版日"),(8,12,"改版者"),(13,31,"改版内容")])
+    today = date.today().strftime("%Y-%m-%d")
+    r = _data_row(ws, r, [(2,3,"1.0"),(4,7,today),(8,12,author),(13,31,"初版作成")])
+    r = _empty_rows(ws, r, 9, [(2,3),(4,7),(8,12),(13,31)])
 
 
-def fill_cover(ws, org: dict, req: dict, author: str):
-    # build_cover_sheet:
-    # margin(1),margin(2),title(3),margin(4),section(5)
-    # プロジェクト名(6),システム名(7),目的・背景(8),スコープ対象(9),スコープ対象外(10)
-    # 開始日(11),終了予定日(12),本番公開日(13)
-    vals = [
-        org.get("project_name", ""),
-        org.get("system_name", ""),
-        req.get("purpose", ""),
-        "",  # スコープ（対象）
-        "",  # スコープ（対象外）
-        org.get("start_date", ""),
-        org.get("end_date", ""),
-        org.get("go_live_date", ""),
-    ]
-    for i, val in enumerate(vals):
-        _set(ws, 6 + i, _META_VAL_COL, val)
+# ── シート 2: システム概要 ────────────────────────────────────────
+def _build_system_overview(ws, req: dict, system: dict, sys_img_path: str | None):
+    _setup_grid(ws)
+    r = 2
+    _set_h(ws, 1, 8)
+    r = _title_row(ws, r, "システム概要")
+    r = _margin(ws, r)
 
-    # 体制テーブル: section(15), header(16), data rows 17..22
-    # cols: (2,6) 役割 / (7,16) 氏名 / (17,22) 担当領域 / (23,31) 備考
-    stake_cols = [(2, 6), (7, 16), (17, 22), (23, 31)]
-    for i, s in enumerate(org.get("stakeholders", [])):
-        r = 17 + i
-        _set_row(ws, r, 0, stake_cols, [s["role"], s["name"], s.get("domain", ""), s.get("note", "")])
+    # 導入背景・課題
+    r = _section_row(ws, r, "導入背景・解決する課題")
+    bg_text = req.get("background", "")
+    n_bg_rows = max(5, len(bg_text) // 60 + 2)
+    r = _text_area(ws, r, n_bg_rows, bg_text)
+    r = _margin(ws, r)
 
+    # システム全体構成図
+    r = _section_row(ws, r, "システム全体構成")
+    if sys_img_path:
+        n_img_rows = dg.embed_image_in_sheet(ws, sys_img_path, anchor_row=r,
+                                             anchor_col=GRID_LEFT, max_width_px=1100)
+        r += n_img_rows
+    else:
+        r = _text_area(ws, r, 15, "（system.json が見つかりません）")
+    r = _margin(ws, r)
 
-def fill_system_overview(ws, sys_info: dict, req: dict):
-    # build_system_overview_sheet:
-    # margin(1),margin(2),title(3),margin(4),section(5)
-    # 導入背景テキストエリア: rows 6..13（結合済み）→ row6 のみ書き込む
-    # 外部連携一覧: section(固定offset後), header, data rows
-    _set(ws, 6, GRID_LEFT, req.get("purpose", ""))
-
-    # 外部連携一覧の開始行は:
-    # margin(1)+margin(2)+title(3)+margin(4)+section(5)+textarea8行(6-13)+margin(14)+
-    # section(15)+diagram19行(16-34)+margin(35)+section(36)+header(37)+data38..
-    ext_cols = [(2, 8), (9, 12), (13, 18), (19, 22), (23, 31)]
-    for i, ex in enumerate(sys_info.get("externals", [])[:8]):
-        r = 38 + i
-        _set_row(ws, r, 0, ext_cols, [
-            ex.get("name", ""), ex.get("direction", ""),
-            ex.get("protocol", ""), ex.get("frequency", ""),
-            ex.get("purpose", ""),
+    # 外部連携先一覧
+    r = _section_row(ws, r, "外部連携先一覧")
+    r = _hdr_row(ws, r, [(2,8,"連携先システム"),(9,12,"方向"),(13,18,"方式"),
+                          (19,22,"頻度"),(23,31,"目的・概要")])
+    for ex in system.get("external_systems", [])[:10]:
+        r = _data_row(ws, r, [
+            (2,8,ex.get("name","")), (9,12,ex.get("direction","")),
+            (13,18,ex.get("protocol","")), (19,22,ex.get("frequency","")),
+            (23,31,ex.get("purpose","")),
         ])
+    if len(system.get("external_systems", [])) < 5:
+        r = _empty_rows(ws, r, 5 - len(system.get("external_systems", [])),
+                        [(2,8),(9,12),(13,18),(19,22),(23,31)])
 
 
-def fill_er(ws, rels: list[dict]):
-    # build_er_sheet:
-    # margin(1)+margin(2)+title(3)+margin(4)+section(5)+diagram29行(6-34)+margin(35)
-    # +section(36)+header(37)+data rows 38..
-    rel_cols = [(2, 8), (9, 10), (11, 17), (18, 23), (24, 31)]
-    for i, rel in enumerate(rels[:15]):
-        r = 38 + i
-        _set_row(ws, r, 0, rel_cols, [
-            rel["parent"], rel["rel"], rel["child"], rel["field"], rel["note"],
+# ── シート 3: 業務フロー図 ────────────────────────────────────────
+def _build_flow_sheet(ws, asis_flow: dict | None, tobe_flow: dict | None,
+                      asis_img: str | None, tobe_img: str | None):
+    _setup_grid(ws)
+    r = 2
+    _set_h(ws, 1, 8)
+    r = _title_row(ws, r, "業務フロー図")
+    r = _margin(ws, r)
+
+    for label, flow, img_path in [
+        ("As-Is 業務フロー（現状）",             asis_flow, asis_img),
+        ("To-Be 業務フロー（Salesforce導入後）", tobe_flow, tobe_img),
+    ]:
+        r = _section_row(ws, r, label)
+        if img_path:
+            n_img_rows = dg.embed_image_in_sheet(ws, img_path, anchor_row=r,
+                                                 anchor_col=GRID_LEFT, max_width_px=1100)
+            r += n_img_rows
+        else:
+            r = _text_area(ws, r, 12, "（フローデータなし）")
+        r = _margin(ws, r)
+
+        # 手順テーブル（steps から生成）
+        sub = label.split("（")[0]
+        r = _sub_section_row(ws, r, f"{sub} 手順（補足）")
+        r = _hdr_row(ws, r, [(2,3,"No"),(4,8,"担当"),(9,22,"操作・処理内容"),(23,31,"備考")])
+        steps = (flow or {}).get("steps", [])[:10]
+        for i, s in enumerate(steps):
+            r = _data_row(ws, r, [
+                (2,3,str(s.get("id",""))),
+                (4,8,str(s.get("lane",""))),
+                (9,22,str(s.get("label","") or s.get("title",""))),
+                (23,31,""),
+            ], row_h=18)
+        if len(steps) < 5:
+            r = _empty_rows(ws, r, 5 - len(steps), [(2,3),(4,8),(9,22),(23,31)], row_h=18)
+        r = _margin(ws, r, 12)
+
+
+# ── シート 4: ER図 ──────────────────────────────────────────────
+def _build_er_sheet(ws, objects: list, relations: list, er_img: str | None):
+    _setup_grid(ws)
+    r = 2
+    _set_h(ws, 1, 8)
+    r = _title_row(ws, r, "ER図（オブジェクト関連図）")
+    r = _margin(ws, r)
+
+    r = _section_row(ws, r, "オブジェクト関連図")
+    if er_img:
+        n_img_rows = dg.embed_image_in_sheet(ws, er_img, anchor_row=r,
+                                             anchor_col=GRID_LEFT, max_width_px=1100)
+        r += n_img_rows
+    else:
+        r = _text_area(ws, r, 18, "（カタログデータなし）")
+    r = _margin(ws, r)
+
+    r = _section_row(ws, r, "関連定義表")
+    r = _hdr_row(ws, r, [(2,8,"親オブジェクト"),(9,10,"関係"),
+                          (11,17,"子オブジェクト"),(18,23,"参照関係項目"),(24,31,"備考")])
+    for rel in relations[:20]:
+        r = _data_row(ws, r, [
+            (2,8,rel["parent"]), (9,10,rel["rel"]),
+            (11,17,rel["child"]), (18,23,rel.get("field","")), (24,31,""),
         ])
+    if len(relations) < 5:
+        r = _empty_rows(ws, r, 5 - len(relations),
+                        [(2,8),(9,10),(11,17),(18,23),(24,31)])
 
 
-def fill_glossary(ws, terms: list[dict]):
-    # build_glossary_sheet:
-    # margin(1)+margin(2)+title(3)+margin(4)+section(5)+header(6)+data rows 7..
-    term_cols = [(2, 3), (4, 10), (11, 18), (19, 31)]
-    for i, t in enumerate(terms[:30]):
-        r = 7 + i
-        _set_row(ws, r, 0, term_cols, [str(i + 1), t["biz_term"], t["sf_term"], t["desc"]])
+# ── シート 5: 用語集 ────────────────────────────────────────────
+def _build_glossary_sheet(ws, glossary: list):
+    _setup_grid(ws)
+    r = 2
+    _set_h(ws, 1, 8)
+    r = _title_row(ws, r, "用語集")
+    r = _margin(ws, r)
+    r = _section_row(ws, r, "業務用語・Salesforce用語 対照表")
+    r = _hdr_row(ws, r, [(2,3,"No"),(4,10,"業務用語"),
+                          (11,18,"Salesforce用語 / オブジェクト名"),(19,31,"説明")])
+    for i, t in enumerate(glossary):
+        r = _data_row(ws, r, [(2,3,str(i+1)),(4,10,t["biz"]),
+                               (11,18,t["sf"]),(19,31,t["desc"])], row_h=18)
+    if len(glossary) < 10:
+        r = _empty_rows(ws, r, 10 - len(glossary), [(2,3),(4,10),(11,18),(19,31)], row_h=18)
 
 
-# ── メイン ────────────────────────────────────────────────────────
-
-GRID_LEFT = 2
-
-
-def generate(docs_dir: Path, output: Path, author: str, project_name: str,
-             template: Path = DEFAULT_TEMPLATE):
-    if not template.exists():
-        print(
-            f"ERROR: テンプレートが見つかりません: {template}\n"
-            "先に build_basic_doc_template.py を実行してください。",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    org      = parse_org_profile(docs_dir / "overview" / "org-profile.md")
+# ── メイン ──────────────────────────────────────────────────────
+def generate(docs_dir: Path, output: Path, author: str, project_name: str):
+    org      = parse_org(docs_dir / "overview" / "org-profile.md")
     req      = parse_requirements(docs_dir / "requirements" / "requirements.md")
-    sys_info = parse_system_json(docs_dir / "architecture" / "system.json")
-    rels     = parse_data_model(docs_dir / "catalog" / "_data-model.md")
-    terms    = parse_glossary(docs_dir / "overview" / "org-profile.md")
+    system   = parse_system_json(docs_dir / "architecture" / "system.json")
+    swim     = parse_swimlanes(docs_dir / "flow" / "swimlanes.json")
+    objects  = parse_catalog_index(docs_dir / "catalog" / "_index.md")
+    relations = parse_data_model(docs_dir / "catalog" / "_data-model.md")
 
     if project_name:
         org["project_name"] = project_name
 
-    wb = load_workbook(str(template))
+    asis_flow, tobe_flow = _pick_flows(swim)
 
-    fill_cover(wb["表紙"],               org, req, author)
-    fill_system_overview(wb["システム概要"], sys_info, req)
-    # 業務フロー図・ER図は図エリアが主体のため、テキスト補足のみ
-    fill_er(wb["ER図"],                  rels)
-    fill_glossary(wb["用語集"],           terms)
+    # 図を一時ディレクトリに生成
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(str(output))
+        sys_img = er_img = asis_img = tobe_img = None
+
+        if system:
+            try:
+                dg.render_system_diagram(system, str(tmp / "system.png"))
+                sys_img = str(tmp / "system.png")
+                print("  [OK] システム構成図")
+            except Exception as e:
+                print(f"  [WARN] システム構成図: {e}")
+
+        if objects and relations:
+            try:
+                dg.render_er_diagram(objects, relations, str(tmp / "er.png"))
+                er_img = str(tmp / "er.png")
+                print("  [OK] ER図")
+            except Exception as e:
+                print(f"  [WARN] ER図: {e}")
+
+        if asis_flow:
+            try:
+                dg.render_swimlane(asis_flow, str(tmp / "asis.png"))
+                asis_img = str(tmp / "asis.png")
+                print("  [OK] As-Is フロー")
+            except Exception as e:
+                print(f"  [WARN] As-Is フロー: {e}")
+
+        if tobe_flow:
+            try:
+                dg.render_swimlane(tobe_flow, str(tmp / "tobe.png"))
+                tobe_img = str(tmp / "tobe.png")
+                print("  [OK] To-Be フロー")
+            except Exception as e:
+                print(f"  [WARN] To-Be フロー: {e}")
+
+        wb = Workbook()
+        wb.remove(wb.active)
+
+        ws1 = wb.create_sheet("表紙")
+        ws2 = wb.create_sheet("システム概要")
+        ws3 = wb.create_sheet("業務フロー図")
+        ws4 = wb.create_sheet("ER図")
+        ws5 = wb.create_sheet("用語集")
+
+        _build_cover(ws1, org, req, author)
+        _build_system_overview(ws2, req, system, sys_img)
+        _build_flow_sheet(ws3, asis_flow, tobe_flow, asis_img, tobe_img)
+        _build_er_sheet(ws4, objects, relations, er_img)
+        _build_glossary_sheet(ws5, org.get("glossary", []))
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+        wb.save(str(output))
+
     print(f"saved: {output}")
 
 
 def main():
     ap = argparse.ArgumentParser(description="プロジェクト概要書.xlsx 生成")
-    ap.add_argument("--docs-dir",     required=True, help="docs/ フォルダのパス")
-    ap.add_argument("--output",       required=True, help="出力先 .xlsx パス")
-    ap.add_argument("--author",       default="",    help="作成者名")
-    ap.add_argument("--project-name", default="",    help="プロジェクト名（省略時はorg-profile.mdから取得）")
-    ap.add_argument("--template",     default=str(DEFAULT_TEMPLATE), help="テンプレート.xlsxパス")
+    ap.add_argument("--docs-dir",     required=True)
+    ap.add_argument("--output",       required=True)
+    ap.add_argument("--author",       default="")
+    ap.add_argument("--project-name", default="")
     args = ap.parse_args()
-    generate(
-        docs_dir=Path(args.docs_dir),
-        output=Path(args.output),
-        author=args.author,
-        project_name=args.project_name,
-        template=Path(args.template),
-    )
+    generate(Path(args.docs_dir), Path(args.output),
+             args.author, args.project_name)
 
 
 if __name__ == "__main__":
