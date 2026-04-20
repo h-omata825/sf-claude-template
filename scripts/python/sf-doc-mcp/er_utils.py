@@ -144,7 +144,7 @@ def _draw_box(ax, box: dict) -> dict:
     x, y, w, h = box["x"], box["y"], box["w"], box["h"]
     sc       = STYLE_COLORS.get(box.get("style", "primary"), STYLE_COLORS["light"])
     is_ref   = bool(box.get("ref_only", False))
-    fields   = [] if is_ref else [f for f in box.get("fields", []) if f.get("is_fk")]
+    fields   = [] if is_ref else box.get("fields", [])
 
     # 1. 外枠 FancyBboxPatch（ボディ背景 + 角丸ボーダー用）
     pad = 0.04
@@ -215,7 +215,27 @@ def _draw_box(ax, box: dict) -> dict:
                 ha="left", va="center", color=_hex(sc["hdr_fg"]),
                 clip_on=True, zorder=5, **_fpkw(9.5, bold=True))
 
-    # 6. フィールド行（FK のみ表示）
+    # フィールド型の略語
+    _FTYPE_ABBR = {
+        "master_detail": "MD", "reference": "ref", "lookup": "ref",
+        "picklist": "PL",  "multipicklist": "MPL",
+        "text": "TX",      "textarea": "TA",  "longtextarea": "TXT",
+        "checkbox": "CB",  "date": "DT",      "datetime": "DTM",
+        "number": "NUM",   "currency": "¥",   "percent": "%",
+        "autonumber": "AN","formula": "FML",  "html": "HTML",
+        "email": "ML",     "phone": "TEL",    "url": "URL",
+        "id": "ID",
+    }
+    _FTYPE_COLOR = {
+        "MD":  "#CC2200",  "ref": "#2C6FAC",
+        "PL":  "#7B5EA7",  "MPL": "#7B5EA7",
+        "CB":  "#2E7D32",  "DT":  "#1565C0",  "DTM": "#1565C0",
+        "¥":   "#1E7E5A",  "%":   "#1E7E5A",  "NUM": "#1E7E5A",
+        "FML": "#5D4037",  "AN":  "#5D4037",
+        "TX":  "#757575",  "TA":  "#757575",  "TXT": "#757575",
+    }
+
+    # 6. フィールド行（FK + 非FK）
     for i, fld in enumerate(fields):
         fy = y + HDR_H + i * FIELD_H
         if fy + FIELD_H > y + h - 0.02:
@@ -230,31 +250,58 @@ def _draw_box(ax, box: dict) -> dict:
             row_bg.set_clip_path(outer)
             ax.add_patch(row_bg)
 
-        # FK アイコン（小菱形）
-        ix, iy = x + 0.12, fy + FIELD_H / 2
-        ds = 0.052
-        icon_pts = [(ix, iy - ds), (ix + ds * 1.5, iy),
-                    (ix, iy + ds), (ix - ds * 1.5, iy)]
-        ax.add_patch(mpatches.Polygon(
-            icon_pts, closed=True,
-            facecolor=_hex(sc["hdr"]), edgecolor="none", zorder=4,
-        ))
+        is_fk    = fld.get("is_fk", False)
+        ftype_raw = fld.get("type", "")
+        ftype_key = {"reference": "ref", "master_detail": "MD", "lookup": "ref"}.get(
+            ftype_raw, ftype_raw)
+        ftype_lbl = _FTYPE_ABBR.get(ftype_raw, ftype_raw[:3].upper() if ftype_raw else "")
+        badge_color = _FTYPE_COLOR.get(ftype_lbl, "#757575")
+
+        if is_fk:
+            # FK: 菱形アイコン
+            ix, iy = x + 0.12, fy + FIELD_H / 2
+            ds = 0.052
+            icon_pts = [(ix, iy - ds), (ix + ds * 1.5, iy),
+                        (ix, iy + ds), (ix - ds * 1.5, iy)]
+            ax.add_patch(mpatches.Polygon(
+                icon_pts, closed=True,
+                facecolor=_hex(badge_color), edgecolor="none", zorder=4,
+            ))
+            text_x = x + 0.24
+        else:
+            # 非 FK: 型バッジ（小矩形）
+            badge_w = max(len(ftype_lbl) * 0.070 + 0.10, 0.28)
+            badge_h = FIELD_H * 0.56
+            bx_ = x + 0.08
+            by_ = fy + (FIELD_H - badge_h) / 2
+            badge = FancyBboxPatch(
+                (bx_, by_), badge_w, badge_h,
+                boxstyle="round,pad=0.01",
+                linewidth=0, edgecolor="none",
+                facecolor=(*_hex(badge_color), 0.18),
+                zorder=3,
+            )
+            badge.set_clip_path(outer)
+            ax.add_patch(badge)
+            ax.text(bx_ + badge_w / 2, fy + FIELD_H / 2, ftype_lbl,
+                    ha="center", va="center",
+                    color=_hex(badge_color),
+                    clip_on=True, zorder=4, **_fpkw(6.0, bold=True))
+            text_x = x + 0.08 + badge_w + 0.07
 
         fname = fld.get("label") or fld.get("api_name", "")
-        ax.text(x + 0.24, fy + FIELD_H / 2, fname,
+        ax.text(text_x, fy + FIELD_H / 2, fname,
                 ha="left", va="center", color="#1E1E1E",
-                clip_on=True, zorder=4, **_fpkw(8.0, bold=True))
+                clip_on=True, zorder=4, **_fpkw(8.0, bold=is_fk))
 
-        ftype_lbl = {"reference": "ref", "master_detail": "MD"}.get(
-            fld.get("type", ""), fld.get("type", "")[:3]
-        )
-        ax.text(x + w - 0.10, fy + FIELD_H / 2, ftype_lbl,
-                ha="right", va="center", color="#666666",
-                clip_on=True, zorder=4, **_fpkw(6.5))
+        if is_fk:
+            ax.text(x + w - 0.10, fy + FIELD_H / 2, ftype_lbl,
+                    ha="right", va="center", color=_hex(badge_color),
+                    clip_on=True, zorder=4, **_fpkw(6.5, bold=True))
 
     # フィールドなし（ref_only でない場合のみ）
     if not fields and not is_ref:
-        ax.text(x + w / 2, y + HDR_H + 0.16, "（FK なし）",
+        ax.text(x + w / 2, y + HDR_H + 0.16, "（フィールドなし）",
                 ha="center", va="top", color="#AAAAAA",
                 clip_on=True, zorder=4, **_fpkw(7.0))
 

@@ -534,8 +534,11 @@ def _build_er_slide(title, node_ids, cat_map, label_map,
     main_nodes = [nid for nid in node_ids if nid not in ref_only_set]
 
     def _er_fields(nid):
-        """ER図用: 参照/主従 FK フィールドのみ返す"""
-        return [f for f in object_fields.get(nid, {}).get("fields", []) if f.get("is_fk")]
+        """ER図用: FK 優先で全フィールドを返す（FK → 非FK の順、MAX_FIELDS 上限）"""
+        all_f = object_fields.get(nid, {}).get("fields", [])
+        fk    = [f for f in all_f if f.get("is_fk")]
+        non_fk = [f for f in all_f if not f.get("is_fk")]
+        return (fk + non_fk)[:MAX_FIELDS]
 
     box_heights = {
         nid: compute_box_h(len(_er_fields(nid)))
@@ -632,15 +635,18 @@ def _build_tx_er_core(title, label_map, object_fields, relations, style_by_api):
 
     tx_apis = set(GRID_POS.keys())
 
-    # 各ボックスの高さを先に計算（ER図: FK フィールドのみ表示）
+    # 各ボックスの高さを先に計算
     box_info = {}
     for api, (col, row) in GRID_POS.items():
         if api not in label_map:
             continue
-        oinfo = object_fields.get(api, {"fields": []})
-        fk_only = [f for f in oinfo.get("fields", []) if f.get("is_fk")]
-        box_info[api] = {"oinfo": oinfo, "fk_fields": fk_only,
-                         "h": compute_box_h(len(fk_only)), "col": col, "row": row}
+        oinfo   = object_fields.get(api, {"fields": []})
+        all_f   = oinfo.get("fields", [])
+        fk_f    = [f for f in all_f if f.get("is_fk")]
+        non_fk  = [f for f in all_f if not f.get("is_fk")]
+        er_f    = (fk_f + non_fk)[:MAX_FIELDS]
+        box_info[api] = {"oinfo": oinfo, "fk_fields": er_f,
+                         "h": compute_box_h(len(er_f)), "col": col, "row": row}
 
     # 行ごとの最大高さ
     row_max_h = {}
@@ -761,8 +767,11 @@ def _build_tx_er_grouped(title, std_ext_apis, mst_ext_apis,
     boxes = []
     y = TX_Y0
     for api in valid_tx:
-        oinfo     = object_fields.get(api, {"fields": []})
-        fk_fields = [f for f in oinfo.get("fields", []) if f.get("is_fk")][:2]
+        oinfo   = object_fields.get(api, {"fields": []})
+        all_f   = oinfo.get("fields", [])
+        fk_f    = [f for f in all_f if f.get("is_fk")]
+        non_fk  = [f for f in all_f if not f.get("is_fk")]
+        fk_fields = (fk_f + non_fk)[:4]  # 外部参照スライドは最大4件で縦スペースを確保
         h = round(HDR_H + len(fk_fields) * COMPACT_FIELD_H, 3)
         boxes.append({
             "id": api, "label": label_map.get(api, api), "api_name": api,
@@ -866,9 +875,10 @@ def _build_tx_er_grouped_pages(
     valid_tx = [a for a in TX_ORDER if a in label_map and a in tx_conn_set]
 
     def _tx_h(api):
-        oinfo = object_fields.get(api, {"fields": []})
-        fk_n  = min(len([f for f in oinfo.get("fields", []) if f.get("is_fk")]), MAX_FK)
-        return round(HDR_H + fk_n * COMPACT_FIELD_H, 3)
+        oinfo  = object_fields.get(api, {"fields": []})
+        all_f  = oinfo.get("fields", [])
+        fld_n  = min(len(all_f), MAX_FK)
+        return round(HDR_H + fld_n * COMPACT_FIELD_H, 3)
 
     # TX を高さでチャンク分割
     AVAIL_H = SLIDE_H - TX_Y0 - 0.2  # 余白込み
