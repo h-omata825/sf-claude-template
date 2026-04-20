@@ -273,9 +273,9 @@ def generate_diagram_image(boxes: list, arrows: list, out_path: str,
         return False
 
     fig, ax = plt.subplots(figsize=(slide_w, slide_h), dpi=DPI)
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
     ax.set_xlim(0, slide_w)
     ax.set_ylim(slide_h, 0)
-    ax.set_aspect("equal")
     ax.axis("off")
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
