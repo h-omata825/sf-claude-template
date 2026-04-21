@@ -4,18 +4,21 @@ backlog-xlsx / create_records.py
 対応記録.xlsx を生成するスクリプト
 
 Usage:
-    python create_records.py <folder> <issue_id> <issue_title> <issue_type> <priority> <deadline> <summary>
+    python create_records.py --folder FOLDER --issue-id ID --title TITLE
+                             --type TYPE --priority PRIORITY --deadline DEADLINE
+                             --summary SUMMARY
 
 Arguments:
-    folder       : 保存先フォルダパス
-    issue_id     : 課題ID (例: GF-327)
-    issue_title  : 件名
-    issue_type   : 課題種別 (バグ / 追加要望 / その他)
-    priority     : 優先度
-    deadline     : 期限 (YYYY-MM-DD or "未設定")
-    summary      : 背景・要件の要約
+    --folder     : 保存先フォルダパス
+    --issue-id   : 課題ID (例: GF-327)
+    --title      : 件名
+    --type       : 課題種別 (バグ / 追加要望 / その他)
+    --priority   : 優先度
+    --deadline   : 期限 (YYYY-MM-DD or "未設定")
+    --summary    : 背景・要件の要約（改行・特殊文字を含んでもよい）
 """
 
+import argparse
 import os
 import sys
 
@@ -28,17 +31,23 @@ except ImportError:
 
 
 def main():
-    if len(sys.argv) < 8:
-        print("Usage: python create_records.py <folder> <issue_id> <title> <type> <priority> <deadline> <summary>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="対応記録.xlsx を生成する")
+    parser.add_argument("--folder",   required=True, help="保存先フォルダパス")
+    parser.add_argument("--issue-id", required=True, dest="issue_id", help="課題ID (例: GF-327)")
+    parser.add_argument("--title",    required=True, help="件名")
+    parser.add_argument("--type",     required=True, dest="issue_type", help="課題種別")
+    parser.add_argument("--priority", required=True, help="優先度")
+    parser.add_argument("--deadline", required=True, help="期限 (YYYY-MM-DD or 未設定)")
+    parser.add_argument("--summary",  required=True, help="背景・要件の要約")
+    args = parser.parse_args()
 
-    FOLDER      = sys.argv[1]
-    ISSUE_ID    = sys.argv[2]
-    ISSUE_TITLE = sys.argv[3]
-    ISSUE_TYPE  = sys.argv[4]
-    PRIORITY    = sys.argv[5]
-    DEADLINE    = sys.argv[6]
-    BG_DESC     = sys.argv[7]
+    FOLDER      = args.folder
+    ISSUE_ID    = args.issue_id
+    ISSUE_TITLE = args.title
+    ISSUE_TYPE  = args.issue_type
+    PRIORITY    = args.priority
+    DEADLINE    = args.deadline
+    BG_DESC     = args.summary
 
     # --- スタイル定義 ---
     HDR  = PatternFill("solid", fgColor="1F3461")
@@ -153,29 +162,37 @@ def main():
     ws4.column_dimensions["D"].width = 50
     ws4.column_dimensions["E"].width = 50
 
-    sec_header(ws4, 1, 1, "対応内容")
-    sec_header(ws4, 2, 1, "■ バックアップ情報（修正前に記録）")
-    bold_cell(ws4, 3, 1, "Git hash（修正前）")
-    ws4.cell(row=3, column=2, value="（実装前に記録: git rev-parse HEAD）")
-    bold_cell(ws4, 4, 1, "stash名")
-    ws4.cell(row=4, column=2, value="（stash使用時に記録）")
-    bold_cell(ws4, 5, 1, "巻き戻し方法")
-    ws4.cell(row=5, column=2, value="git reset --hard [hash] または git stash pop")
+    CHANGE_LIST_ROWS  = 6   # 変更ファイル一覧のデータ行数（余裕をもたせる）
+    BEFORE_AFTER_ROWS = 3   # Before/After セクションの説明行数
+    CHECKLIST_ROWS    = 7   # 影響確認チェックリストのデータ行数
 
-    sec_header(ws4, 7, 1, "■ 変更ファイル一覧")
+    r4 = 1
+    sec_header(ws4, r4, 1, "対応内容"); r4 += 1
+    sec_header(ws4, r4, 1, "■ バックアップ情報（修正前に記録）"); r4 += 1
+    bold_cell(ws4, r4, 1, "Git hash（修正前）")
+    ws4.cell(row=r4, column=2, value="（実装前に記録: git rev-parse HEAD）"); r4 += 1
+    bold_cell(ws4, r4, 1, "stash名")
+    ws4.cell(row=r4, column=2, value="（stash使用時に記録）"); r4 += 1
+    bold_cell(ws4, r4, 1, "巻き戻し方法")
+    ws4.cell(row=r4, column=2, value="git reset --hard [hash] または git stash pop"); r4 += 2
+
+    sec_header(ws4, r4, 1, "■ 変更ファイル一覧"); r4 += 1
     for i, h in enumerate(["No", "ファイルパス", "変更種別", "変更概要"], 1):
-        col_header(ws4, 8, i, h)
+        col_header(ws4, r4, i, h)
+    r4 += 1 + CHANGE_LIST_ROWS  # ヘッダー行 + データ行分を確保
 
-    sec_header(ws4, 15, 1, "■ Before / After（実装後に記入）")
-    ws4.cell(row=16, column=1, value="実装完了後、各ファイルの変更前後を記載する").alignment = WRAP
+    sec_header(ws4, r4, 1, "■ Before / After（実装後に記入）"); r4 += 1
+    ws4.cell(row=r4, column=1, value="実装完了後、各ファイルの変更前後を記載する").alignment = WRAP
+    r4 += BEFORE_AFTER_ROWS
 
-    sec_header(ws4, 20, 1, "■ 影響確認チェックリスト")
+    sec_header(ws4, r4, 1, "■ 影響確認チェックリスト"); r4 += 1
     for i, h in enumerate(["□", "確認内容", "結果", "備考"], 1):
-        col_header(ws4, 21, i, h)
+        col_header(ws4, r4, i, h)
+    r4 += 1 + CHECKLIST_ROWS
 
-    sec_header(ws4, 30, 1, "■ 追加修正（必要に応じて追記）")
+    sec_header(ws4, r4, 1, "■ 追加修正（必要に応じて追記）"); r4 += 1
     for i, h in enumerate(["No", "ファイルパス", "変更種別", "変更概要", "詳細・根拠"], 1):
-        col_header(ws4, 31, i, h)
+        col_header(ws4, r4, i, h)
 
     # ==========================================================
     # Sheet5: テスト・検証記録
@@ -198,19 +215,24 @@ def main():
     for col, w in zip("ABCDEF", [6, 22, 35, 20, 32, 32]):
         ws6.column_dimensions[col].width = w
 
-    sec_header(ws6, 1, 1, "リリース・ロールバック")
-    sec_header(ws6, 2, 1, "■ リリース対象一覧")
+    RELEASE_LIST_ROWS    = 8  # リリース対象一覧のデータ行数
+    ROLLBACK_DETAIL_ROWS = 3  # ロールバック手順の説明行数
+
+    r6 = 1
+    sec_header(ws6, r6, 1, "リリース・ロールバック"); r6 += 1
+    sec_header(ws6, r6, 1, "■ リリース対象一覧"); r6 += 1
     for i, h in enumerate(["No", "種別", "API名 / 対象", "変更種別", "デプロイ方法", "備考"], 1):
-        col_header(ws6, 3, i, h)
+        col_header(ws6, r6, i, h)
+    r6 += 1 + RELEASE_LIST_ROWS
 
-    sec_header(ws6, 12, 1, "■ ロールバック手順")
-    ws6.cell(row=13, column=1, value="（ロールバックが必要な場合の手順を記載する）").alignment = WRAP
+    sec_header(ws6, r6, 1, "■ ロールバック手順"); r6 += 1
+    ws6.cell(row=r6, column=1, value="（ロールバックが必要な場合の手順を記載する）").alignment = WRAP
+    r6 += ROLLBACK_DETAIL_ROWS
 
-    sec_header(ws6, 16, 1, "■ 本番デプロイ記録")
-    r = 17
+    sec_header(ws6, r6, 1, "■ 本番デプロイ記録"); r6 += 1
     for k in ["デプロイ日時", "実施者", "検証結果"]:
-        bold_cell(ws6, r, 1, k)
-        r += 1
+        bold_cell(ws6, r6, 1, k)
+        r6 += 1
 
     path = os.path.join(FOLDER, f"{ISSUE_ID}_対応記録.xlsx")
     wb.save(path)
