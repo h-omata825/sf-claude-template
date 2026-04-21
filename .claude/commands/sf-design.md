@@ -13,8 +13,8 @@ Salesforce プロジェクトの設計書を生成します。
 
 | 層 | 対象読者 | 内容 | 出力先 |
 |---|---|---|---|
-| 詳細設計 | エンジニア | 機能グループ単位のコンポーネント仕様・インターフェース・画面項目 | `{ROOT}/02_詳細設計/` |
-| プログラム設計 | 実装者 | コンポーネント単位の処理フロー・SOQL・DML | `{ROOT}/03_プログラム設計/` |
+| 詳細設計 | エンジニア | 機能グループ単位のコンポーネント仕様・インターフェース・画面項目 | `{output_dir}/02_詳細設計/` |
+| プログラム設計 | 実装者 | コンポーネント単位の処理フロー・SOQL・DML | `{output_dir}/03_プログラム設計/` |
 
 ---
 
@@ -30,37 +30,23 @@ AskUserQuestion で生成する設計書を選択する:
 
 ## Step 0-2: 共通情報の取得
 
-### 管理フォルダ（= プロジェクトルート）
+### プロジェクトディレクトリ
 
-> sf-design は **管理フォルダ = プロジェクトルート（force-app/ / docs/ / scripts/ が存在するフォルダ）** を前提とする。`project_dir` は `ROOT` と同じ値を使用する。
+> sf-design は **カレントディレクトリ（force-app/ / docs/ / scripts/ が存在するフォルダ）** をプロジェクトルートとして使用する。
 
-チャットで直接聞く:
-```
-プロジェクトフォルダのパスを入力してください（設計書の出力先になります）:
-```
-
-入力後、ROOT 解決スクリプトを実行:
 ```bash
-python -c "
-import pathlib, sys
-p = pathlib.Path(r'{入力値}')
-known = ['01_基本設計', '02_詳細設計', '03_プログラム設計']
-for part in [p] + list(p.parents):
-    if part.name in known:
-        print('ROOT:' + str(part.parent))
-        sys.exit()
-print('ROOT:' + str(p))
-"
+python -c "import pathlib; print('project_dir:' + str(pathlib.Path('.').resolve()))"
 ```
-出力の `ROOT:` 以降を `ROOT` として控える。**`project_dir = ROOT`** とする。
 
-前回設定の読み込み（ROOT 確定後）:
+出力の `project_dir:` 以降を **`project_dir`** として控える。
+
+前回設定の読み込み:
 ```bash
 python -c "
 import pathlib
 try:
     import yaml
-    p = pathlib.Path(r'{ROOT}') / 'docs' / '.sf' / 'sf_design_config.yml'
+    p = pathlib.Path('docs/.sf/sf_design_config.yml')
     if p.exists():
         d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
         print('author:' + str(d.get('author', '')))
@@ -70,10 +56,11 @@ try:
         print('output_dir:')
 except Exception:
     print('author:')
+    print('output_dir:')
 "
 ```
 
-出力から `author`（前回の作成者名）と `output_dir`（前回の ROOT）を控える。
+出力から `author`（前回の作成者名）と `output_dir`（前回の出力先フォルダ）を控える。
 
 ### 作成者名
 
@@ -85,6 +72,18 @@ except Exception:
 - label: "スキップ"、description: "作成者名なし"
 
 Other が選ばれた場合はチャットで入力してもらう。「スキップ」が選ばれた場合は空文字として扱う。
+
+### 出力先フォルダ
+
+**前回値がある場合:** AskUserQuestion で提示（1択+Other自動）:
+- label: "前回: {last_output_dir}"、description: "前回と同じフォルダを使用"
+
+**前回値がない場合:** チャットで直接聞く:
+```
+資料の出力先フォルダのパスを入力してください（このフォルダ内に 02_詳細設計/ 03_プログラム設計/ が作成されます）:
+```
+
+Other が選ばれた場合もチャットで入力してもらう。確定した値を `output_dir` として控える。
 
 ### プロジェクト名
 
@@ -117,9 +116,9 @@ python -c "
 import pathlib
 try:
     import yaml
-    p = pathlib.Path(r'{ROOT}') / 'docs' / '.sf' / 'sf_design_config.yml'
+    p = pathlib.Path('docs/.sf/sf_design_config.yml')
     p.parent.mkdir(parents=True, exist_ok=True)
-    data = {'author': r'{author}', 'output_dir': r'{ROOT}'}
+    data = {'author': r'{author}', 'output_dir': r'{output_dir}'}
     p.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding='utf-8')
 except Exception as e:
     print('設定の保存に失敗:', e)
@@ -239,10 +238,10 @@ for e in errors:
 ## Step 1: 詳細設計（選択した場合）
 
 ```bash
-mkdir -p "{ROOT}/02_詳細設計" && mkdir -p "{ROOT}/02_詳細設計/.tmp"
+mkdir -p "{output_dir}/02_詳細設計" && mkdir -p "{output_dir}/02_詳細設計/.tmp"
 ```
 
-`output_dir` = `{ROOT}/02_詳細設計`、`tmp_dir` = `{ROOT}/02_詳細設計/.tmp`
+`output_dir` = `{output_dir}/02_詳細設計`、`tmp_dir` = `{output_dir}/02_詳細設計/.tmp`
 
 ### 対象グループの選択
 
@@ -260,8 +259,8 @@ mkdir -p "{ROOT}/02_詳細設計" && mkdir -p "{ROOT}/02_詳細設計/.tmp"
 
 ```
 project_dir:           {project_dir}
-output_dir:            {ROOT}/02_詳細設計
-tmp_dir:               {ROOT}/02_詳細設計/.tmp
+output_dir:            {output_dir}/02_詳細設計
+tmp_dir:               {output_dir}/02_詳細設計/.tmp
 author:                {author}
 project_name:          {project_name}
 target_group_ids:      {target_group_ids_2}  # 全グループの場合は空リスト []
@@ -275,10 +274,10 @@ version_increment:     minor
 > プログラム設計書と合わせて **機能一覧**（全コンポーネントの索引 Excel）も自動生成される。
 
 ```bash
-mkdir -p "{ROOT}/03_プログラム設計" && mkdir -p "{ROOT}/03_プログラム設計/.tmp"
+mkdir -p "{output_dir}/03_プログラム設計" && mkdir -p "{output_dir}/03_プログラム設計/.tmp"
 ```
 
-`output_dir` = `{ROOT}/03_プログラム設計`、`tmp_dir` = `{ROOT}/03_プログラム設計/.tmp`
+`output_dir` = `{output_dir}/03_プログラム設計`、`tmp_dir` = `{output_dir}/03_プログラム設計/.tmp`
 
 ### 機能スキャン
 
@@ -350,20 +349,20 @@ print(f'画面系（sf-screen-writer対象）: {len(screen_list)}件')
 
 > **実行順序は必ず守ること**: sf-design-writer の機能一覧生成は sf-screen-writer が出力した design JSON も収集するため、sf-screen-writer を先に完了させてから sf-design-writer を起動する。
 
-**上位設計 JSON の参照**: `{ROOT}/02_詳細設計/.tmp/` に JSON が存在する場合は、その旨を**エージェント起動時に明示する**（エージェント内で自動参照する）。
+**上位設計 JSON の参照**: `{output_dir}/02_詳細設計/.tmp/` に JSON が存在する場合は、その旨を**エージェント起動時に明示する**（エージェント内で自動参照する）。
 
 **① LWC・画面フロー・Visualforce・Aura → sf-screen-writer に委譲（先に実行）:**
 ```
 project_dir:       {project_dir}
-output_dir:        {ROOT}/03_プログラム設計
-tmp_dir:           {ROOT}/03_プログラム設計/.tmp
+output_dir:        {output_dir}/03_プログラム設計
+tmp_dir:           {output_dir}/03_プログラム設計/.tmp
 author:            {author}
 project_name:      {project_name}
 sf_alias:          {SF_ALIAS}
 feature_list:      {feature_list}（画面系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
 target_ids:        {target_ids}
 version_increment: minor
-上位設計参照:      {ROOT}/02_詳細設計/.tmp/ に存在する JSON（なければ省略）
+上位設計参照:      {output_dir}/02_詳細設計/.tmp/ に存在する JSON（なければ省略）
 ```
 
 sf-screen-writer の完了を確認してから次へ進む。
@@ -371,14 +370,14 @@ sf-screen-writer の完了を確認してから次へ進む。
 **② Apex・Batch・Flow(非画面)・Integration → sf-design-writer に委譲（sf-screen-writer 完了後）:**
 ```
 project_dir:       {project_dir}
-output_dir:        {ROOT}/03_プログラム設計
-tmp_dir:           {ROOT}/03_プログラム設計/.tmp
+output_dir:        {output_dir}/03_プログラム設計
+tmp_dir:           {output_dir}/03_プログラム設計/.tmp
 author:            {author}
 project_name:      {project_name}
 feature_list:      {feature_list}（Apex系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
 target_ids:        {target_ids}
 version_increment: minor
-上位設計参照:      {ROOT}/02_詳細設計/.tmp/ に存在する JSON（なければ省略）
+上位設計参照:      {output_dir}/02_詳細設計/.tmp/ に存在する JSON（なければ省略）
 ```
 
 sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生成する。sf-screen-writer の design JSON が `{tmp_dir}` に揃っている状態で起動すること。
@@ -397,7 +396,7 @@ sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生
 python -c "
 import shutil, pathlib
 for subdir in ['02_詳細設計', '03_プログラム設計']:
-    tmp = pathlib.Path(r'{ROOT}') / subdir / '.tmp'
+    tmp = pathlib.Path(r'{output_dir}') / subdir / '.tmp'
     if tmp.exists():
         shutil.rmtree(tmp, ignore_errors=True)
         print(f'削除: {tmp}')
@@ -413,11 +412,11 @@ print('クリーンアップ完了')
 ✅ 設計書生成完了
 
 【詳細設計】（生成した場合）
-  生成先: {ROOT}/02_詳細設計/
+  生成先: {output_dir}/02_詳細設計/
   生成数: {n} グループ
 
 【プログラム設計】（生成した場合）
-  生成先: {ROOT}/03_プログラム設計/
+  生成先: {output_dir}/03_プログラム設計/
   生成数: {n} 件
 
 ⚠️ 要確認: ...
