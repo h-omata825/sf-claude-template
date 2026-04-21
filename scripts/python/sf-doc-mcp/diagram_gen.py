@@ -517,68 +517,50 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
     def _badge(n: int) -> str:
         return _BADGES[n - 1] if 1 <= n <= len(_BADGES) else f"({n})"
 
+    import re as _re
+
     g = _gv.Digraph(
         "flowchart",
         graph_attr={
             "bgcolor": "white",
             "rankdir": "LR",
             "splines": "ortho",
-            "nodesep": "0.5",
-            "ranksep": "0.7",
+            "nodesep": "0.6",
+            "ranksep": "0.8",
             "fontname": FONT_JP,
-            "pad": "0.3",
+            "pad": "0.4",
             "dpi": "100",
         },
     )
-    g.attr("node", shape="none", margin="0")
 
     for step in steps:
         sid        = str(step.get("step", ""))
         n          = int(step.get("step", 0))
         badge      = _badge(n)
         raw_title  = step.get("title", "") or step.get("description", "")
-        # 括弧内に英数字を含む補足（技術詳細）を除去
-        import re as _re
+        # 括弧内に英数字を含む技術補足を除去
         raw_title  = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
-        title      = _wrap_jp(raw_title, 10)
+        # 10文字折り返し
+        wrapped    = _wrap_jp(raw_title, 10)
         component  = step.get("component", "")
         branch     = step.get("branch", "")
 
+        # ノードラベル: バッジ + 折り返しタイトル（\n区切り）
+        label = badge + "\\n" + wrapped
+
         if branch:
-            badge_color  = "#7F6000"
-            badge_bg     = "#FFF2CC"
-            badge_border = "#BF9000"
+            g.node(sid, label=label,
+                   shape="diamond", style="filled",
+                   fillcolor="#FFF2CC", fontcolor="#7F6000",
+                   fontname=FONT_JP, fontsize="9",
+                   margin="0.25,0.18")
         else:
-            badge_color  = "white"
-            badge_bg     = C_STEP_BG
-            badge_border = "#1F3864"
-
-        # 番号バッジ（大）＋タイトル全文（小フォント・折り返し）＋コンポーネント名（外側）
-        title_lines = "".join(
-            f'<FONT POINT-SIZE="8" COLOR="{badge_color}">{line}</FONT><BR ALIGN="LEFT"/>'
-            for line in title.split("\\n")
-        )
-        comp_row = (
-            f'<TR><TD ALIGN="CENTER">'
-            f'<FONT POINT-SIZE="7" COLOR="#888888">{component}</FONT>'
-            f'</TD></TR>'
-        ) if component else ""
-
-        html = (
-            f'<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0">'
-            f'<TR><TD>'
-            f'<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" '
-            f'BGCOLOR="{badge_bg}" COLOR="{badge_border}" STYLE="ROUNDED">'
-            f'<TR><TD ALIGN="CENTER">'
-            f'<FONT POINT-SIZE="14" COLOR="{badge_color}"><B>{badge}</B></FONT>'
-            f'</TD></TR>'
-            f'<TR><TD ALIGN="LEFT">{title_lines}</TD></TR>'
-            f'</TABLE>'
-            f'</TD></TR>'
-            f'{comp_row}'
-            f'</TABLE>>'
-        )
-        g.node(sid, label=html, fontname=FONT_JP)
+            g.node(sid, label=label,
+                   shape="box", style="filled,rounded",
+                   fillcolor=C_STEP_BG, fontcolor="white",
+                   fontname=FONT_JP, fontsize="9",
+                   margin="0.25,0.18",
+                   xlabel=component)  # コンポーネント名はノード外側に表示
 
     has_next = any(step.get("next") for step in steps)
     if has_next:
