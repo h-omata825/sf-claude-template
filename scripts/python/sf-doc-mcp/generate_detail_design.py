@@ -398,23 +398,36 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
         _embed_image(ws, png_path, img_anchor, img_w=880)
 
 
+def _estimate_row_height(text: str, chars_per_line: int = 26,
+                         line_pt: int = 14, min_h: int = 24, max_h: int = 200) -> int:
+    """テキストの折り返しを考慮して行の高さ（ポイント）を推定する。"""
+    import math as _math
+    if not text:
+        return min_h
+    lines = text.split("\n")
+    total = sum(_math.ceil(max(len(ln), 1) / chars_per_line) for ln in lines)
+    return min(max_h, max(min_h, total * line_pt + 8))
+
+
 def fill_process_overview(ws, data: dict, changed_step_nos: set,
                           png_path: str | None):
-    """処理概要シート: テーブル(動的行) + フローチャート。"""
+    """処理概要シート: テーブル(動的行・動的高) + フローチャート。"""
     steps = data.get("process_steps", [])
     n_data = len(steps)
     total_rows = n_data + DYNAMIC_EMPTY_ROWS
 
-    # データ行 + 空行の枠を作成
+    # データ行の枠を作成（デフォルト高は後で上書き）
     r = PROC_DATA_ROW_START
     data_rows(ws, r, r + total_rows - 1, PROC_COL_GROUPS, row_h=30)
 
     for i, ps in enumerate(steps):
         step_no = ps.get("step", i + 1)
         is_changed = step_no in changed_step_nos
-        set_h(ws, r, 30)
 
         desc_text = f"{ps.get('title', '')}\n{ps.get('description', '')}".strip()
+        row_h = _estimate_row_height(desc_text)
+        set_h(ws, r, row_h)
+
         component = ps.get("component") or ""
         branch = ps.get("branch") or ""
 
@@ -515,15 +528,15 @@ _JARGON_JA: list[tuple] = [
     (_re.compile(r'\bdelete\b', _re.IGNORECASE), '削除'),
     (_re.compile(r'\bupdate\b', _re.IGNORECASE), '更新'),
     (_re.compile(r'\bquery\b', _re.IGNORECASE), '参照'),
-    (_re.compile(r'\bCustomerUser\b'), '顧客ユーザー'),
+    (_re.compile(r'\bCustomerUser\b'), 'カスタマーユーザー'),
     (_re.compile(r'\b[A-Z][A-Za-z]*Tmp\b'), '一時データ'),
 ]
 
 # 技術用語→日本語変換ルール（役割・説明文用）
 _TECH_REPL = [
-    (_re.compile(r'@InvocableMethod[としてで\s]*'), 'Flowのアクションとして呼び出され、'),
-    (_re.compile(r'@AuraEnabled[としてで\s]*'), 'LWCから呼び出し可能で、'),
-    (_re.compile(r'@RemoteAction[としてで\s]*'), '非同期で呼び出され、'),
+    (_re.compile(r'@InvocableMethod[としてで\s]*'), 'フローから呼び出され、'),
+    (_re.compile(r'@AuraEnabled[としてで\s]*'), 'LWCから呼び出され、'),
+    (_re.compile(r'@RemoteAction[としてで\s]*'), '非同期処理として呼び出され、'),
     (_re.compile(r'@\w+'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
@@ -771,11 +784,25 @@ def _build_business_flow(data: dict) -> list[dict]:
         })
         step_no += 1
 
-    # next リンク設定
-    for i, step in enumerate(steps[:-1]):
-        step["next"] = [{"to": steps[i + 1]["step"]}]
+    # 業務レベルのステップのみに絞り込む
+    # - お客様 / GF社担当者: 常に表示
+    # - 自動フロー: 承認・通知・送信など業務上可視の結果のみ表示
+    # - システム: 除外（処理概要シートで扱う）
+    biz_steps = [
+        s for s in steps
+        if s["actor"] in ("お客様", "GF社担当者")
+        or (s["actor"] == "自動フロー"
+            and _re.search(r'承認|通知|送信|完了|確認|審査|レビュー', s["action"]))
+    ]
 
-    return steps
+    # ステップ番号を振り直し、next リンクを再設定
+    for i, step in enumerate(biz_steps, 1):
+        step["step"] = i
+        step["next"] = []
+    for i in range(len(biz_steps) - 1):
+        biz_steps[i]["next"] = [{"to": biz_steps[i + 1]["step"]}]
+
+    return biz_steps
 
 
 def _build_process_steps(data: dict) -> list[dict]:
