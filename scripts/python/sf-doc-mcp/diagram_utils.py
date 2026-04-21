@@ -1804,9 +1804,13 @@ def generate_object_component_matrix(
     OBJ_BG   = "#E8EDF5"
     FIELD_BG = "#F8F9FB"
 
-    # 全コンポーネントを列に使う（Apex・Flow等すべて）
-    apex_comps = components if components else []
-    comp_names = [c.get("api_name", "") for c in apex_comps]
+    # DML操作のあるコンポーネントのみ列に使う（object_access 登場順）
+    seen_comps: list[str] = []
+    for entry in object_access:
+        comp = entry.get("component", "")
+        if comp and comp not in seen_comps:
+            seen_comps.append(comp)
+    comp_names = seen_comps
 
     # オブジェクト→コンポーネント→操作のマトリクス構築
     matrix: dict[str, dict[str, str]] = {
