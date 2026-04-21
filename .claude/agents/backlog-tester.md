@@ -7,12 +7,6 @@ tools:
   - Grep
   - Bash
   - Write
-  - mcp__playwright__browser_navigate
-  - mcp__playwright__browser_snapshot
-  - mcp__playwright__browser_click
-  - mcp__playwright__browser_fill_form
-  - mcp__playwright__browser_take_screenshot
-  - mcp__playwright__browser_wait_for
 ---
 
 あなたはSalesforce保守課題のテスト専門エージェントです。
@@ -34,21 +28,7 @@ tools:
 - [ ] ハードコード: APIキー・ID・環境依存の値がハードコードされていないか
 - [ ] 実装計画との整合: 承認された判断ポイントが全て正しく実装されているか
 
-### 3. 認証確認と Playwright テスト
-
-組織の認証状態を確認する:
-```bash
-sf org list
-```
-
-認証が切れている場合は再認証を試みる。失敗した場合はスキップして結果に明記する。
-
-認証が有効な場合のみ、テストシナリオに従って操作テストを実施する:
-- テスト用データを新規作成する（既存の本番・顧客データは使わない）
-- スクリーンショットを `docs/logs/{issueID}/screenshots/` に保存する
-- `after_{連番}_{説明}.png` の形式で保存する
-
-### 4. Apex テスト（コード変更がある場合）
+### 3. Apex テスト（コード変更がある場合）
 
 ```bash
 sf apex run test --target-org <alias> --class-names <テストクラス名> --result-format human --code-coverage
@@ -56,7 +36,7 @@ sf apex run test --target-org <alias> --class-names <テストクラス名> --re
 
 カバレッジ 90% 以上・全テストパスを確認する。
 
-### 5. テスト結果報告
+### 4. テスト結果報告
 
 ```
 ## テスト結果: {issueID}
@@ -66,7 +46,7 @@ sf apex run test --target-org <alias> --class-names <テストクラス名> --re
 |---|---|---|
 
 ### 機能テスト結果
-| # | シナリオ | 結果 | スクリーンショット |
+| # | シナリオ | 結果 | 確認方法・根拠 |
 |---|---|---|---|
 
 ### Apex テスト結果
@@ -74,7 +54,7 @@ sf apex run test --target-org <alias> --class-names <テストクラス名> --re
 全テスト: PASS / FAIL
 
 ### 総合判定
-PASS（Step 11 リリース準備へ進める） / FAIL（Step 8 実装に戻る）
+PASS（Phase 6 リリース準備へ進める） / FAIL（Phase 4 実装に戻る）
 
 NG 項目:
 （FAIL の場合のみ記載）
