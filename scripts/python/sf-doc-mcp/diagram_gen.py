@@ -517,16 +517,24 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
     def _badge(n: int) -> str:
         return _BADGES[n - 1] if 1 <= n <= len(_BADGES) else f"({n})"
 
-    # アクション一言: 最初の動詞句を 8 文字以内で抽出
+    # アクション一言: 日本語動詞句を 6 文字以内で抽出
     def _action(title: str) -> str:
+        import re
         t = (title or "").strip()
-        # 「〜を〜する」→「〜する」に短縮: 「する」「します」「行う」で切る
-        for pat in ["を", "から", "（", "、", "，", "。"]:
-            idx = t.find(pat)
-            if 0 < idx <= 8:
-                t = t[:idx]
-                break
-        return t[:8]
+        # 「〜を〜する/作成/確認/更新/送信/取得/登録/削除」→ 動詞句を返す
+        m = re.search(r'を([\u3040-\u9fff]{2,6})(?:する|します|行う|実行)?', t)
+        if m:
+            verb = m.group(1)
+            return verb + "する" if not verb.endswith(("する", "確認", "作成", "更新")) else verb
+        # 「〜の〜確認/作成/更新」→ 名詞句
+        m = re.search(r'の([\u3040-\u9fff]{2,5}(?:確認|作成|更新|取得|送信|登録|削除))', t)
+        if m:
+            return m.group(1)
+        # 最後の日本語ブロックを使う
+        blocks = re.findall(r'[\u3040-\u9fff]{2,}', t)
+        if blocks:
+            return blocks[-1][:6]
+        return t[:6]
 
     g = _gv.Digraph(
         "flowchart",
@@ -539,7 +547,6 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "fontname": FONT_JP,
             "pad": "0.3",
             "dpi": "100",
-            "size": "9,3!",
         },
     )
     g.attr("node", shape="none", margin="0")
