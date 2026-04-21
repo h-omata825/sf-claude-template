@@ -483,16 +483,246 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
 
 # ── GFスキーマ正規化 ────────────────────────────────────────────────
+import re as _re
+
+# Salesforce 標準オブジェクトの日本語ラベルマップ
+_STD_OBJ_LABELS = {
+    "Lead": "リード", "Contact": "取引先責任者", "Account": "取引先",
+    "Opportunity": "商談", "Case": "ケース", "Task": "ToDo", "Event": "行動",
+    "User": "ユーザー", "ContentVersion": "コンテンツバージョン",
+    "ContentDocument": "コンテンツドキュメント",
+    "ContentDocumentLink": "コンテンツドキュメントリンク",
+    "EmailMessage": "メール", "Attachment": "添付ファイル",
+}
+
+# 技術用語→日本語変換ルール（正規表現, 置換文字列）
+_TECH_REPL = [
+    (_re.compile(r'@InvocableMethod[としてで\s]*'), 'Flowのアクションとして呼び出され、'),
+    (_re.compile(r'@AuraEnabled[としてで\s]*'), 'LWCから呼び出し可能で、'),
+    (_re.compile(r'@RemoteAction[としてで\s]*'), '非同期で呼び出され、'),
+    (_re.compile(r'@\w+'), ''),
+    # ClassName.methodName() → 除去（前後の助詞が残る）
+    (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
+    # ClassName.methodName → 除去
+    (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
+    # 連続する句読点・空白を整理
+    (_re.compile(r'[ \t]{2,}'), ' '),
+    (_re.compile(r'(、){2,}'), '、'),
+    (_re.compile(r'(。){2,}'), '。'),
+]
+
+
+def _clean_tech(text: str) -> str:
+    """Apexアノテーション・クラス名.メソッド名パターンを除去して日本語説明にする。"""
+    for pattern, repl in _TECH_REPL:
+        text = pattern.sub(repl, text)
+    return text.strip()
+
+
+def _short_title(responsibility: str, max_len: int = 35) -> str:
+    """responsibilityの先頭文からAPIを除去した短いタイトルを作る。"""
+    clean = _clean_tech(responsibility)
+    m = _re.match(r'^(.+?)[。．\n]', clean)
+    title = m.group(1) if m else clean
+    return title[:max_len].strip()
+
+
+def _extract_actor(token: str) -> str:
+    """フロートークンから日本語アクター名を推定する。"""
+    t = _re.sub(r'（[^）]*）|\([^)]*\)', '', token).strip()
+    if _re.search(r'お客様|顧客|申請者|依頼者', t):
+        return "お客様"
+    if _re.search(r'管理者|事務|担当者|スタッフ|GF社', t):
+        return "GF社担当者"
+    if _re.search(r'Flow|フロー|承認', t):
+        return "自動フロー"
+    if _re.search(r'[A-Z][a-zA-Z]', t):
+        return "システム"
+    return t[:20] if t else "システム"
+
+
+def _infer_callees(data: dict) -> None:
+    """data_flow_overview の「→」連鎖からコンポーネント間呼び出し関係を推論して callees に設定する。"""
+    flow_text = data.get("data_flow_overview", "")
+    if not flow_text:
+        return
+    comp_names = {c.get("api_name", "") for c in data.get("components", [])}
+    if not comp_names:
+        return
+
+    # 最初の段落（。まで）だけ使う
+    main_flow = flow_text.split("。")[0]
+    tokens = _re.split(r'→', main_flow)
+
+    def find_comp(token: str) -> str | None:
+        for name in comp_names:
+            if name and name in token:
+                return name
+        return None
+
+    callees_map: dict[str, list[str]] = {n: [] for n in comp_names}
+    prev = None
+    for token in tokens:
+        curr = find_comp(token)
+        if curr and prev and prev != curr and curr not in callees_map[prev]:
+            callees_map[prev].append(curr)
+        if curr:
+            prev = curr
+
+    for comp in data.get("components", []):
+        name = comp.get("api_name", "")
+        if callees_map.get(name):
+            comp["callees"] = callees_map[name]
+
+
+def _build_business_flow(data: dict) -> list[dict]:
+    """data_flow_overview の「→」トークンから業務フロー steps を生成する。"""
+    flow_text = data.get("data_flow_overview", "")
+    if not flow_text:
+        return []
+
+    comp_map = {c.get("api_name", ""): c for c in data.get("components", [])}
+    # 最初の文（。まで）
+    main_flow = flow_text.split("。")[0]
+    tokens = [t.strip() for t in _re.split(r'→', main_flow) if t.strip()]
+
+    steps = []
+    for i, token in enumerate(tokens):
+        # コンポーネント名が含まれる場合は対応するresponsibilityの先頭文を使う
+        matched_comp = next((c for name, c in comp_map.items() if name and name in token), None)
+        if matched_comp:
+            responsibility = matched_comp.get("responsibility", "")
+            action = _short_title(responsibility) if responsibility else _clean_tech(token)
+            actor = "システム"
+        else:
+            clean = _re.sub(r'（[^）]*）|\([^)]*\)', '', token).strip()
+            clean = _clean_tech(clean)
+            if i == 0:
+                actor = _extract_actor(token)
+                action = f"{clean}から処理を依頼・起動する" if clean else "処理を開始する"
+            else:
+                actor = "システム"
+                action = clean if clean else token.strip()
+
+        steps.append({
+            "step": i + 1,
+            "actor": actor,
+            "action": action,
+            "system": matched_comp.get("api_name", "Salesforce") if matched_comp else "外部",
+            "next": [{"to": i + 2}] if i < len(tokens) - 1 else [],
+        })
+
+    return steps
+
+
+def _build_process_steps(data: dict) -> list[dict]:
+    """components の responsibility から日本語の処理概要 steps を生成する。"""
+    steps = []
+    for i, comp in enumerate(data.get("components", []), 1):
+        responsibility = comp.get("responsibility", "")
+        comp_type = comp.get("type", "Apex")
+
+        # 入出力情報を補足に追加
+        desc_parts = [_clean_tech(responsibility)]
+        if comp.get("inputs"):
+            desc_parts.append(f"■ 受け取るデータ: {comp['inputs']}")
+        if comp.get("outputs"):
+            desc_parts.append(f"■ 出力・更新内容: {comp['outputs']}")
+        if comp.get("error_handling"):
+            desc_parts.append(f"■ エラー処理: {comp['error_handling']}")
+
+        title = _short_title(responsibility) if responsibility else comp.get("api_name", "")
+
+        # Flowは分岐処理が多いためbranchに "条件分岐あり" を設定
+        branch = "条件分岐あり" if comp_type == "Flow" else None
+
+        steps.append({
+            "step": i,
+            "title": title,
+            "description": "\n".join(p for p in desc_parts if p),
+            "component": comp.get("api_name", ""),
+            "branch": branch,
+            "next": [{"to": i + 1}] if i < len(data.get("components", [])) else [],
+        })
+
+    return steps
+
+
+def _build_related_objects(data: dict) -> list[dict]:
+    """component の inputs/outputs/responsibility から __c オブジェクトと標準オブジェクトを抽出する。"""
+    seen: set[str] = set()
+    objects: list[dict] = []
+
+    all_texts = []
+    for comp in data.get("components", []):
+        all_texts += [
+            comp.get("responsibility", ""),
+            comp.get("inputs", ""),
+            comp.get("outputs", ""),
+        ]
+    all_texts += [
+        data.get("data_flow_overview", ""),
+        data.get("processing_purpose", ""),
+    ]
+    combined = " ".join(all_texts)
+
+    # __c オブジェクト
+    for m in _re.finditer(r'([A-Z][A-Za-z0-9]*__c)\b', combined):
+        api = m.group(1)
+        if api not in seen:
+            seen.add(api)
+            # ラベル推定: CamelCase → スペース区切り（大文字前にスペース）
+            raw = api.replace("__c", "")
+            label = _re.sub(r'([A-Z])', r' \1', raw).strip()
+            objects.append({
+                "api_name": api, "label": label,
+                "fields": [{"api_name": "-", "label": "（詳細は個票参照）",
+                             "access": "", "note": ""}],
+                "relations": [],
+            })
+
+    # 標準オブジェクト（一致する場合のみ）
+    for std_api, std_label in _STD_OBJ_LABELS.items():
+        # 単語境界で出現するものだけ
+        if std_api not in seen and _re.search(rf'\b{std_api}\b', combined):
+            seen.add(std_api)
+            objects.append({
+                "api_name": std_api, "label": std_label,
+                "fields": [{"api_name": "-", "label": "（詳細は個票参照）",
+                             "access": "", "note": ""}],
+                "relations": [],
+            })
+
+    return objects
+
+
+def _infer_users(data: dict) -> str:
+    """processing_purpose / data_flow_overview からユーザー/利用部門を推定する。"""
+    combined = " ".join([
+        data.get("processing_purpose", ""),
+        data.get("data_flow_overview", ""),
+    ])
+    parts = []
+    if _re.search(r'お客様|顧客|申請者|Experience Cloud', combined):
+        parts.append("お客様（Experience Cloudユーザー）")
+    if _re.search(r'管理者|GF社|担当者|事務', combined):
+        parts.append("GF社担当者")
+    if _re.search(r'コンサル', combined):
+        parts.append("GF社コンサル部")
+    if _re.search(r'営業', combined):
+        parts.append("GF社営業部")
+    return "・".join(parts) if parts else ""
+
+
 def _normalize_schema(data: dict) -> dict:
     """GFプロジェクト固有スキーマを generate_detail_design.py の標準スキーマに変換する。
 
     GFスキーマ → 標準スキーマ の主なマッピング:
       group_id           → feature_id
       processing_purpose → summary
-      data_flow_overview → purpose
-      notes              → (概要の補足情報として summary に追記)
-      components[].responsibility → components[].role
-      interfaces[]       → process_steps[]  (process_steps が未定義の場合のみ)
+      data_flow_overview → purpose / business_flow
+      components[]       → process_steps（日本語化）・callees推論
+      interfaces[]       → (補助情報のみ)
     """
     # feature_id
     if not data.get("feature_id") and data.get("group_id"):
@@ -502,58 +732,49 @@ def _normalize_schema(data: dict) -> dict:
     if not data.get("summary"):
         parts = [data.get("processing_purpose", "")]
         if data.get("notes"):
-            parts.append(f"【備考】{data['notes']}")
+            parts.append(f"【前提・補足】{data['notes']}")
         data["summary"] = "\n".join(p for p in parts if p)
 
     if not data.get("purpose") and data.get("data_flow_overview"):
         data["purpose"] = data["data_flow_overview"]
 
+    # 利用者推定
+    if not data.get("users"):
+        data["users"] = _infer_users(data)
+
+    # 起点画面: LWC コンポーネントがあれば列挙、なければ空
+    if not data.get("trigger_screen"):
+        lwcs = [c.get("api_name", "") for c in data.get("components", [])
+                if c.get("type") == "LWC"]
+        if lwcs:
+            data["trigger_screen"] = " / ".join(lwcs)
+
     # prerequisites → trigger
     if not data.get("trigger") and data.get("prerequisites"):
         data["trigger"] = data["prerequisites"]
 
-    # components: responsibility → role
+    # components: responsibility → role（日本語化）& callees 初期化
     for comp in data.get("components", []):
         if not comp.get("role"):
-            role_parts = [comp.get("responsibility", "")]
-            if comp.get("inputs"):
-                role_parts.append(f"入力: {comp['inputs']}")
-            if comp.get("outputs"):
-                role_parts.append(f"出力: {comp['outputs']}")
-            if comp.get("error_handling"):
-                role_parts.append(f"エラー: {comp['error_handling']}")
-            comp["role"] = "\n".join(p for p in role_parts if p)
-        # callees が未定義の場合は空リストを保証
+            comp["role"] = _clean_tech(comp.get("responsibility", ""))
         if "callees" not in comp:
             comp["callees"] = []
 
-    # process_steps: interfaces → process_steps (未定義の場合のみ)
-    if not data.get("process_steps") and data.get("interfaces"):
-        steps = []
-        for i, iface in enumerate(data["interfaces"], 1):
-            desc = iface.get("description", "")
-            params = iface.get("input_params", "")
-            ret = iface.get("return_value", "")
-            exc = iface.get("exceptions", "")
-            detail_parts = []
-            if params:
-                detail_parts.append(f"入力: {params}")
-            if ret and ret != "void":
-                detail_parts.append(f"戻り値: {ret}")
-            if exc:
-                detail_parts.append(f"例外: {exc}")
-            full_desc = desc
-            if detail_parts:
-                full_desc += "\n" + " / ".join(detail_parts)
-            steps.append({
-                "step": i,
-                "title": f"{iface.get('component', '')} - {iface.get('method', '')}",
-                "description": full_desc,
-                "component": iface.get("component", ""),
-                "branch": None,
-                "next": [],
-            })
-        data["process_steps"] = steps
+    # callees を data_flow_overview から推論（まだ未設定の場合）
+    if not any(comp.get("callees") for comp in data.get("components", [])):
+        _infer_callees(data)
+
+    # process_steps: components から日本語説明で生成
+    if not data.get("process_steps"):
+        data["process_steps"] = _build_process_steps(data)
+
+    # business_flow: data_flow_overview から生成
+    if not data.get("business_flow"):
+        data["business_flow"] = _build_business_flow(data)
+
+    # related_objects: outputs/inputs から __c・標準オブジェクトを抽出
+    if not data.get("related_objects"):
+        data["related_objects"] = _build_related_objects(data)
 
     return data
 
