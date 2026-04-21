@@ -539,12 +539,15 @@ def _parse_flow_fields(flow_path: Path) -> dict[str, set]:
 
 
 def _parse_apex_fields(cls_path: Path) -> dict[str, set]:
-    """Apexクラスから SOQL + DML の {obj_api: {field_api}} を抽出する。"""
+    """Apexクラスから SOQL + DML + トリガーハンドラーのフィールドを抽出する。
+    Returns {obj_api: {field_api}}
+    """
     try:
         content = cls_path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return {}
     result: dict[str, set] = {}
+
     # SOQL: SELECT f1, f2 FROM ObjectName
     for m in _re.finditer(
         r'SELECT\s+(.*?)\s+FROM\s+([A-Za-z0-9_]+)', content, _re.IGNORECASE | _re.DOTALL
@@ -556,10 +559,31 @@ def _parse_apex_fields(cls_path: Path) -> dict[str, set]:
         }
         if fields:
             result.setdefault(obj_api, set()).update(fields)
-    # DML: variable.FieldName__c = ...
+
+    # DML: variable.FieldName__c = ...（オブジェクト特定不可のため __any__ に保持）
     for fapi in _re.findall(r'\.\s*([A-Za-z][A-Za-z0-9_]*__c)\s*=', content):
-        # オブジェクトAPIは特定できないため全オブジェクトへの候補として保持
         result.setdefault("__any__", set()).add(fapi)
+
+    # トリガーハンドラー: メソッド引数・ローカル変数の型宣言からプライマリオブジェクトを特定
+    # 例: Map<Id, ViewAblePerson__c> や List<ViewAblePerson__c> → ViewAblePerson__c がプライマリ
+    trigger_obj = None
+    for pat in [r'Map<Id,\s*([A-Za-z][A-Za-z0-9]*__c)>',
+                r'List<([A-Za-z][A-Za-z0-9]*__c)>',
+                r'([A-Za-z][A-Za-z0-9]*__c)\s+\w+\s*[=;,)]']:
+        m = _re.search(pat, content)
+        if m:
+            trigger_obj = m.group(1)
+            break
+    if trigger_obj:
+        # そのオブジェクト型変数へのプロパティアクセス (.Field__c) を収集
+        prop_fields = set(_re.findall(
+            r'\b\w+\.\s*([A-Za-z][A-Za-z0-9]*__[cr])\b', content
+        ))
+        # Id系・リレーション(__r)は除外
+        prop_fields = {f for f in prop_fields if not f.endswith('__r')}
+        if prop_fields:
+            result.setdefault(trigger_obj, set()).update(prop_fields)
+
     return result
 
 
@@ -961,34 +985,33 @@ def _clean_io_text(text: str) -> str:
     return text.strip()
 
 
-def _short_title(responsibility: str, max_len: int = 50) -> str:
-    """責務テキストから日本語アクション文タイトルを生成する。
-
-    「〜を〜する」形式を目指す。技術用語・API名・boolean変数は除去済みの
-    _clean_tech_business を使用し、主要アクション節を抽出する。
-    """
+def _short_title(responsibility: str, max_len: int = 25) -> str:
+    """責務テキストから短い日本語アクションタイトルを生成する（フローチャートノード用）。"""
     clean = _clean_tech_business(responsibility)
+    # 「Flowのアクションとして〜から」「〜クラスとして〜から」等のプリアンブルを除去
+    clean = _re.sub(r'^[^。・\n]*?(?:アクション|クラス|ハンドラ|ハンドラー)として[^。・\n]*?から[、]?', '', clean).strip()
     clean = _PREAMBLE_RE.sub('', clean).strip()
+    # 末尾の「〜の責務を持つ」「〜責務を担う」を除去
+    clean = _re.sub(r'(?:の)?責務を(?:持つ|担う|持ち)?。?$', '', clean).strip()
 
-    # 「〜を担当する」→ 担当内容だけを抽出してタイトルに
+    # 「〜を担当する」形式 → 先頭項目のみ
     m_tantou = _re.match(r'^(.+?)を担当する', clean)
     if m_tantou:
-        core = m_tantou.group(1).strip()
-        # 「・」区切りリストは先頭2項目に絞る
-        items = [x.strip() for x in core.split('・') if x.strip()]
-        if len(items) > 2:
-            core = '・'.join(items[:2]) + 'など'
-        return (core + 'を行う')[:max_len]
+        items = [x.strip() for x in m_tantou.group(1).split('・') if x.strip()]
+        return (items[0] + 'を行う')[:max_len] if items else ''
 
-    # 最初の文（句読点まで）を取得
+    # 「・」区切りリストは先頭1項目のみ使用
+    items = [x.strip() for x in clean.split('・') if x.strip()]
+    if items:
+        first = items[0]
+        m = _re.match(r'^(.+?)[。．]', first)
+        return (m.group(1) if m else first)[:max_len].strip()
+
     m = _re.match(r'^(.+?)[。．\n]', clean)
-    title = m.group(1).strip() if m else clean.strip()
-
-    # 末尾が体言止めなら「する」を補う
+    title = (m.group(1) if m else clean)[:max_len].strip()
     if title and not _re.search(r'[するなる行うれるわれる]$', title):
         title = title + 'を行う'
-
-    return title[:max_len].strip()
+    return title[:max_len]
 
 
 def _extract_actor(token: str) -> str:
@@ -1196,6 +1219,11 @@ def _build_process_steps(data: dict) -> list[dict]:
         # 責務を日本語化（SF オブジェクト名・フィールド名・ジャーゴン→日本語 → Apex用クリーン）
         resp_j = _translate_sf_fields(_translate_jargon(_translate_sf_objects(responsibility)))
         desc_main = _clean_tech(resp_j)
+        # トリガータイミング注釈（処理前（新規）/処理後（新規））等を除去
+        desc_main = _re.sub(
+            r'[（(](?:処理前|処理後)（[^）]+）(?:/(?:処理前|処理後)（[^）]+）)*[）)]', '', desc_main
+        ).strip()
+        desc_main = _re.sub(r'\s{2,}', ' ', desc_main)
 
         title  = _short_title(responsibility) if responsibility else ""
         branch = None  # 実際の条件内容が取れない場合は空にする
@@ -1250,12 +1278,13 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
     for comp in data.get("components", []):
         name = comp.get("api_name", "")
 
-        # inputs → R（参照）
+        # inputs → R（参照）。ただし trigger newList / trigger.new 文脈では INSERT
         for text in [comp.get("inputs", "")]:
             if not text:
                 continue
+            is_trigger_new = bool(_re.search(r'trigger\s+new|trigger\.new|newList', text, _re.IGNORECASE))
             for m in _re.finditer(r'(?<![A-Za-z0-9_])([A-Z][A-Za-z0-9]*__c)(?![A-Za-z0-9_])', text):
-                _register(m.group(1), name, "R")
+                _register(m.group(1), name, "INSERT" if is_trigger_new else "R")
             for std_api in _STD_OBJ_LABELS:
                 if _re.search(rf'(?<![A-Za-z0-9_]){_re.escape(std_api)}(?![A-Za-z0-9_])', text):
                     _register(std_api, name, "R")
