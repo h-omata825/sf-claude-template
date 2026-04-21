@@ -427,7 +427,7 @@ else:
 
 > **重要**: `overview` は **Phase 1 で `{tmp_dir}/{api_name}_design.json` に保存した設計 JSON の `overview` フィールド**を使うこと。sf-doc から渡された `feature_list`（scan_features.py 出力）の `overview` は javadoc の1行抜粋であり品質が低いため、絶対に使わない。
 
-> **出力先の補足**: `/sf-design` コマンドの `output_dir` はプログラム設計書専用フォルダ（例: `docs/design/`）を指すため、ここで生成する `機能一覧.xlsx` は `{output_dir}/機能一覧.xlsx` に出力される。`/sf-doc` 経由で生成した機能一覧（`01_基本設計/機能一覧.xlsx`）とは別フォルダに存在する。どちらが最新かを完了報告に明記すること。
+> **出力先の補足**: `/sf-design` コマンドはユーザー指定の `output_dir` の下に `03_プログラム設計/` を作り、そこに設計書と機能一覧を出力する。`/sf-doc` が `01_基本設計/機能一覧_v*.xlsx` を生成するのとは別に、このエージェントが生成する機能一覧は **Phase 1 でソースを精読した overview を反映した高品質版**として `{output_dir}/機能一覧.xlsx`（`03_プログラム設計/` 直下）に出力される。
 
 既存の機能一覧.xlsx が `{output_dir}/機能一覧.xlsx` に存在する場合は `--source-file` で渡す（差分検出・バージョン管理に使用）:
 
