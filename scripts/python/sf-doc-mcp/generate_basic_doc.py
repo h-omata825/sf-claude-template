@@ -24,11 +24,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import tempfile
 from datetime import date
 from pathlib import Path
+
+# Graphviz on Windows is often installed but not in PATH — add the default location
+_GV_BIN = r"C:\Program Files\Graphviz\bin"
+if os.path.isdir(_GV_BIN) and _GV_BIN not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _GV_BIN + os.pathsep + os.environ.get("PATH", "")
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
