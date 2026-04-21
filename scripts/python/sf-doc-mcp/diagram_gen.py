@@ -53,7 +53,7 @@ C_STEP_BG     = "#2E75B6"
 C_STEP_FG     = "#FFFFFF"
 C_STEP_BORDER = "#1F3864"
 
-FONT_JP = "MS Gothic"   # graphviz 用（Windows）
+FONT_JP = "Meiryo"   # graphviz 用（Windows・TrueType で高品質レンダリング）
 DPI     = 150
 
 
@@ -659,9 +659,8 @@ def render_component_diagram(
         for c in comp.get("callees", []):
             called_by.add(c)
 
-    n_nodes = len(components) + (1 if True else 0)  # trigger node included
-    _dw = max(5.0, n_nodes * 1.8)
-    _dh = max(2.5, n_nodes * 0.55)
+    n_nodes = len(components) + 1  # trigger node included
+    _dh = max(3.0, n_nodes * 0.9)
     g = _gv.Digraph(
         "components",
         graph_attr={
@@ -669,11 +668,11 @@ def render_component_diagram(
             "rankdir": "LR",
             "splines": "ortho",
             "nodesep": "0.5",
-            "ranksep": "0.8",
+            "ranksep": "1.0",
             "fontname": FONT_JP,
             "pad": "0.4",
-            "dpi": "120",
-            "size": f"{_dw},{_dh}",
+            "dpi": "150",
+            "size": f"5,{_dh}!",
         },
     )
 

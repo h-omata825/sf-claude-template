@@ -1828,12 +1828,28 @@ def generate_object_component_matrix(
         fields    = obj.get("fields", []) or [{"label": "（項目なし）", "api_name": ""}]
         obj_groups.append((obj_api, obj_label, fields))
 
+    import textwrap as _tw
+    import re as _re_local
+
+    def _strip_type_suffix(name: str) -> str:
+        """（Apex）（Flow）等の型ラベルを除去して短くする。"""
+        return _re_local.sub(r'[（(][A-Za-zApexFlowBatch\u30a0-\u30ff]+[）)]', '', name).strip('_').strip()
+
+    def _wrap_hdr(name: str, width: int = 10) -> str:
+        """コンポーネント名を折り返す。"""
+        short = _strip_type_suffix(name)
+        lines = _tw.wrap(short, width=width)
+        return '\n'.join(lines) if lines else name
+
+    # コンポーネント列幅: 名前の長さに応じて動的調整（上限2.8）
+    _max_name_len = max((len(_strip_type_suffix(c)) for c in comp_names), default=8)
+    cell_w      = min(2.8, max(1.6, _max_name_len * 0.13))
+
     # レイアウト定数
     obj_col_w   = 2.6    # オブジェクト名列（縦結合）
     field_col_w = 2.2    # 項目ラベル列
-    cell_w      = 2.0    # コンポーネント列
     cell_h      = 0.6    # 1フィールドの行高
-    hdr_h       = 1.1    # ヘッダ行高
+    hdr_h       = 1.4    # ヘッダ行高（折り返し対応で高め）
     legend_h    = 0.55   # 凡例エリア高
     margin      = 0.3
 
@@ -1865,8 +1881,9 @@ def generate_object_component_matrix(
     for ci, comp in enumerate(comp_names):
         x = margin + obj_col_w + field_col_w + ci * cell_w
         _rect(x, hdr_y, cell_w, hdr_h, HDR_BG, ec=HDR_BG)
-        ax.text(x + cell_w / 2, hdr_y + hdr_h / 2, comp,
-                ha="center", va="center", color=HDR_FG, **_fpkw(8, bold=True))
+        ax.text(x + cell_w / 2, hdr_y + hdr_h / 2, _wrap_hdr(comp, width=10),
+                ha="center", va="center", color=HDR_FG,
+                multialignment="center", **_fpkw(8, bold=True))
 
     # ── データ行（オブジェクト単位でフィールドを展開） ──────────
     accum_h = 0.0

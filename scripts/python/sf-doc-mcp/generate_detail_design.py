@@ -187,8 +187,9 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
 
 # ── PNG埋め込み ────────────────────────────────────────────────────
 def _embed_image(ws, png_path: str, anchor: str,
-                 img_w: int = 840, img_h: int | None = None):
-    """PNGをExcelシートに埋め込む。img_h=Noneなら縦横比維持。"""
+                 img_w: int = 840, img_h: int | None = None,
+                 max_h: int | None = None):
+    """PNGをExcelシートに埋め込む。img_h=Noneなら縦横比維持。max_h で高さ上限を設定。"""
     try:
         if not Path(png_path).exists():
             return
@@ -196,8 +197,12 @@ def _embed_image(ws, png_path: str, anchor: str,
         img.anchor = anchor
         if img_h is None:
             ratio = img.height / img.width if img.width else 1.0
-            img.width = img_w
-            img.height = int(img_w * ratio)
+            w, h = img_w, int(img_w * ratio)
+            if max_h and h > max_h:
+                h = max_h
+                w = int(h / ratio)
+            img.width = w
+            img.height = h
         else:
             img.width = img_w
             img.height = img_h
@@ -484,8 +489,7 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, img_w=880)
-
+        _embed_image(ws, png_path, img_anchor, img_w=700, max_h=500)
 
 
 
@@ -1033,11 +1037,14 @@ def _build_process_steps(data: dict) -> list[dict]:
         desc_main = _clean_tech(resp_j)
 
         title  = _short_title(responsibility) if responsibility else ""
-        branch = "条件分岐あり" if comp_type == "Flow" else None
+        branch = None  # 実際の条件内容が取れない場合は空にする
 
-        # セル表示: タイトル（1行目）＋詳細（2行目以降）。タイトルが詳細の書き出しと
-        # 大きく重複する場合は詳細のみにして二重表示を避ける
-        if title and desc_main and title[:15] not in desc_main[:len(title) + 5]:
+        # セル表示: タイトル（1行目）＋詳細（2行目以降）。
+        # タイトルと詳細の冒頭20字が重複する場合 or 詳細がタイトルを包含する場合は詳細のみ表示
+        _t_norm = _re.sub(r'\s', '', title)
+        _d_norm = _re.sub(r'\s', '', desc_main)
+        _overlap = len(title) > 0 and (_t_norm[:20] in _d_norm or _d_norm[:20] in _t_norm)
+        if title and desc_main and not _overlap:
             display_desc = f"{title}\n\n{desc_main}"
         else:
             display_desc = desc_main or title
