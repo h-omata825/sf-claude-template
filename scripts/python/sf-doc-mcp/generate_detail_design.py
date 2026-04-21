@@ -705,11 +705,10 @@ _TECH_REPL_BIZ = [
     # "/作成" 正規化・重複まとめ
     (_re.compile(r'/作成'), '・作成'),
     (_re.compile(r'(?:・作成){2,}'), '・作成'),
-    # Salesforce フィールド API名（__c/__r/__b 等）を除去
-    (_re.compile(r'[A-Za-z][A-Za-z0-9_]*(?:__c|__r|__C|__R)\b'), ''),
-    # フィールド名除去後の「の等」「の、」「の」 → 整理
+    # Salesforce フィールド API名（__c/__r 等）を除去（\bはUnicode文字前で効かないため (?![A-Za-z0-9_]) を使用）
+    (_re.compile(r'[A-Za-z][A-Za-z0-9_]*(?:__c|__r|__C|__R)(?![A-Za-z0-9_])'), ''),
+    # フィールド名除去後の「の等」「の、」 → 整理
     (_re.compile(r'の(?=[等や・、。\s])'), ''),
-    (_re.compile(r'(?<=[^\s])(?=[等や])'), ''),
     # 整理
     (_re.compile(r'[ \t]{2,}'), ' '),
     (_re.compile(r'[・、]{2,}'), '・'),
@@ -1266,21 +1265,30 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
 
 
 def _infer_users(data: dict) -> str:
-    """processing_purpose / data_flow_overview からユーザー/利用部門を推定する。"""
+    """processing_purpose / data_flow_overview / components からユーザー/利用部門を推定する。"""
+    comp_resp = " ".join(
+        c.get("responsibility", "") for c in data.get("components", [])
+    )
     combined = " ".join([
         data.get("processing_purpose", ""),
         data.get("data_flow_overview", ""),
+        comp_resp,
     ])
     parts = []
-    if _re.search(r'お客様|顧客|申請者|Experience Cloud', combined):
-        parts.append("お客様（Experience Cloudユーザー）")
-    if _re.search(r'管理者|GF社|担当者|事務', combined):
+    if _re.search(r'お客様|顧客|申請者|Experience Cloud|見込み客|問い合わせ者|HP問い合わせ|WebTo', combined):
+        if _re.search(r'Experience Cloud|申請者', combined):
+            parts.append("お客様（Experience Cloudユーザー）")
+        else:
+            parts.append("見込み客・問い合わせ者")
+    if _re.search(r'管理者|GF社|担当者|事務|社内|内部', combined):
         parts.append("GF社担当者")
     if _re.search(r'コンサル', combined):
         parts.append("GF社コンサル部")
     if _re.search(r'営業', combined):
         parts.append("GF社営業部")
-    return "・".join(parts) if parts else ""
+    if not parts:
+        parts.append("GF社担当者")
+    return "・".join(parts)
 
 
 def _normalize_schema(data: dict) -> dict:

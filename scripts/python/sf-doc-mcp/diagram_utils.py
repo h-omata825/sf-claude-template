@@ -1804,8 +1804,8 @@ def generate_object_component_matrix(
     OBJ_BG   = "#E8EDF5"
     FIELD_BG = "#F8F9FB"
 
-    # Apexコンポーネントのみ列に使う
-    apex_comps = [c for c in components if c.get("type") == "Apex"] or components
+    # 全コンポーネントを列に使う（Apex・Flow等すべて）
+    apex_comps = components if components else []
     comp_names = [c.get("api_name", "") for c in apex_comps]
 
     # オブジェクト→コンポーネント→操作のマトリクス構築

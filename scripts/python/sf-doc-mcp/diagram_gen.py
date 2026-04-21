@@ -531,7 +531,7 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "ranksep": "0.3",  # 上段(ステップ)と下段(コンポーネント名)の間隔
             "fontname": _FC_FONT,
             "pad": "0.4",
-            "dpi": "100",
+            "dpi": "150",
         },
     )
 
@@ -659,18 +659,21 @@ def render_component_diagram(
         for c in comp.get("callees", []):
             called_by.add(c)
 
+    n_nodes = len(components) + (1 if True else 0)  # trigger node included
+    _dw = max(5.0, n_nodes * 1.8)
+    _dh = max(2.5, n_nodes * 0.55)
     g = _gv.Digraph(
         "components",
         graph_attr={
             "bgcolor": "white",
             "rankdir": "LR",
             "splines": "ortho",
-            "nodesep": "0.4",
-            "ranksep": "0.6",
+            "nodesep": "0.5",
+            "ranksep": "0.8",
             "fontname": FONT_JP,
-            "pad": "0.3",
-            "dpi": "100",
-            "size": "9,3!",
+            "pad": "0.4",
+            "dpi": "120",
+            "size": f"{_dw},{_dh}",
         },
     )
 
@@ -716,9 +719,7 @@ def render_component_diagram(
         top_level_sorted = sorted(top_level, key=lambda n: step_order.get(n, 999))
         for i, name in enumerate(top_level_sorted, 1):
             g.edge(trigger_node, name,
-                   xlabel=f"⑤"[:1] + str(i),  # ①②③...
                    color=C_EDGE, arrowsize="0.7",
-                   fontname=FONT_JP, fontsize="9", fontcolor=C_EDGE,
                    style="dashed")
 
     png_bytes = g.pipe(format="png")
@@ -748,11 +749,9 @@ def render_object_access_matrix(
     if not _HAS_GV:
         raise RuntimeError("graphviz が利用できません")
 
-    # Apex コンポーネントのみを列に使う
-    apex_comps = [c for c in components if c.get("type") == "Apex"]
+    # 全コンポーネントを列に使う
+    apex_comps = components if components else []
     comp_names = [c.get("api_name", "") for c in apex_comps]
-    if not comp_names:
-        comp_names = [c.get("api_name", "") for c in components]
 
     obj_names  = [o.get("api_name", "") for o in related_objects]
     obj_labels = {o.get("api_name", ""): o.get("label", o.get("api_name", ""))
