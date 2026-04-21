@@ -494,38 +494,127 @@ import re as _re
 
 # ── SFプロジェクト → メタデータパス マッピング ───────────────────────────
 _SF_PROJECT_PATHS: dict[str, str] = {
-    "greenfield": "C:/workspace/16_グリーンフィールド/GF_UAT",
+    "greenfield": "C:/workspace/16_グリーンフィールド/greenfield",
 }
 # メタデータから構築するフィールドラベルマップ {obj_api: {field_api: ja_label}}
 _SF_FIELD_LABELS: dict[str, dict[str, str]] = {}
 # オブジェクトラベルマップ {obj_api: ja_label}
 _SF_OBJ_LABELS: dict[str, str] = {}
+# コンポーネント別フィールドマップ {comp_api_name: {obj_api: {field_api}}}
+_SF_COMP_FIELDS: dict[str, dict[str, set]] = {}
+
+
+def _parse_flow_fields(flow_path: Path) -> dict[str, set]:
+    """Flow XMLから {obj_api: {field_api}} を抽出する。"""
+    try:
+        content = flow_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return {}
+    result: dict[str, set] = {}
+    tags = ("recordCreates", "recordUpdates", "recordLookups", "recordDeletes")
+    for tag in tags:
+        for block in _re.findall(rf'<{tag}>(.*?)</{tag}>', content, _re.DOTALL):
+            obj_m = _re.search(r'<object>([A-Za-z0-9_]+)</object>', block)
+            if not obj_m:
+                continue
+            obj_api = obj_m.group(1)
+            fields = set(_re.findall(r'<field>([A-Za-z0-9_]+)</field>', block))
+            if fields:
+                result.setdefault(obj_api, set()).update(fields)
+    return result
+
+
+def _parse_apex_fields(cls_path: Path) -> dict[str, set]:
+    """Apexクラスから SOQL + DML の {obj_api: {field_api}} を抽出する。"""
+    try:
+        content = cls_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return {}
+    result: dict[str, set] = {}
+    # SOQL: SELECT f1, f2 FROM ObjectName
+    for m in _re.finditer(
+        r'SELECT\s+(.*?)\s+FROM\s+([A-Za-z0-9_]+)', content, _re.IGNORECASE | _re.DOTALL
+    ):
+        fields_str, obj_api = m.group(1), m.group(2)
+        fields = {
+            f.strip() for f in _re.split(r'[\s,]+', fields_str)
+            if f.strip() and f.strip().lower() != "id" and _re.match(r'^[A-Za-z]\w*$', f.strip())
+        }
+        if fields:
+            result.setdefault(obj_api, set()).update(fields)
+    # DML: variable.FieldName__c = ...
+    for fapi in _re.findall(r'\.\s*([A-Za-z][A-Za-z0-9_]*__c)\s*=', content):
+        # オブジェクトAPIは特定できないため全オブジェクトへの候補として保持
+        result.setdefault("__any__", set()).add(fapi)
+    return result
 
 
 def _load_sf_metadata(sf_project_path: str) -> None:
-    """SFプロジェクトの objectTranslations (-ja) からフィールド・オブジェクトラベルを構築してグローバルに格納する。"""
-    global _SF_FIELD_LABELS, _SF_OBJ_LABELS
-    trans_dir = Path(sf_project_path) / "force-app/main/default/objectTranslations"
-    if not trans_dir.exists():
-        return
-    for obj_dir in trans_dir.iterdir():
-        if not obj_dir.name.endswith("-ja"):
-            continue
-        obj_api = obj_dir.name[:-3]
-        # オブジェクト翻訳（caseValues の value）
-        obj_trans = obj_dir / f"{obj_dir.name}.objectTranslation-meta.xml"
-        if obj_trans.exists():
-            content = obj_trans.read_text(encoding="utf-8")
-            m = _re.search(r'<value>([^<]+)</value>', content)
-            if m:
-                _SF_OBJ_LABELS[obj_api] = m.group(1).strip()
-        # フィールド翻訳
-        for fxml in obj_dir.glob("*.fieldTranslation-meta.xml"):
-            field_api = fxml.name.replace(".fieldTranslation-meta.xml", "")
-            content = fxml.read_text(encoding="utf-8")
-            m = _re.search(r'<label><!--\s*(.*?)\s*--></label>', content)
-            if m and m.group(1):
-                _SF_FIELD_LABELS.setdefault(obj_api, {})[field_api] = m.group(1).strip()
+    """SFプロジェクトの objectTranslations/flows/classes からメタデータを構築してグローバルに格納する。"""
+    global _SF_FIELD_LABELS, _SF_OBJ_LABELS, _SF_COMP_FIELDS
+    base = Path(sf_project_path) / "force-app/main/default"
+
+    # objectTranslations: フィールド・オブジェクトの日本語ラベル
+    trans_dir = base / "objectTranslations"
+    if trans_dir.exists():
+        for obj_dir in trans_dir.iterdir():
+            if not obj_dir.name.endswith("-ja"):
+                continue
+            obj_api = obj_dir.name[:-3]
+            obj_trans = obj_dir / f"{obj_dir.name}.objectTranslation-meta.xml"
+            if obj_trans.exists():
+                content = obj_trans.read_text(encoding="utf-8")
+                m = _re.search(r'<value>([^<]+)</value>', content)
+                if m:
+                    _SF_OBJ_LABELS[obj_api] = m.group(1).strip()
+            for fxml in obj_dir.glob("*.fieldTranslation-meta.xml"):
+                field_api = fxml.name.replace(".fieldTranslation-meta.xml", "")
+                content = fxml.read_text(encoding="utf-8")
+                m = _re.search(r'<label><!--\s*(.*?)\s*--></label>', content)
+                if m and m.group(1):
+                    _SF_FIELD_LABELS.setdefault(obj_api, {})[field_api] = m.group(1).strip()
+
+    # flows: コンポーネント別のオブジェクト+フィールド
+    flows_dir = base / "flows"
+    if flows_dir.exists():
+        for flow_file in flows_dir.glob("*.flow-meta.xml"):
+            comp_api = flow_file.name.replace(".flow-meta.xml", "")
+            obj_fields = _parse_flow_fields(flow_file)
+            if obj_fields:
+                _SF_COMP_FIELDS[comp_api] = {k: v for k, v in obj_fields.items()}
+
+    # classes: コンポーネント別のオブジェクト+フィールド（テストクラスは除外）
+    classes_dir = base / "classes"
+    if classes_dir.exists():
+        for cls_file in classes_dir.glob("*.cls"):
+            if cls_file.name.endswith("Test.cls"):
+                continue
+            comp_api = cls_file.name.replace(".cls", "")
+            obj_fields = _parse_apex_fields(cls_file)
+            if obj_fields:
+                _SF_COMP_FIELDS[comp_api] = {k: v for k, v in obj_fields.items()}
+
+    # objects: field-meta.xml からラベルを補完（objectTranslations にないカスタムフィールド対応）
+    objects_dir = base / "objects"
+    if objects_dir.exists():
+        for obj_dir in objects_dir.iterdir():
+            if not obj_dir.is_dir():
+                continue
+            obj_api = obj_dir.name
+            fields_dir = obj_dir / "fields"
+            if not fields_dir.exists():
+                continue
+            for fxml in fields_dir.glob("*.field-meta.xml"):
+                field_api = fxml.name.replace(".field-meta.xml", "")
+                if field_api in _SF_FIELD_LABELS.get(obj_api, {}):
+                    continue  # 翻訳ファイルで既に取得済み
+                try:
+                    content = fxml.read_text(encoding="utf-8")
+                except Exception:
+                    continue
+                m = _re.search(r'<label>([^<]+)</label>', content)
+                if m:
+                    _SF_FIELD_LABELS.setdefault(obj_api, {})[field_api] = m.group(1).strip()
 
 
 def _sf_field_label(obj_api: str, field_api: str) -> str:
@@ -1222,16 +1311,21 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
         fields = obj_fields.get(obj_api, [])
 
         if not fields:
-            # メタデータから主要フィールドを補完（メタデータが読み込まれている場合）
+            # Flow/Apexメタデータからフィールドを補完
             meta = _SF_FIELD_LABELS.get(obj_api, {})
-            if meta:
-                all_texts = " ".join(
-                    c.get("inputs", "") + " " + c.get("outputs", "")
-                    for c in data.get("components", [])
-                ) + " " + dfo
-                for fapi, flabel in meta.items():
-                    if _re.search(rf'\b{_re.escape(fapi)}\b', all_texts):
-                        fields.append({"api_name": fapi, "label": flabel, "access": obj_combined_op, "note": ""})
+            seen_apis: set[str] = set()
+            for comp in data.get("components", []):
+                # JSONのapi_nameから型接尾辞（（Flow）等）を除去してコンポーネントキーに変換
+                raw_api = comp.get("api_name", "")
+                comp_key = _re.sub(r'（[^）]+）$', '', raw_api).strip()
+                comp_field_map = _SF_COMP_FIELDS.get(comp_key, {})
+                # 対象オブジェクトに直接マッチするフィールド
+                for fapi in comp_field_map.get(obj_api, set()):
+                    if fapi in seen_apis:
+                        continue
+                    seen_apis.add(fapi)
+                    label = meta.get(fapi) or _sf_field_label(obj_api, fapi)
+                    fields.append({"api_name": fapi, "label": label, "access": obj_combined_op, "note": ""})
 
         if not fields:
             # 最終フォールバック
