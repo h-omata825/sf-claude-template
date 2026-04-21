@@ -466,6 +466,18 @@ def _short_label(text: str, max_len: int = 18) -> str:
     return text if len(text) <= max_len else text[:max_len] + "…"
 
 
+def _wrap_jp(text: str, width: int = 12) -> str:
+    """日本語テキストを width 文字で折り返す（\\n区切り）。切り捨てしない。"""
+    text = (text or "").strip()
+    lines = []
+    while len(text) > width:
+        lines.append(text[:width])
+        text = text[width:]
+    if text:
+        lines.append(text)
+    return "\\n".join(lines)
+
+
 def _wrap_name(name: str, max_per_line: int = 14) -> str:
     """CamelCase/スネークケースの長い名前を max_per_line 文字で折り返す（\\n区切り）。"""
     if len(name) <= max_per_line:
@@ -513,13 +525,13 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
 
     for step in steps:
         sid       = str(step.get("step", ""))
-        title     = _short_label(step.get("title", "") or step.get("description", ""), 14)
-        component = _wrap_name(step.get("component", ""), 14)
+        title     = _wrap_jp(step.get("title", "") or step.get("description", ""), 11)
+        component = _wrap_name(step.get("component", ""), 13)
         branch    = step.get("branch", "")
 
-        # 上段: コンポーネント名（誰が）、下段: ステップ番号＋処理概要
+        # 上段: コンポーネント名（誰が）、下段: ステップ番号＋処理概要（折り返し）
         if component:
-            lbl = f"{component}\\n──\\n{sid}. {title}"
+            lbl = f"{component}\\n{sid}. {title}"
         else:
             lbl = f"{sid}. {title}"
 
@@ -527,12 +539,12 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             g.node(sid, label=lbl,
                    shape="diamond", style="filled",
                    fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=FONT_JP, fontsize="9", width="1.6", height="0.8")
+                   fontname=FONT_JP, fontsize="9")
         else:
             g.node(sid, label=lbl,
                    shape="box", style="filled,rounded",
                    fillcolor=C_STEP_BG, fontcolor=C_STEP_FG,
-                   fontname=FONT_JP, fontsize="9", width="1.6", height="0.8")
+                   fontname=FONT_JP, fontsize="9")
 
     has_next = any(step.get("next") for step in steps)
     if has_next:
