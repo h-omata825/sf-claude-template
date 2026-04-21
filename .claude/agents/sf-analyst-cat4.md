@@ -90,14 +90,14 @@ docs/design/
 
 ### Phase 1: 対象コンポーネントの収集
 
-**ソースは力-app/ と docs/ の両方を必ず使う。**
+**ソースは force-app/ と docs/ の両方を必ず使う。**
 
 ```bash
 # Apexクラス（テストクラス除外）
-sf data query -q "SELECT Name, IsTest, Body FROM ApexClass WHERE NamespacePrefix = null AND IsTest = false ORDER BY Name" --json
+sf data query -q "SELECT Name, IsTest FROM ApexClass WHERE NamespacePrefix = null AND IsTest = false ORDER BY Name" --json
 
 # Apexトリガー
-sf data query -q "SELECT Name, TableEnumOrId, Body FROM ApexTrigger WHERE NamespacePrefix = null" --json
+sf data query -q "SELECT Name, TableEnumOrId FROM ApexTrigger WHERE NamespacePrefix = null" --json
 
 # フロー（アクティブバージョンのみ）
 sf data query -q "SELECT ApiName, ProcessType, Label, Description FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json

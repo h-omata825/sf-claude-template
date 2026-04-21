@@ -120,7 +120,7 @@ sf data query -q "SELECT COUNT() FROM <オブジェクト名>" --json
 さらに以下も取得する（精度向上のため）:
 ```bash
 # FK関係の実態を確認
-sf data query -q "SELECT Field, RelationshipName, ReferenceTo FROM FieldDefinition WHERE EntityDefinition.QualifiedApiName = '<オブジェクト名>' AND DataType = 'Lookup' OR DataType = 'MasterDetail'" --json 2>/dev/null
+sf data query -q "SELECT Field, RelationshipName, ReferenceTo FROM FieldDefinition WHERE EntityDefinition.QualifiedApiName = '<オブジェクト名>' AND (DataType = 'Lookup' OR DataType = 'MasterDetail')" --json 2>/dev/null
 
 # このオブジェクトに参照している他オブジェクトを確認
 sf data query -q "SELECT EntityDefinition.QualifiedApiName, Field FROM FieldDefinition WHERE ReferenceTo = '<オブジェクト名>'" --json 2>/dev/null

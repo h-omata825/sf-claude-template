@@ -88,16 +88,21 @@ Step 1: カテゴリ1 をエージェントへ委譲（順次）
     → docs/flow/swimlanes.json
     → 完了サマリを返す
 
-Step 2: カテゴリ2〜5 を並列でエージェントへ委譲
+Step 2: カテゴリ2〜4 を並列でエージェントへ委譲
   ※ カテゴリ1完了後に実行（org-profile.md を参照するため）
   sf-analyst-cat2（カテゴリ2: オブジェクト・項目構成）       ┐
   sf-analyst-cat3（カテゴリ3: マスタデータ・ワークフロー設定）│ 並列実行
-  sf-analyst-cat4（カテゴリ4: 設計・機能仕様）               │
-  sf-analyst-cat5（カテゴリ5: 機能グループ定義）             ┘
+  sf-analyst-cat4（カテゴリ4: 設計・機能仕様）               ┘
     → 各カテゴリの docs/ を生成
     → 完了サマリを返す
 
-Step 3: 2周目（横断補完）
+Step 3: カテゴリ5 をカテゴリ4完了後に単独で委譲
+  ※ cat5はcat4の出力（docs/design/）を参照するため、cat4完了後に実行する
+  sf-analyst-cat5（カテゴリ5: 機能グループ定義）
+    → docs/.sf/feature_groups.yml を生成
+    → 完了サマリを返す
+
+Step 4: 2周目（横断補完）
   sf-org-analyst に全 docs/ を読み込んで横断補完を実施させる
 ```
 
@@ -108,7 +113,7 @@ Step 3: 2周目（横断補完）
 | 組織概要・環境情報 | `sf-analyst-cat1` |
 | オブジェクト・項目構成 | `sf-analyst-cat2` |
 | マスタデータ・ワークフロー設定 | `sf-analyst-cat3` |
-| 設計・機能グループ定義 | `sf-analyst-cat4` と `sf-analyst-cat5` を並列実行 |
+| 設計・機能グループ定義 | `sf-analyst-cat4` → 完了後に `sf-analyst-cat5`（順次実行） |
 
 ---
 
@@ -121,7 +126,7 @@ Step 3: 2周目（横断補完）
 ✅ カテゴリ2 完了 — オブジェクト定義書 X件 を生成しました
 ✅ カテゴリ3 完了 — マスタデータ・ワークフロー設定情報を記録しました
 ✅ カテゴリ4 完了 — 設計書 X件 を生成しました（docs/design/）
-✅ カテゴリ5 完了 — docs/.sf/feature_groups.yml を生成しました（FG-XXX 件の機能グループ）
+✅ カテゴリ5 完了 — docs/.sf/feature_groups.yml を生成しました（GRP-XXX 件の機能グループ）
 🔄 2周目（横断補完）を実行中...
 ```
 

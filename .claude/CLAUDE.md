@@ -21,7 +21,12 @@
 | データ移行 / CSVマッピング / Data Loader / SOQL最適化 / バルク処理 / データクレンジング | `data-manager` |
 | 外部API連携 / REST・SOAP / Named Credentials / Platform Events / MuleSoft | `integration-dev` |
 | 一般調査 / メール下書き / 翻訳 / アドホック / その他秘書業務 | `assistant` |
-| `/sf-memory` コマンドから委譲（Salesforce組織情報の収集・`docs/` への保存） | `sf-org-analyst` |
+| `/sf-memory` カテゴリ1委譲（組織概要・環境情報・業務フロー・要件定義の収集） | `sf-analyst-cat1` |
+| `/sf-memory` カテゴリ2委譲（オブジェクト・項目構成・ER図・オブジェクト定義書の生成） | `sf-analyst-cat2` |
+| `/sf-memory` カテゴリ3委譲（マスタデータ・メールテンプレート・自動化設定の収集） | `sf-analyst-cat3` |
+| `/sf-memory` カテゴリ4委譲（Apex・Flow・LWC・Batch等のコンポーネント設計書生成） | `sf-analyst-cat4` |
+| `/sf-memory` カテゴリ5委譲（業務機能グループ定義 feature_groups.yml の生成） | `sf-analyst-cat5` |
+| `/sf-memory` 全カテゴリ完了後の2周目横断補完（用語統一・矛盾解消・相互参照補完） | `sf-org-analyst` |
 | `/sf-design` コマンドから委譲（プログラム設計書・基本/詳細設計・Excel生成） | `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
