@@ -197,8 +197,7 @@ def build_overview(wb):
 BF_COLS = [
     (2,  3,  "No"),
     (4,  8,  "アクター"),
-    (9,  22, "処理内容"),
-    (23, 31, "分岐条件"),
+    (9,  31, "処理内容"),
 ]
 
 def build_business_flow(wb):

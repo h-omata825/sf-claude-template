@@ -87,14 +87,12 @@ OV_ROWS = {
 BF_DATA_ROW_START  = 5
 BF_STEP_CS,  BF_STEP_CE  = 2,  3
 BF_ACTOR_CS, BF_ACTOR_CE = 4,  8
-BF_ACT_CS,   BF_ACT_CE   = 9,  22
-BF_COND_CS,  BF_COND_CE  = 23, 31
+BF_ACT_CS,   BF_ACT_CE   = 9,  31
 # BF_COL_GROUPS: データ行のマージセル定義
 BF_COL_GROUPS = [
     (BF_STEP_CS, BF_STEP_CE),
     (BF_ACTOR_CS, BF_ACTOR_CE),
     (BF_ACT_CS, BF_ACT_CE),
-    (BF_COND_CS, BF_COND_CE),
 ]
 
 # 対象オブジェクト: 表上・図下レイアウト（動的行）
@@ -246,19 +244,14 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
         set_h(ws, r, 24)
 
         nexts = flow.get("next", [])
-        conditions = [n.get("condition", "") for n in nexts if n.get("condition")]
-        cond_text = " / ".join(conditions)
-
         c1 = MW(ws, r, BF_STEP_CS,  BF_STEP_CE,  step_no,
                 border=B_all(), h="center")
         c2 = MW(ws, r, BF_ACTOR_CS, BF_ACTOR_CE, flow.get("actor", ""),
                 border=B_all(), h="center")
         c3 = MW(ws, r, BF_ACT_CS,   BF_ACT_CE,   flow.get("action", ""),
                 border=B_all(), wrap=True, v="top")
-        c4 = MW(ws, r, BF_COND_CS,  BF_COND_CE,  cond_text,
-                border=B_all(), wrap=True, v="top")
         if is_changed:
-            for c in (c1, c2, c3, c4):
+            for c in (c1, c2, c3):
                 dr.apply_red(c)
         r += 1
 
