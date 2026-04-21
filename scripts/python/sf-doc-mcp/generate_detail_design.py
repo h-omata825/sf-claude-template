@@ -285,18 +285,15 @@ def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
     object_access = data.get("object_access", [])
     process_steps = data.get("process_steps", [])
 
+    # comp_api_name（API名）でルックアップ。なければ component（タイプ名）でフォールバック
     comp_to_step: dict[str, str] = {}
     for ps in process_steps:
-        comp = ps.get("component", "")
-        if comp and comp not in comp_to_step:
-            comp_to_step[comp] = ps.get("title", "")
+        key = ps.get("comp_api_name") or ps.get("component", "")
+        if key and key not in comp_to_step:
+            comp_to_step[key] = ps.get("title", "")
 
     accesses = [a for a in object_access if a.get("object") == obj_api]
     if not accesses:
-        if field_access in ("W", "RW", "INSERT"):
-            return "更新・登録対象。"
-        if field_access == "R":
-            return "参照のみ。"
         return ""
 
     # フィールドの読み書き区分に応じて関連するアクセスのみ抽出
@@ -309,15 +306,13 @@ def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
     if not relevant:
         relevant = accesses  # フォールバック
 
-    parts = []
+    # 備考には「どの処理ステップで使われるか」のみ記載（操作種別は読み書き区分列と重複するため省く）
+    step_titles = []
     for acc in relevant:
-        op_ja = _OP_JA.get(acc.get("operation", ""), acc.get("operation", ""))
         step_title = comp_to_step.get(acc.get("component", ""), "")
-        if step_title:
-            parts.append(f"{step_title}時に{op_ja}")
-        else:
-            parts.append(op_ja)
-    return "。".join(parts) + "。" if parts else ""
+        if step_title and step_title not in step_titles:
+            step_titles.append(step_title)
+    return "・".join(step_titles) if step_titles else ""
 
 
 def fill_target_objects(ws, data: dict, changed_obj_keys: set,
@@ -607,19 +602,59 @@ _JARGON_JA: list[tuple] = [
 # 技術用語→日本語変換ルール（役割・説明文用）
 _TECH_REPL = [
     # アノテーション → 日本語フレーズ
+    # NOTE: _translate_jargon で InvocableMethod → フローアクション に変換済みのため
+    # 変換後パターン "@フローアクション〜" も除去対象に含める
     (_re.compile(r'@InvocableMethod[としてで\s]*'), 'フローから呼び出され、'),
+    (_re.compile(r'@フローアクション(?:として)?(?:Flowから呼ばれ)?[、\s]*'), 'フローから呼び出され、'),
     (_re.compile(r'@AuraEnabled[としてで\s]*'), 'LWCから呼び出され、'),
+    (_re.compile(r'@LWC公開メソッド(?:として)?[、\s]*'), 'LWCから呼び出され、'),
     (_re.compile(r'@RemoteAction[としてで\s]*'), '非同期処理として呼び出され、'),
+    (_re.compile(r'@\w+[としてで\s]*'), ''),  # 残った@アノテーションを除去
+    # SOQL文を丸ごと除去（SELECT〜FROM〜を含む記述）
+    (_re.compile(r'SELECT\s+.+?\s+FROM\s+\w+(?:\s+WHERE\s+[^。\n]+)?', _re.DOTALL | _re.IGNORECASE), ''),
+    (_re.compile(r':\w+'), ''),  # SOQL bind変数
+    # HTTPプロトコル技術記述（POST→302→GET等）を除去
+    (_re.compile(r'[A-Z]{2,6}→\d{3}→[A-Z]{2,6}'), ''),
+    # boolean変数が括弧で補足されているケース: （isXxx）（hasXxx）
+    (_re.compile(r'[（(](?:is|has)[A-Z]\w*[）)]'), ''),
+    # boolean条件文: "isXxxがtrueの場合は" → 変数名を除去し条件の結果のみ残す
+    (_re.compile(r'(?:is|has)[A-Z]\w*が(?:false|true|null)(?:の場合[はに]?)?'), ''),
+    # 単独のboolean変数（isXxx / hasXxx）を除去
+    (_re.compile(r'(?<![A-Za-z])(?:is|has)[A-Z][A-Za-z]+(?![A-Za-z])'), ''),
+    # 小文字始まりのcamelCase技術名（コンポーネント名等）が日本語助詞の前にある場合
+    (_re.compile(r'(?<![A-Za-z])[a-z][a-zA-Z]{3,}(?=[をがはにでへのもと])'), ''),
+    # 大文字始まりの長いCamelCaseクラス名が日本語に隣接する場合（VisaApplicationTypeMaster等）
+    (_re.compile(r'[A-Z][a-zA-Z0-9]{6,}(?=[ぁ-ん一-龥ァ-ヶーをがはにでへのもと]|により|によって)'), ''),
     # クラス名.メソッド名 を除去
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
-    # Apex トリガーイベント文脈（処理前/後）を除去: "OBJ作成時（処理前（新規）/処理後（新規））に"
-    # は設計書読者に不要な技術詳細。メインの責務テキストのみ残す
+    # Apex トリガーイベント文脈（処理前/後）を除去
     (_re.compile(r'[^\s。]{2,20}(?:作成|更新|削除)時（処理前（(?:新規|更新|削除)）(?:/処理後（(?:新規|更新|削除)）)?）[にので]?'), ''),
-    # 助詞・接続詞が文末に孤立するケース（クラス名除去の後）を修正
+    # 技術的なサーバーサイド表現を簡潔な日本語に
+    (_re.compile(r'のサーバーサイドロジック'), ''),
+    (_re.compile(r'のメインコンポーネント'), ''),
+    (_re.compile(r'単一責務クラス'), 'クラス'),
+    # "呼び出され、Flow〜から呼ばれ、" の重複を除去（ルックビハインド不可のため捕捉グループで実装）
+    (_re.compile(r'(呼び出され)[、\s]{0,2}Flow[^\s、。]{0,20}から呼ばれ[、\s]*'), r'\1、'),
+    # 同一表現の繰り返し（サービス名など）が括弧内外で重複: "外部帳票サービス（外部帳票サービス）"
+    (_re.compile(r'([^\s（]{4,30})（\1）'), r'\1'),
+    # メソッドが重複: "公開メソッドメソッド" → "公開メソッド"
+    (_re.compile(r'(メソッド){2,}'), 'メソッド'),
+    # 空括弧を除去: （）
+    (_re.compile(r'（\s*）'), ''),
+    (_re.compile(r'\(\s*\)'), ''),
+    # 主語なし「・による〜」「/による〜」を除去（CamelCase除去後に残る）
+    (_re.compile(r'[・、/]\s*による[^\s、。]{1,20}'), ''),
+    # "/作成" を "・作成" に正規化し、重複した "・作成・作成" をまとめる
+    (_re.compile(r'/作成'), '・作成'),
+    (_re.compile(r'(?:・作成){2,}'), '・作成'),
+    # 助詞・接続詞が文節先頭に孤立するケース（クラス名除去後）を修正
+    (_re.compile(r'[・、]\s*を[ぁ-ん一-龥A-Za-z]{1,10}て(?=の)'), ''),  # を〜ての → 除去
     (_re.compile(r'[はがをにでへのも][。．]'), '。'),
+    (_re.compile(r'^[、。\s]+'), ''),  # 文頭の余分な記号
     # 連続記号・空白の整理
     (_re.compile(r'[ \t]{2,}'), ' '),
+    (_re.compile(r'[・、]{2,}'), '・'),
     (_re.compile(r'(、){2,}'), '、'),
     (_re.compile(r'(。){2,}'), '。'),
 ]
@@ -630,8 +665,19 @@ _TECH_REPL_BIZ = [
     (_re.compile(r'@AuraEnabled[としてで\s]*'), ''),
     (_re.compile(r'@RemoteAction[としてで\s]*'), ''),
     (_re.compile(r'@\w+'), ''),
+    # SOQL・boolean変数・HTTPプロトコル除去（タイトル用）
+    (_re.compile(r'SELECT\s+.+?\s+FROM\s+\w+(?:\s+WHERE\s+[^。\n]+)?', _re.DOTALL | _re.IGNORECASE), ''),
+    (_re.compile(r':\w+'), ''),
+    (_re.compile(r'[A-Z]{2,6}→\d{3}→[A-Z]{2,6}'), ''),
+    (_re.compile(r'[（(](?:is|has)[A-Z]\w*[）)]'), ''),
+    (_re.compile(r'(?:is|has)[A-Z]\w*が(?:false|true|null)(?:の場合[はに]?)?'), ''),
+    (_re.compile(r'(?<![A-Za-z])(?:is|has)[A-Z][A-Za-z]+(?![A-Za-z])'), ''),
+    (_re.compile(r'(?<![A-Za-z])[a-z][a-zA-Z]{3,}(?=[をがはにでへのもと])'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
+    (_re.compile(r'のサーバーサイドロジック'), ''),
+    (_re.compile(r'のメインコンポーネント'), ''),
+    (_re.compile(r'単一責務クラス'), 'クラス'),
     # List<CustomObj__c> → __c削除の前に除去（先に処理しないと List<> が残る）
     (_re.compile(r'List<[A-Z][A-Za-z0-9]*__[cepr]>'), 'レコードリスト'),
     (_re.compile(r'List<[A-Za-z]+>'), 'リスト'),
@@ -647,8 +693,21 @@ _TECH_REPL_BIZ = [
     # 括弧内が英語・記号で始まる（技術情報）は除去
     (_re.compile(r'（[A-Z@#][^）]{0,60}）'), ''),
     (_re.compile(r'\([A-Z@#][^)]{0,60}\)'), ''),
+    # 同一表現の繰り返し（括弧内外重複）: "外部帳票サービス（外部帳票サービス）"
+    (_re.compile(r'([^\s（]{4,30})（\1）'), r'\1'),
+    # メソッドが重複: "公開メソッドメソッド" → "公開メソッド"
+    (_re.compile(r'(メソッド){2,}'), 'メソッド'),
+    # 空括弧を除去
+    (_re.compile(r'（\s*）'), ''),
+    (_re.compile(r'\(\s*\)'), ''),
+    # 主語なし「・による〜」を除去（CamelCase除去後に残る場合）
+    (_re.compile(r'[・、/]\s*による[^\s、。]{1,20}'), ''),
+    # "/作成" 正規化・重複まとめ
+    (_re.compile(r'/作成'), '・作成'),
+    (_re.compile(r'(?:・作成){2,}'), '・作成'),
     # 整理
     (_re.compile(r'[ \t]{2,}'), ' '),
+    (_re.compile(r'[・、]{2,}'), '・'),
     (_re.compile(r'(、){2,}'), '、'),
     (_re.compile(r'^[、。・/\s]+|[、。・/\s]+$'), ''),
 ]
@@ -733,12 +792,33 @@ def _clean_io_text(text: str) -> str:
     return text.strip()
 
 
-def _short_title(responsibility: str, max_len: int = 35) -> str:
-    """責務テキストから短いビジネスアクションタイトルを作る（API名・クラス名なし）。"""
+def _short_title(responsibility: str, max_len: int = 50) -> str:
+    """責務テキストから日本語アクション文タイトルを生成する。
+
+    「〜を〜する」形式を目指す。技術用語・API名・boolean変数は除去済みの
+    _clean_tech_business を使用し、主要アクション節を抽出する。
+    """
     clean = _clean_tech_business(responsibility)
     clean = _PREAMBLE_RE.sub('', clean).strip()
+
+    # 「〜を担当する」→ 担当内容だけを抽出してタイトルに
+    m_tantou = _re.match(r'^(.+?)を担当する', clean)
+    if m_tantou:
+        core = m_tantou.group(1).strip()
+        # 「・」区切りリストは先頭2項目に絞る
+        items = [x.strip() for x in core.split('・') if x.strip()]
+        if len(items) > 2:
+            core = '・'.join(items[:2]) + 'など'
+        return (core + 'を行う')[:max_len]
+
+    # 最初の文（句読点まで）を取得
     m = _re.match(r'^(.+?)[。．\n]', clean)
-    title = m.group(1) if m else clean
+    title = m.group(1).strip() if m else clean.strip()
+
+    # 末尾が体言止めなら「する」を補う
+    if title and not _re.search(r'[するなる行うれるわれる]$', title):
+        title = title + 'を行う'
+
     return title[:max_len].strip()
 
 
@@ -951,11 +1031,19 @@ def _build_process_steps(data: dict) -> list[dict]:
         title  = _short_title(responsibility) if responsibility else ""
         branch = "条件分岐あり" if comp_type == "Flow" else None
 
+        # セル表示: タイトル（1行目）＋詳細（2行目以降）。タイトルが詳細の書き出しと
+        # 大きく重複する場合は詳細のみにして二重表示を避ける
+        if title and desc_main and title[:15] not in desc_main[:len(title) + 5]:
+            display_desc = f"{title}\n\n{desc_main}"
+        else:
+            display_desc = desc_main or title
+
         steps.append({
             "step": i,
             "title": title,
-            "description": desc_main,
+            "description": display_desc,
             "component": _comp_type_label(comp),
+            "comp_api_name": comp.get("api_name", ""),
             "branch": branch,
             "next": [{"to": i + 1}] if i < n_comps else [],
         })
@@ -1074,47 +1162,86 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
     #   フィールド名（IsConsignee__c等）を誤ってオブジェクトとして追加する恐れがあるため除外する
     purpose_text = data.get("processing_purpose", "")
     combined_extra = " ".join([dfo, purpose_text])
+    comp_names_real = [c.get("api_name", "") for c in data.get("components", []) if c.get("api_name")]
+
     for std_api in _STD_OBJ_LABELS:
         pat = rf'(?<![A-Za-z0-9_]){_re.escape(std_api)}(?![A-Za-z0-9_])'
-        if _re.search(pat, combined_extra):
-            if std_api not in obj_comp_ops:
-                # テキスト検出のみの場合、purpose から作成/更新を推定して仮登録
-                _write_kw = r'作成|登録|更新|送信|保存'
-                _write_ctx = rf'(?:{_re.escape(std_api)}.{{0,20}}(?:{_write_kw})|(?:{_write_kw}).{{0,20}}{_re.escape(std_api)})'
-                inferred_op = "W" if _re.search(_write_ctx, combined_extra) else "R"
-                obj_comp_ops[std_api] = {"（テキスト検出）": inferred_op}
+        if not _re.search(pat, combined_extra):
+            continue
+        if std_api in obj_comp_ops:
+            continue
+
+        # 操作種別を推定（INSERT > W > R の優先順位）
+        _insert_ctx = rf'(?:{_re.escape(std_api)}.{{0,20}}(?:作成|登録|新規)|(?:作成|登録|新規).{{0,20}}{_re.escape(std_api)})'
+        _update_ctx = rf'(?:{_re.escape(std_api)}.{{0,20}}(?:更新|変更|保存)|(?:更新|変更|保存).{{0,20}}{_re.escape(std_api)})'
+        if _re.search(_insert_ctx, combined_extra):
+            inferred_op = "INSERT"
+        elif _re.search(_update_ctx, combined_extra):
+            inferred_op = "W"
+        else:
+            inferred_op = "R"
+
+        # 前後200文字以内に実コンポーネント名があれば紐付ける
+        linked_comp = None
+        for m in _re.finditer(pat, combined_extra):
+            window = combined_extra[max(0, m.start() - 200): m.end() + 200]
+            for cname in comp_names_real:
+                if cname in window:
+                    linked_comp = cname
+                    break
+            if linked_comp:
+                break
+
+        # 紐付け先が見つかればそのコンポーネントへ。なければテキスト検出として仮登録
+        assigned_comp = linked_comp if linked_comp else "（テキスト検出）"
+        obj_comp_ops[std_api] = {assigned_comp: inferred_op}
 
     # related_objects 構築
     related_objects = []
     for obj_api, comp_ops in obj_comp_ops.items():
+        # オブジェクトレベルの合算アクセス種別（マトリクスと一致させる）
+        all_ops = list(comp_ops.values())
+        has_read   = any(o in ("R", "RW") for o in all_ops)
+        has_write  = any(o in ("W", "RW") for o in all_ops)
+        has_insert = any(o == "INSERT" for o in all_ops)
+        if has_insert and not has_read and not has_write:
+            obj_combined_op = "INSERT"
+        elif has_insert and has_read:
+            obj_combined_op = "RW"   # 新規作成 + 参照 → 参照・更新に近い
+        elif has_write and has_read:
+            obj_combined_op = "RW"
+        elif has_write:
+            obj_combined_op = "W"
+        elif has_read:
+            obj_combined_op = "R"
+        else:
+            obj_combined_op = all_ops[0] if all_ops else ""
+
         fields = obj_fields.get(obj_api, [])
 
         if not fields:
             # メタデータから主要フィールドを補完（メタデータが読み込まれている場合）
             meta = _SF_FIELD_LABELS.get(obj_api, {})
             if meta:
-                # コンポーネントのinputs/outputs テキストに言及されているフィールドのみ取得
                 all_texts = " ".join(
                     c.get("inputs", "") + " " + c.get("outputs", "")
                     for c in data.get("components", [])
                 ) + " " + dfo
                 for fapi, flabel in meta.items():
                     if _re.search(rf'\b{_re.escape(fapi)}\b', all_texts):
-                        all_ops = list(comp_ops.values())
-                        op = "W" if any(o in ("W", "RW", "INSERT") for o in all_ops) else "R"
-                        fields.append({"api_name": fapi, "label": flabel, "access": op, "note": ""})
+                        fields.append({"api_name": fapi, "label": flabel, "access": obj_combined_op, "note": ""})
 
         if not fields:
-            # 最終フォールバック: アクセス種別は comp_ops から取得（空白にしない）
-            all_ops = list(comp_ops.values())
-            op = ("RW" if "W" in all_ops and "R" in all_ops
-                  else all_ops[0] if all_ops else "")
-            # INSERT（レコード新規登録）の場合は項目明示不要
-            if op == "INSERT" or all(o == "INSERT" for o in all_ops if o):
+            # 最終フォールバック
+            if has_insert and not has_read:
                 label = "（レコード新規登録）"
             else:
                 label = "（対象項目は別途設計書を参照）"
-            fields = [{"api_name": "—", "label": label, "access": op, "note": ""}]
+            fields = [{"api_name": "—", "label": label, "access": obj_combined_op, "note": ""}]
+        else:
+            # 既存フィールドの access もオブジェクト合算値に統一
+            for f in fields:
+                f["access"] = obj_combined_op
 
         related_objects.append({
             "api_name": obj_api,
@@ -1278,8 +1405,11 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
             er_path = str(Path(tmp_dir) / "er.png")
             if object_access:
                 from diagram_utils import generate_object_component_matrix
+                # テキスト検出のみのオブジェクトはマトリクスから除外
+                oa_obj_apis = {oa["object"] for oa in object_access}
+                matrix_objects = [o for o in objects if o["api_name"] in oa_obj_apis]
                 generate_object_component_matrix(
-                    object_access, components, objects, er_path)
+                    object_access, components, matrix_objects, er_path)
             else:
                 # object_access がない場合は従来のER図にフォールバック
                 from er_utils import generate_er_image
