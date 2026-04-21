@@ -68,8 +68,7 @@ REV_COLS = {
     "変更内容": (12, 17),
     "変更理由": (18, 23),
     "変更日":   (24, 26),
-    "変更者":   (27, 29),
-    "備考":     (30, 31),
+    "変更者":   (27, 31),
 }
 
 # 概要（row3〜row8: 機能名/機能概要/目的/利用者/起点画面/操作トリガー）
@@ -495,33 +494,70 @@ _STD_OBJ_LABELS = {
     "EmailMessage": "メール", "Attachment": "添付ファイル",
 }
 
-# 技術用語→日本語変換ルール（正規表現, 置換文字列）
+# 技術用語→日本語変換ルール（役割・説明文用）
 _TECH_REPL = [
     (_re.compile(r'@InvocableMethod[としてで\s]*'), 'Flowのアクションとして呼び出され、'),
     (_re.compile(r'@AuraEnabled[としてで\s]*'), 'LWCから呼び出し可能で、'),
     (_re.compile(r'@RemoteAction[としてで\s]*'), '非同期で呼び出され、'),
     (_re.compile(r'@\w+'), ''),
-    # ClassName.methodName() → 除去（前後の助詞が残る）
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
-    # ClassName.methodName → 除去
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
-    # 連続する句読点・空白を整理
     (_re.compile(r'[ \t]{2,}'), ' '),
     (_re.compile(r'(、){2,}'), '、'),
     (_re.compile(r'(。){2,}'), '。'),
 ]
 
+# 業務フロー・タイトル用: より積極的にAPIを除去（置換なし）
+_TECH_REPL_BIZ = [
+    (_re.compile(r'@InvocableMethod[としてで\s]*'), ''),
+    (_re.compile(r'@AuraEnabled[としてで\s]*'), ''),
+    (_re.compile(r'@RemoteAction[としてで\s]*'), ''),
+    (_re.compile(r'@\w+'), ''),
+    (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
+    (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
+    # __c/__e/__r カスタムオブジェクト名
+    (_re.compile(r'\b[A-Z][A-Za-z0-9]*__[cepr]\b'), ''),
+    # Salesforce 標準オブジェクト名
+    (_re.compile(
+        r'\b(ContentVersion|ContentDocument(?:Link)?|EmailMessage|Attachment|'
+        r'Lead|Contact|Account|Opportunity|Case|Task|Event|User)\b'), ''),
+    # Apex クラス名（Controller/Service/Handler/Manager/Batch/Trigger で終わるもの）
+    (_re.compile(r'\b[A-Z][A-Za-z0-9]{2,}(?:Controller|Service|Handler|Manager|Batch|Trigger)\b'), ''),
+    # 括弧内が英語・記号で始まる（技術情報）は除去
+    (_re.compile(r'（[A-Z@#][^）]{0,50}）'), ''),
+    (_re.compile(r'\([A-Z@#][^)]{0,50}\)'), ''),
+    (_re.compile(r'[ \t]{2,}'), ' '),
+    (_re.compile(r'(、){2,}'), '、'),
+    (_re.compile(r'^[、。・/\s]+|[、。・/\s]+$'), ''),
+]
+
+# 業務フロー step の先頭 preamble（呼び出し起点の説明）を除去
+_PREAMBLE_RE = _re.compile(
+    r'^(?:[^、。]{0,25}として(?:呼ばれ|呼び出され)、|'
+    r'Flowから呼ばれ、|'
+    r'[^、。]{0,15}[がは]Flowから[^、。]{0,15}、)'
+)
+
 
 def _clean_tech(text: str) -> str:
-    """Apexアノテーション・クラス名.メソッド名パターンを除去して日本語説明にする。"""
+    """Apexアノテーション・クラス名.メソッド名パターンを除去して日本語説明にする（役割・説明文用）。"""
     for pattern, repl in _TECH_REPL:
         text = pattern.sub(repl, text)
     return text.strip()
 
 
+def _clean_tech_business(text: str) -> str:
+    """業務フロー・タイトル用: アノテーション・クラス名・SFオブジェクト名を全て除去する。"""
+    for pattern, repl in _TECH_REPL_BIZ:
+        text = pattern.sub(repl, text)
+    return text.strip()
+
+
 def _short_title(responsibility: str, max_len: int = 35) -> str:
-    """responsibilityの先頭文からAPIを除去した短いタイトルを作る。"""
-    clean = _clean_tech(responsibility)
+    """責務テキストから短いビジネスアクションタイトルを作る（API名・クラス名なし）。"""
+    clean = _clean_tech_business(responsibility)
+    # 先頭の呼び出し preamble を除去
+    clean = _PREAMBLE_RE.sub('', clean).strip()
     m = _re.match(r'^(.+?)[。．\n]', clean)
     title = m.group(1) if m else clean
     return title[:max_len].strip()
@@ -550,9 +586,8 @@ def _infer_callees(data: dict) -> None:
     if not comp_names:
         return
 
-    # 最初の段落（。まで）だけ使う
-    main_flow = flow_text.split("。")[0]
-    tokens = _re.split(r'→', main_flow)
+    # 全文を処理（。で区切らず全体から → を抽出）
+    tokens = _re.split(r'→', flow_text.replace("\n", " "))
 
     def find_comp(token: str) -> str | None:
         for name in comp_names:
@@ -576,41 +611,78 @@ def _infer_callees(data: dict) -> None:
 
 
 def _build_business_flow(data: dict) -> list[dict]:
-    """data_flow_overview の「→」トークンから業務フロー steps を生成する。"""
+    """data_flow_overview の「→」チェーンから業務レベルのフロー steps を生成する。
+
+    クラス名・APIアノテーション・SFオブジェクト名を除去し、
+    「誰が・何をするか」の業務記述に変換する。全文の → を処理する。
+    """
     flow_text = data.get("data_flow_overview", "")
     if not flow_text:
         return []
 
     comp_map = {c.get("api_name", ""): c for c in data.get("components", [])}
-    # 最初の文（。まで）
-    main_flow = flow_text.split("。")[0]
-    tokens = [t.strip() for t in _re.split(r'→', main_flow) if t.strip()]
+
+    # 全文から → トークンを収集
+    all_text = flow_text.replace("\n", " ")
+    raw_tokens = [t.strip() for t in _re.split(r'→', all_text) if t.strip()]
 
     steps = []
-    for i, token in enumerate(tokens):
-        # コンポーネント名が含まれる場合は対応するresponsibilityの先頭文を使う
-        matched_comp = next((c for name, c in comp_map.items() if name and name in token), None)
+    step_no = 1
+    seen_actions: set[str] = set()
+
+    for i, token in enumerate(raw_tokens):
+        # 対応するコンポーネントを探す
+        matched_comp = None
+        for name, comp in comp_map.items():
+            if name and name in token:
+                matched_comp = comp
+                break
+
         if matched_comp:
-            responsibility = matched_comp.get("responsibility", "")
-            action = _short_title(responsibility) if responsibility else _clean_tech(token)
-            actor = "システム"
+            resp = matched_comp.get("responsibility", "")
+            biz_resp = _clean_tech_business(resp)
+            biz_resp = _PREAMBLE_RE.sub('', biz_resp).strip()
+            m = _re.match(r'^(.+?)[。．\n]', biz_resp)
+            action = (m.group(1) if m else biz_resp)[:50].strip()
+            if not action:
+                action = _clean_tech_business(token)[:50].strip()
+
+            ctype = matched_comp.get("type", "Apex")
+            actor = "自動フロー" if ctype == "Flow" else "システム"
         else:
-            clean = _re.sub(r'（[^）]*）|\([^)]*\)', '', token).strip()
-            clean = _clean_tech(clean)
+            cleaned = _clean_tech_business(token)
+            cleaned = _re.sub(r'（[^）]*）|\([^)]*\)', '', cleaned).strip()
+            cleaned = _re.sub(r'[ \t]{2,}', ' ', cleaned).strip()
+
             if i == 0:
                 actor = _extract_actor(token)
-                action = f"{clean}から処理を依頼・起動する" if clean else "処理を開始する"
+                action = cleaned if cleaned else "処理を開始する"
+            elif _re.search(r'顧客|お客様|Experience Cloud', token):
+                actor = "お客様"
+                action = cleaned if cleaned else "通知を受け取る"
+            elif _re.search(r'\bFlow\b|フロー|承認', token):
+                actor = "自動フロー"
+                action = cleaned if cleaned else "承認フロー・後続処理を実行する"
             else:
                 actor = "システム"
-                action = clean if clean else token.strip()
+                action = cleaned if cleaned else "処理を実行する"
 
+        if not action or action in seen_actions:
+            continue
+
+        seen_actions.add(action)
         steps.append({
-            "step": i + 1,
+            "step": step_no,
             "actor": actor,
             "action": action,
-            "system": matched_comp.get("api_name", "Salesforce") if matched_comp else "外部",
-            "next": [{"to": i + 2}] if i < len(tokens) - 1 else [],
+            "system": "Salesforce",
+            "next": [],
         })
+        step_no += 1
+
+    # next リンク設定
+    for i, step in enumerate(steps[:-1]):
+        step["next"] = [{"to": steps[i + 1]["step"]}]
 
     return steps
 

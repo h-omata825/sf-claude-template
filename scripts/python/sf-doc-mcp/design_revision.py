@@ -87,15 +87,15 @@ def build_entries(current_version: str, diffs: dict, author: str,
     if is_initial:
         return [{
             "項番": start_no, "版数": current_version, "変更箇所": "全シート",
-            "変更内容": "新規作成", "変更理由": "", "変更日": today,
-            "変更者": author, "備考": "",
+            "変更内容": "新規作成", "変更理由": "初版作成", "変更日": today,
+            "変更者": author,
         }]
 
     if is_major:
         return [{
             "項番": start_no, "版数": current_version, "変更箇所": "全シート",
             "変更内容": "メジャーバージョンアップ（注記リセット）",
-            "変更理由": "", "変更日": today, "変更者": author, "備考": "",
+            "変更理由": "メジャーバージョンアップ", "変更日": today, "変更者": author,
         }]
 
     # 変更箇所を集約（シート名のセット）
@@ -109,8 +109,8 @@ def build_entries(current_version: str, diffs: dict, author: str,
     if not areas:
         return [{
             "項番": start_no, "版数": current_version, "変更箇所": "—",
-            "変更内容": "変更なし", "変更理由": "", "変更日": today,
-            "変更者": author, "備考": "",
+            "変更内容": "変更なし", "変更理由": "設計内容の更新", "変更日": today,
+            "変更者": author,
         }]
 
     # 変更内容を集計して1行に収める
@@ -128,10 +128,9 @@ def build_entries(current_version: str, diffs: dict, author: str,
         "版数":     current_version,
         "変更箇所": "・".join(sorted(areas)),
         "変更内容": "・".join(parts) if parts else "更新",
-        "変更理由": "",
+        "変更理由": "設計内容の更新",
         "変更日":   today,
         "変更者":   author,
-        "備考":     "",
     }]
 
 

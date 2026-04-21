@@ -1,0 +1,215 @@
+{
+  "domain_id": "DOM-002",
+  "name_ja": "ビザ申込・見積依頼",
+  "project_name": "greenfield",
+  "author": "ClaudeCode",
+  "version": "1.0",
+  "date": "2026-04-20",
+  "purpose": "Experience Cloud を通じてお客様が渡航者情報を入力し、ビザ申請要件のプリチェック・コンサルテーション・見積作成依頼を行うまでの一連の申込フローを提供する",
+  "target_users": "お客様（企業の人事・総務担当）、GF社コンサル部・営業部",
+  "overview": "申請者（BusinessTraveler__c）を中心とした申込フロー。プリチェック → コンサルテーション依頼 → 見積作成依頼 の順で進む。各ステップで LWC コンポーネントが画面を担当し、Apex コントローラが初期データ取得・保存処理を行う。",
+  "prerequisites": "Experience Cloud コミュニティへのログイン済み。BusinessTravelerHeader__c（申請区分）レコードが作成済みであること。",
+  "notes": "ビザ種別（レコードタイプ）によってプリチェックのロジックが分岐する。E-1/E-2/Eビザ新規/Individual L 等のレコードタイプが存在する。",
+  "business_flow_description": "お客様が渡航者情報を入力してGFへ申込するフロー",
+  "business_flow": [
+    {
+      "step": "1",
+      "actor": "お客様",
+      "action": "プリチェック画面を開き、サービス種別・渡航者情報を入力する",
+      "system": "preCheck (LWC)",
+      "description": "PreCheckController.getInitData でマスタデータを取得"
+    },
+    {
+      "step": "2",
+      "actor": "システム",
+      "action": "入力内容をもとにビザ申請要件を判定し、プリチェック結果を表示する",
+      "system": "preCheckModal (LWC)",
+      "description": "ビザ種別・就労形態等の条件に応じて OK / リスクあり / NG を判定"
+    },
+    {
+      "step": "3",
+      "actor": "お客様",
+      "action": "コンサルテーション依頼画面で委託担当者・渡航者詳細情報を入力する",
+      "system": "consultation (LWC)",
+      "description": "ConsultationController で担当者候補リストを取得"
+    },
+    {
+      "step": "4",
+      "actor": "お客様",
+      "action": "確認モーダルで内容を確認し、コンサルテーション依頼を送信する",
+      "system": "consultationModal (LWC)",
+      "description": "下書き保存・申請者本人入力依頼・コンサル依頼の3パターン"
+    },
+    {
+      "step": "5",
+      "actor": "お客様",
+      "action": "コンサル結果を確認し、見積作成依頼画面でサービス内容を入力する",
+      "system": "request (LWC)",
+      "description": "RequestController.getInitData でサービスマスタを取得"
+    },
+    {
+      "step": "6",
+      "actor": "お客様",
+      "action": "確認モーダルで内容を確認し、見積作成を依頼する",
+      "system": "requestModal (LWC)",
+      "description": "下書き保存・見積依頼の2パターン。依頼後に GF 社へ通知"
+    }
+  ],
+  "screen_transition_description": "プリチェック → コンサルテーション → 見積依頼 の順に進む。各画面にモーダルが対応する。",
+  "screens": [
+    {
+      "name": "プリチェック画面",
+      "component": "preCheck",
+      "description": "サービス種別・渡航者情報を入力し、ビザ申請要件を事前確認する画面"
+    },
+    {
+      "name": "プリチェック結果モーダル",
+      "component": "preCheckModal",
+      "description": "プリチェック判定結果（OK / リスクあり / NG）を表示するモーダル"
+    },
+    {
+      "name": "コンサルテーション依頼画面",
+      "component": "consultation",
+      "description": "委託担当者・渡航者詳細情報を入力してコンサルテーションを依頼する画面"
+    },
+    {
+      "name": "コンサルテーション確認モーダル",
+      "component": "consultationModal",
+      "description": "コンサルテーション依頼内容を確認・送信するモーダル"
+    },
+    {
+      "name": "見積作成依頼画面",
+      "component": "request",
+      "description": "コンサル結果確認後、サービス内容を入力して見積依頼を行う画面"
+    },
+    {
+      "name": "見積依頼確認モーダル",
+      "component": "requestModal",
+      "description": "見積作成依頼内容を確認・送信するモーダル"
+    }
+  ],
+  "components": [
+    {
+      "type": "LWC",
+      "api_name": "preCheck",
+      "role": "プリチェック入力・判定結果表示",
+      "callers": [],
+      "callees": [
+        "preCheckModal",
+        "PreCheckController"
+      ]
+    },
+    {
+      "type": "LWC",
+      "api_name": "preCheckModal",
+      "role": "プリチェック結果モーダル（判定結果 + 次ステップ案内）",
+      "callers": [
+        "preCheck"
+      ],
+      "callees": []
+    },
+    {
+      "type": "LWC",
+      "api_name": "consultation",
+      "role": "コンサルテーション依頼情報入力",
+      "callers": [],
+      "callees": [
+        "consultationModal",
+        "ConsultationController"
+      ]
+    },
+    {
+      "type": "LWC",
+      "api_name": "consultationModal",
+      "role": "コンサルテーション依頼確認・送信モーダル",
+      "callers": [
+        "consultation"
+      ],
+      "callees": []
+    },
+    {
+      "type": "LWC",
+      "api_name": "request",
+      "role": "見積作成依頼情報入力",
+      "callers": [],
+      "callees": [
+        "requestModal",
+        "RequestController"
+      ]
+    },
+    {
+      "type": "LWC",
+      "api_name": "requestModal",
+      "role": "見積作成依頼確認・送信モーダル",
+      "callers": [
+        "request"
+      ],
+      "callees": []
+    },
+    {
+      "type": "Apex",
+      "api_name": "PreCheckController",
+      "role": "プリチェック用マスタデータ取得・判定ロジック",
+      "callers": [
+        "preCheck"
+      ],
+      "callees": []
+    },
+    {
+      "type": "Apex",
+      "api_name": "ConsultationController",
+      "role": "コンサルテーション依頼の委託担当者候補取得・保存処理",
+      "callers": [
+        "consultation"
+      ],
+      "callees": []
+    },
+    {
+      "type": "Apex",
+      "api_name": "RequestController",
+      "role": "見積作成依頼の初期データ取得・Quote作成・ExternalAccount参照",
+      "callers": [
+        "request"
+      ],
+      "callees": []
+    }
+  ],
+  "related_objects": [
+    {
+      "api_name": "BusinessTraveler__c",
+      "label": "申請者",
+      "usage": "ビザ申請の主体。プリチェック・コンサルテーション・見積依頼の中心オブジェクト"
+    },
+    {
+      "api_name": "BusinessTravelerHeader__c",
+      "label": "申請区分",
+      "usage": "BusinessTraveler__c の親。1申請区分に複数の申請者が紐づく"
+    },
+    {
+      "api_name": "Account",
+      "label": "取引先",
+      "usage": "申請企業の取引先。BusinessTravelerHeader__c.Account__c で関連。見積書の宛先企業名取得に使用"
+    },
+    {
+      "api_name": "Quote__c",
+      "label": "見積",
+      "usage": "見積作成依頼後に生成される見積レコード。RequestController.createQuoteController で INSERT"
+    },
+    {
+      "api_name": "QuoteDetail__c",
+      "label": "見積明細",
+      "usage": "Quote__c の子レコード。見積作成時に明細行も同時生成される"
+    },
+    {
+      "api_name": "ExternalAccount__c",
+      "label": "外部取引先",
+      "usage": "請求先・申請者所属企業などの外部取引先マスタ。見積依頼時に名称・種別で参照・作成"
+    },
+    {
+      "api_name": "ConsultingMemo__c",
+      "label": "コンサルメモ",
+      "usage": "コンサルテーション依頼・結果を記録する"
+    }
+  ],
+  "external_integrations": []
+}
