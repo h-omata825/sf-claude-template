@@ -136,8 +136,6 @@ List<Account> results = Database.query(query);
 
 ---
 
----
-
 ## ドキュメント・資料レビュー（doc-writer / sf-architect 成果物）
 
 ### 共通チェック（全ドキュメント）

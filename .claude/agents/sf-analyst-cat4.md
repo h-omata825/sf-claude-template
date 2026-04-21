@@ -22,6 +22,8 @@ tools:
 
 ## 品質原則（最重要・全フェーズ共通）
 
+[共通品質原則参照](.claude/CLAUDE.md#品質原則sf-memory-全カテゴリ共通) — 以下はカテゴリ4固有の追加原則。
+
 1. **網羅的に読む**: force-app/ のソースコードは分割読みで**最後まで**全文読む。サンプリングや「主要なもののみ」で端折らない。大きいファイル（500行超）は200行ずつ分割して全量読む。
 2. **具体的に書く**: 「処理を行う」ではなく「Account.Billing_Status__c を"請求済"に更新し、関連するOpportunityLineItemを削除する（DELETE）」。メソッド名・引数・戻り値・SOQL件数・DML件数を必ず記述する。
 3. **関連付けを明記する**: 要件番号（FR-XXX）・ユースケースID（UC-XX）・担当オブジェクト・呼び出し元コンポーネントを全て記載する。「どの業務フローのどのステップで動くか」まで記述する。
@@ -90,7 +92,7 @@ sf data query -q "SELECT Name, TableEnumOrId FROM ApexTrigger WHERE NamespacePre
 sf data query -q "SELECT ApiName, ProcessType, Label, Description FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json
 
 # LWCコンポーネント
-sf data query -q "SELECT DeveloperName FROM LightningComponentBundle WHERE NamespacePrefix = null ORDER BY DeveloperName" --json
+sf data query -q "SELECT DeveloperName FROM LightningComponentBundle WHERE NamespacePrefix = null ORDER BY DeveloperName" --use-tooling-api --json
 
 # Named Credential（外部連携の存在確認）
 sf data query -q "SELECT DeveloperName, Endpoint FROM NamedCredential" --json 2>/dev/null

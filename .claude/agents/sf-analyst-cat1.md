@@ -23,6 +23,8 @@ tools:
 
 ## 品質原則（最重要・全フェーズ共通）
 
+[共通品質原則参照](.claude/CLAUDE.md#品質原則sf-memory-全カテゴリ共通) — 以下はカテゴリ1固有の追加原則。
+
 1. **網羅的に読む**: 指定資料は配下を再帰的に**全て**読む。サンプリングや抜粋禁止。大きいファイルは分割読みで**最後まで**目を通す。
 2. **具体的に書く**: 「顧客」ではなく「新規申込者（未契約のエンドユーザー）」。「承認」ではなく「課長承認（金額≥100万円時）／部長承認（金額≥500万円時）」。数値・固有名詞・条件を必ず入れる。
 3. **登場人物・タイミング・経路を落とさない**: 誰が・いつ・何をきっかけに・どのシステム/画面で・何を作成/更新するかを必ず揃える。承認経路・例外経路・差戻しルートも抽出する。
@@ -85,7 +87,7 @@ sf data query -q "SELECT Name, Label, Description, IsCustom FROM PermissionSet W
 ```bash
 sf data query -q "SELECT QualifiedApiName, DeveloperName FROM CustomObject WHERE QualifiedApiName LIKE '%__mdt'" --json
 sf data query -q "SELECT SobjectType, Name, DeveloperName, IsActive, Description FROM RecordType ORDER BY SobjectType" --json
-sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Active, Description, ErrorMessage FROM ValidationRule WHERE Active = true" --json
+sf data query -q "SELECT EntityDefinition.QualifiedApiName, ValidationName, Active, Description, ErrorMessage FROM ValidationRule WHERE Active = true" --use-tooling-api --json
 ```
 
 #### 1-4. 外部連携・接続情報（エラーが出ても続行）
@@ -96,8 +98,8 @@ sf data query -q "SELECT Name, Description, StartUrl FROM ConnectedApplication" 
 
 #### 1-5. Platform Event・カスタム設定（あれば）
 ```bash
-sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__e'" --json
-sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__c' AND IsHierarchyNestingSupported = false" --json
+sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__e'" --use-tooling-api --json
+sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__c' AND IsHierarchyNestingSupported = false" --use-tooling-api --json
 ```
 
 ### Phase 2: 既存資料の読み込み
@@ -149,6 +151,19 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 | `data_stores` | array | `name`, `purpose` |
 | `touchpoints` | array | `name`, `platform`(Experience Cloud/LWC/API等), `users` |
 | `notes` | array | 要確認事項 |
+
+**サンプル構造**:
+```json
+{
+  "system_name": "xxx案件 Salesforce 受注管理システム",
+  "core": { "name": "Salesforce (Sales Cloud)", "role": "受注・契約・請求の中枢" },
+  "actors": [{ "name": "営業担当", "count": 30, "channels": ["Salesforce 標準UI", "LWC受注画面"] }],
+  "external_systems": [{ "name": "基幹システム", "direction": "out", "protocol": "REST", "frequency": "日次", "purpose": "受注データ連携" }],
+  "data_stores": [{ "name": "Salesforce (本番)", "purpose": "全トランザクションデータ" }],
+  "touchpoints": [{ "name": "受注申請画面", "platform": "LWC", "users": "営業担当" }],
+  "notes": ["外部連携の認証方式が未確認"]
+}
+```
 
 ソース優先順位: ①既存システム構成図（画像/PPT/Visio）→最優先で読み込み再構築 ②Named Credential/Connected App/Apex HTTP呼び出し ③org-profile・要件定義書 ④不明は `notes` に記録（未確認のまま推測しない）
 

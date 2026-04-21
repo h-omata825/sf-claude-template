@@ -22,6 +22,8 @@ tools:
 
 ## 品質原則（最重要・全フェーズ共通）
 
+[共通品質原則参照](.claude/CLAUDE.md#品質原則sf-memory-全カテゴリ共通) — 以下はカテゴリ2固有の追加原則。
+
 1. **網羅的に読む**: 指定資料は配下を再帰的に**全て**読む。サンプリングや抜粋禁止。大きいファイルは分割読みで**最後まで**目を通す。
 2. **具体的に書く**: 「文字型・255文字」ではなく「テキスト型（最大255文字）・必須・一意」のように型・制約・用途まで記述する。数値・条件・固有名詞を必ず入れる。
 3. **関連付けを明記する**: オブジェクト同士のリレーション（Lookup/M-D）だけでなく、どのApex・FlowがこのオブジェクトをSOQL/DMLで操作しているかまで記録する。
@@ -82,7 +84,8 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, COUNT(Id) cnt FROM C
 force-app/ 配下のApex・Flow・LWCを読み込み、SOQL FROM句・DML操作・`@wire` アダプターから**実際に利用されている標準オブジェクト**を抽出する:
 
 ```bash
-grep -rE "FROM\s+\w+|INSERT\s+\w+|UPDATE\s+\w+|UPSERT\s+\w+|DELETE\s+\w+" force-app/main/default/classes/ 2>/dev/null | head -100
+# force-app/ が存在しない場合は「メタデータ未取得のため Apex 参照調査をスキップ」と出力して次のステップへ進む
+grep -rE "FROM\s+\w+|INSERT\s+\w+|UPDATE\s+\w+|UPSERT\s+\w+|DELETE\s+\w+" force-app/main/default/classes/ | head -100
 ```
 
 **標準オブジェクトを定義書化する基準（いずれか1つ）**:
@@ -108,11 +111,13 @@ sf data query -q "SELECT COUNT() FROM <オブジェクト名>" --json
 さらに以下も取得する（精度向上のため）:
 ```bash
 # FK関係の実態を確認
-sf data query -q "SELECT Field, RelationshipName, ReferenceTo FROM FieldDefinition WHERE EntityDefinition.QualifiedApiName = '<オブジェクト名>' AND (DataType = 'Lookup' OR DataType = 'MasterDetail')" --json 2>/dev/null
+sf data query -q "SELECT Field, RelationshipName, ReferenceTo FROM FieldDefinition WHERE EntityDefinition.QualifiedApiName = '<オブジェクト名>' AND (DataType = 'Lookup' OR DataType = 'MasterDetail')" --use-tooling-api --json
 
 # このオブジェクトに参照している他オブジェクトを確認
-sf data query -q "SELECT EntityDefinition.QualifiedApiName, Field FROM FieldDefinition WHERE ReferenceTo = '<オブジェクト名>'" --json 2>/dev/null
+sf data query -q "SELECT EntityDefinition.QualifiedApiName, Field FROM FieldDefinition WHERE ReferenceTo = '<オブジェクト名>'" --use-tooling-api --json
 ```
+
+> コマンドが失敗した場合は「取得失敗：権限またはAPI制限を確認」と警告ログを出力し、該当項目を `**[要確認]**` として定義書に記載すること。
 
 抽出する情報:
 - **基本情報**: オブジェクト名（API名・ラベル）・用途（推定）・レコード件数・オブジェクトタイプ

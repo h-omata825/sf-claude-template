@@ -41,6 +41,7 @@ tools:
 | `sf_alias` | Salesforce 組織エイリアス |
 | `feature_list` | scan_features.py の出力（LWC・画面フロー・Aura・Visualforce のみ抽出済み） |
 | `target_ids` | 対象機能IDリスト |
+| `feat_id` | 各 feature の ID（`feature_list` 各要素の `id` フィールド値。例: `F-001`）。Phase 0.7 のハッシュチェックや既存 Excel 検索で使用する |
 | `version_increment` | `"minor"` または `"major"`（初回生成時は `"minor"`） |
 
 ---
@@ -109,8 +110,8 @@ print('テンプレート確認OK: プログラム設計書（画面）テンプ
 python -c "
 import pathlib
 root = pathlib.Path(r'{output_dir}').parent
-basic_dir = root / '基本設計書' / '.tmp'
-detail_dir = root / '詳細設計書' / '.tmp'
+basic_dir = root / '01_基本設計' / '.tmp'
+detail_dir = root / '02_詳細設計' / '.tmp'
 for p in sorted(basic_dir.glob('*_basic.json')) if basic_dir.exists() else []:
     print(f'basic_json:{p}')
 for p in sorted(detail_dir.glob('*_detail.json')) if detail_dir.exists() else []:
@@ -163,6 +164,41 @@ python {project_dir}/scripts/python/sf-doc-mcp/extract_lwc_skeleton.py \
 - スケルトン上のユースケースに対応するハンドラがソースに実際に存在するか確認する。存在しない場合のみ削除・統合してよい
 
 スケルトンが生成できなかった場合（.js ファイルが存在しない等）は Phase 1 で通常通り生成する。
+
+---
+
+## Phase 0.7: ハッシュチェック（全コンポーネント一括）
+
+> **目的**: 変更のないコンポーネントをスキップして LLM 呼び出しと Excel 生成を節約する。
+
+対象コンポーネント全件に対して以下を実行し、スキップリストを作成する。
+
+```bash
+# 既存 Excel の自動検出（feature_id = feat_id フィールド）
+python -c "
+import pathlib, sys
+feat_id = '{feat_id}'
+out = pathlib.Path(r'{output_dir}')
+for sub in out.iterdir():
+    if sub.is_dir():
+        for f in sub.glob(f'【{feat_id}】*.xlsx'):
+            print(f)
+            sys.exit()
+print('')
+"
+```
+
+```bash
+# ハッシュチェック（source_file は feature_list の source_file フィールド）
+python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
+  --source-paths "{source_file}" \
+  --existing-excel "{detected_excel_or_empty}"
+```
+
+| stdout の status | 終了コード | 対応 |
+|---|---|---|
+| `status:MATCH` | 0 | このコンポーネントをスキップリストに追加（Phase 0.5 / Phase 1 / Phase 2 全てスキップ） |
+| `status:CHANGED` / `NEW` / `NO_HASH` | 1 | 通常どおり処理する。`hash:XXXX` の値を `{source_hash}` として記録する |
 
 ---
 
@@ -469,7 +505,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --input "{tmp_dir}/{api_name}_design.json" \
   --template "{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書（画面）テンプレート.xlsx" \
   --output-dir "{output_dir}" \
-  --version-increment {version_increment}
+  --version-increment {version_increment} \
+  --source-hash "{source_hash}"
 ```
 
 既存ファイルがある場合（差分更新）は `--source-file` を追加する:
@@ -479,8 +516,11 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_screen_design.py \
   --template "{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書（画面）テンプレート.xlsx" \
   --output-dir "{output_dir}" \
   --source-file "{output_dir}/{subfolder}/【{id}】{name}.xlsx" \
-  --version-increment {version_increment}
+  --version-increment {version_increment} \
+  --source-hash "{source_hash}"
 ```
+
+> `{source_hash}` は Phase 0.7 で source_hash_checker.py が出力した `hash:XXXX` の値。新規作成・ハッシュなしの場合は空文字で渡す（`--source-hash ""`）。
 
 > **`--source-file` 省略可**: スクリプトが `output_dir` 内を `【{id}】*.xlsx` パターンで自動検出するため、`--source-file` は省略しても問題ない。明示指定する場合のみ追加すること。
 

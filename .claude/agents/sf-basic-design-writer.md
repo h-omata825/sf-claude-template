@@ -119,7 +119,7 @@ root = pathlib.Path(r'{output_dir}').parent
 
 # 詳細設計 JSON（グループ単位）
 detail_dir = root / '詳細設計書' / '.tmp'
-for group_id in {target_group_ids_list}:
+for group_id in {target_group_ids}:
     p = detail_dir / f'{group_id}_detail.json'
     if p.exists():
         print(f'detail_json:{group_id}:{p}')

@@ -30,10 +30,7 @@ tools:
 - **要確認事項を残す**: ビジネス側の確認が必要な項目は明確に区別する
 
 ### sfコマンド実行時の注意
-Git Bashで `sf` コマンドが `C:\Program Files` のパスエラーで失敗する場合は、以下の形式で実行する:
-```bash
-"C:/Program Files/sf/client/bin/node.exe" "C:/Program Files/sf/client/bin/run.js" <サブコマンド> <引数>
-```
+[sf コマンド代替実行パス参照](.claude/CLAUDE.md#ファイル読み込み共通) — Git Bash で `sf` が失敗する場合の代替実行方法は CLAUDE.md の「ファイル読み込み（共通）」セクションを参照。
 
 ---
 

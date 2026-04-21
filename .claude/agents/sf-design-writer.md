@@ -393,13 +393,21 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_design.py \
 
 ```bash
 python -c "
-import pathlib, sys
+import pathlib, sys, json as _json
 jsons = list(pathlib.Path(r'{tmp_dir}').glob('*_design.json'))
 if not jsons:
     print('ERROR: *_design.json が 0 件です。Phase 1/2 でエラーが発生した可能性があります。')
     sys.exit(1)
-# sf-screen-writer 分（LWC/画面フロー）が含まれているかを確認
-screen_jsons = [j for j in jsons if '_screen_' in j.name or '_lwc_' in j.name]
+# sf-screen-writer 分（LWC/Aura/VF/画面フロー）が含まれているかをJSONのtypeフィールドで判定
+screen_types = {'LWC', 'Aura', 'Visualforce', 'ScreenFlow'}
+screen_jsons = []
+for j in jsons:
+    try:
+        data = _json.loads(j.read_text(encoding='utf-8'))
+        if data.get('type') in screen_types:
+            screen_jsons.append(j)
+    except Exception:
+        pass
 if screen_jsons:
     print(f'{len(jsons)} 件の設計 JSON を検出（うち sf-screen-writer 分: {len(screen_jsons)} 件）。機能一覧を生成します。')
 else:
@@ -409,6 +417,8 @@ else:
 
 - 0 件の場合: 「設計 JSON が生成されていません。Phase 1/2 のエラーを確認してください。」と報告して終了する。Phase 4（クリーンアップ）は実行する。
 - 1 件以上の場合: 以下の feature_list.json 組み立てへ進む。
+
+> **バッチ単位の進捗確認**: JSON が 10 件を超える場合、10 件ごとに「x/y 件処理中」と中間報告を出力する。処理が途中で止まった場合は残件数を報告して続行可否を確認する。
 
 `{tmp_dir}` 内の **全 `*_design.json`** から feature_list.json を組み立て、**必ず `{tmp_dir}/feature_list.json` に保存**してから実行する（sf-screen-writer 分の LWC/画面フロー JSON も含める）:
 

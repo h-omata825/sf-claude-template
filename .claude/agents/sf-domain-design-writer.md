@@ -34,7 +34,7 @@ tools:
 | `tmp_dir` | 一時ファイル置き場（`{output_dir}/.tmp`） |
 | `author` | 作成者名 |
 | `project_name` | プロジェクト名 |
-| `target_domain_ids` | 対象ドメインIDリスト（例: `["DOM-001"]`）。空の場合は全ドメイン |
+| `target_group_ids` | 対象グループIDリスト（例: `["GRP-001", "GRP-003"]`）。空の場合は全グループ |
 | `version_increment` | `"minor"` または `"major"` |
 
 ---
@@ -171,8 +171,8 @@ type_dir = {
     'LWC': ('lwc', ''), 'Aura': ('aura', ''), 'Trigger': ('triggers', '.trigger'),
 }
 force_app = proj / 'force-app' / 'main' / 'default'
-# {group_ids_for_domain} は必ず Python list[str] 形式で展開すること（例: ["GRP-001", "GRP-002"]）
-target_group_ids = {group_ids_for_domain}  # type: list[str]
+# {target_group_ids} は必ず Python list[str] 形式で展開すること（例: ["GRP-001", "GRP-002"]）
+target_group_ids = {target_group_ids}  # type: list[str]
 target_groups = [g for g in groups if g['group_id'] in target_group_ids]
 paths = []
 for grp in target_groups:
@@ -227,7 +227,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
 2. `docs/requirements/` — 要件定義書
 3. `docs/design/` — 既存設計書 MD
 4. `docs/overview/org-profile.md` — プロジェクト概要
-5. 詳細設計書 JSON（`{output_dir}/../詳細設計書/.tmp/{group_id}_detail.json`）
+5. 詳細設計書 JSON（`{output_dir}/../02_詳細設計/.tmp/{group_id}_detail.json`）
 
 ### 1-3. コードから補足情報を取得
 
