@@ -536,7 +536,11 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         sid        = str(step.get("step", ""))
         n          = int(step.get("step", 0))
         badge      = _badge(n)
-        title      = _wrap_jp(step.get("title", "") or step.get("description", ""), 10)
+        raw_title  = step.get("title", "") or step.get("description", "")
+        # 括弧内に英数字を含む補足（技術詳細）を除去
+        import re as _re
+        raw_title  = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
+        title      = _wrap_jp(raw_title, 10)
         component  = step.get("component", "")
         branch     = step.get("branch", "")
 
