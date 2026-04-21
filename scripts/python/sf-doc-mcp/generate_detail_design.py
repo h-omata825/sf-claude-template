@@ -497,6 +497,57 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 # ── GFスキーマ正規化 ────────────────────────────────────────────────
 import re as _re
 
+# ── SFプロジェクト → メタデータパス マッピング ───────────────────────────
+_SF_PROJECT_PATHS: dict[str, str] = {
+    "greenfield": "C:/workspace/16_グリーンフィールド/GF_UAT",
+}
+# メタデータから構築するフィールドラベルマップ {obj_api: {field_api: ja_label}}
+_SF_FIELD_LABELS: dict[str, dict[str, str]] = {}
+# オブジェクトラベルマップ {obj_api: ja_label}
+_SF_OBJ_LABELS: dict[str, str] = {}
+
+
+def _load_sf_metadata(sf_project_path: str) -> None:
+    """SFプロジェクトの objectTranslations (-ja) からフィールド・オブジェクトラベルを構築してグローバルに格納する。"""
+    global _SF_FIELD_LABELS, _SF_OBJ_LABELS
+    trans_dir = Path(sf_project_path) / "force-app/main/default/objectTranslations"
+    if not trans_dir.exists():
+        return
+    for obj_dir in trans_dir.iterdir():
+        if not obj_dir.name.endswith("-ja"):
+            continue
+        obj_api = obj_dir.name[:-3]
+        # オブジェクト翻訳（caseValues の value）
+        obj_trans = obj_dir / f"{obj_dir.name}.objectTranslation-meta.xml"
+        if obj_trans.exists():
+            content = obj_trans.read_text(encoding="utf-8")
+            m = _re.search(r'<value>([^<]+)</value>', content)
+            if m:
+                _SF_OBJ_LABELS[obj_api] = m.group(1).strip()
+        # フィールド翻訳
+        for fxml in obj_dir.glob("*.fieldTranslation-meta.xml"):
+            field_api = fxml.name.replace(".fieldTranslation-meta.xml", "")
+            content = fxml.read_text(encoding="utf-8")
+            m = _re.search(r'<label><!--\s*(.*?)\s*--></label>', content)
+            if m and m.group(1):
+                _SF_FIELD_LABELS.setdefault(obj_api, {})[field_api] = m.group(1).strip()
+
+
+def _sf_field_label(obj_api: str, field_api: str) -> str:
+    """フィールドAPI名を日本語ラベルに変換する（メタデータ優先、なければ加工済みAPI名）。"""
+    label = _SF_FIELD_LABELS.get(obj_api, {}).get(field_api)
+    if label:
+        return label
+    return field_api.replace("__c", "").replace("__", "_")
+
+
+def _sf_obj_label(obj_api: str) -> str:
+    """オブジェクトAPI名を日本語ラベルに変換する。"""
+    if obj_api in _STD_OBJ_LABELS:
+        return _STD_OBJ_LABELS[obj_api]
+    return _SF_OBJ_LABELS.get(obj_api) or _obj_label_from_api(obj_api)
+
+
 # ── Salesforce 標準オブジェクト API名 → 日本語ラベルマップ ───────────────
 _STD_OBJ_LABELS = {
     "ContentDocumentLink": "コンテンツ紐付けレコード",
@@ -516,20 +567,38 @@ _STD_OBJ_LABELS = {
 }
 
 # 技術英語ジャーゴン → 日本語変換（SF オブジェクト名以外の技術用語）
+# NOTE: re.ASCII により \b が ASCII 文字のみを word char として扱う（日本語隣接でも正しくマッチ）
+# NOTE: "before insert" 等の複合パターンは単体 "insert" より前に置く（置換順依存を防ぐ）
+_A = _re.ASCII  # shorthand
+_AI = _re.ASCII | _re.IGNORECASE
 _JARGON_JA: list[tuple] = [
-    (_re.compile(r'\bOPROARTS\s+API\b'), '外部帳票サービス'),
-    (_re.compile(r'\bOPROARTS\b'), '外部帳票サービス'),
-    (_re.compile(r'\bList<Id>\b'), 'IDリスト'),
-    (_re.compile(r'\bList<[A-Za-z]+>\b'), 'リスト'),
-    (_re.compile(r'\bBlob\b'), 'バイナリデータ'),
-    (_re.compile(r'\bvoid\b'), 'なし'),
-    (_re.compile(r'\binsert\b', _re.IGNORECASE), '新規作成'),
-    (_re.compile(r'\bupsert\b', _re.IGNORECASE), '登録・更新'),
-    (_re.compile(r'\bdelete\b', _re.IGNORECASE), '削除'),
-    (_re.compile(r'\bupdate\b', _re.IGNORECASE), '更新'),
-    (_re.compile(r'\bquery\b', _re.IGNORECASE), '参照'),
-    (_re.compile(r'\bCustomerUser\b'), 'カスタマーユーザー'),
-    (_re.compile(r'\b[A-Z][A-Za-z]*Tmp\b'), '一時データ'),
+    # Apex トリガー複合表現（単体 insert/delete/update より先に処理）
+    (_re.compile(r'\bbefore\s+insert\b', _AI), '処理前（新規）'),
+    (_re.compile(r'\bafter\s+insert\b',  _AI), '処理後（新規）'),
+    (_re.compile(r'\bbefore\s+update\b', _AI), '処理前（更新）'),
+    (_re.compile(r'\bafter\s+update\b',  _AI), '処理後（更新）'),
+    (_re.compile(r'\bbefore\s+delete\b', _AI), '処理前（削除）'),
+    (_re.compile(r'\bafter\s+delete\b',  _AI), '処理後（削除）'),
+    # SF API / 外部サービス
+    (_re.compile(r'\bOPROARTS\s+API\b', _A), '外部帳票サービス'),
+    (_re.compile(r'\bOPROARTS\b', _A), '外部帳票サービス'),
+    # コレクション型
+    (_re.compile(r'\bList<Id>\b', _A), 'IDリスト'),
+    (_re.compile(r'\bList<[A-Za-z]+>\b', _A), 'リスト'),
+    # データ型
+    (_re.compile(r'\bBlob\b', _A), 'バイナリデータ'),
+    (_re.compile(r'\bvoid\b', _A), 'なし'),
+    # DML 操作（単体）
+    (_re.compile(r'\binsert\b', _AI), '新規作成'),
+    (_re.compile(r'\bupsert\b', _AI), '登録・更新'),
+    (_re.compile(r'\bdelete\b', _AI), '削除'),
+    (_re.compile(r'\bupdate\b', _AI), '更新'),
+    (_re.compile(r'\bquery\b',  _AI), '参照'),
+    # Apex 固有クラス名・アノテーション
+    (_re.compile(r'\bCustomerUser\b', _A), 'カスタマーユーザー'),
+    (_re.compile(r'\b[A-Z][A-Za-z]*Tmp\b', _A), '一時データ'),
+    (_re.compile(r'\bInvocableMethod\b', _A), 'フローアクション'),
+    (_re.compile(r'\bAuraEnabled\b', _A), 'LWC公開メソッド'),
 ]
 
 # 技術用語→日本語変換ルール（役割・説明文用）
@@ -553,7 +622,13 @@ _TECH_REPL_BIZ = [
     (_re.compile(r'@\w+'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
-    # __c/__e/__r カスタムオブジェクト名
+    # List<CustomObj__c> → __c削除の前に除去（先に処理しないと List<> が残る）
+    (_re.compile(r'List<[A-Z][A-Za-z0-9]*__[cepr]>'), 'レコードリスト'),
+    (_re.compile(r'List<[A-Za-z]+>'), 'リスト'),
+    # （trigger xxx） 等のApexトリガー技術的記述を除去
+    (_re.compile(r'（trigger\s+\w+）'), ''),
+    (_re.compile(r'\(trigger\s+\w+\)'), ''),
+    # __c/__e/__r カスタムオブジェクト名（上記 List<> 除去後）
     (_re.compile(r'\b[A-Z][A-Za-z0-9]*__[cepr]\b'), ''),
     # Apex クラス名（Controller/Service/Handler/Manager/Batch/Trigger で終わるもの）
     (_re.compile(r'\b[A-Z][A-Za-z0-9]{2,}(?:Controller|Service|Handler|Manager|Batch|Trigger)\b'), ''),
@@ -577,9 +652,17 @@ _PREAMBLE_RE = _re.compile(
 
 
 def _translate_sf_objects(text: str) -> str:
-    """Salesforce 標準オブジェクト API名を日本語ラベルに置換する。"""
-    for api, ja in _STD_OBJ_LABELS.items():  # 長→短の順で登録済み
-        text = _re.sub(rf'\b{api}\b', ja, text)
+    """Salesforce 標準オブジェクト + ロード済みカスタムオブジェクト API名を日本語ラベルに置換する。
+
+    NOTE: Python3 の re は Unicode モードで日本語文字も \\w 扱いするため、
+    日本語に隣接する英語 API 名が word boundary にマッチしない。
+    ASCII 専用の lookahead/lookbehind に変更。
+    """
+    for api, ja in _STD_OBJ_LABELS.items():
+        text = _re.sub(rf'(?<![A-Za-z0-9_]){_re.escape(api)}(?![A-Za-z0-9_])', ja, text)
+    # カスタムオブジェクト（メタデータ読み込み済みの場合のみ）
+    for api, ja in _SF_OBJ_LABELS.items():
+        text = _re.sub(rf'(?<![A-Za-z0-9_]){_re.escape(api)}(?![A-Za-z0-9_])', ja, text)
     return text
 
 
@@ -597,21 +680,46 @@ def _clean_tech(text: str) -> str:
     return text.strip()
 
 
+_EC_PLACEHOLDER = "\x01EC\x01"
+
 def _clean_tech_business(text: str) -> str:
-    """業務フロー・タイトル・概要用: SF標準オブジェクトを日本語化→技術用語を全除去する。"""
+    """業務フロー・タイトル・概要用: SF標準オブジェクトを日本語化→技術用語を全除去する。
+
+    "Experience Cloud" はブランド名のため、CamelCase 除去パターンに巻き込まれないよう
+    プレースホルダーで保護してから処理し、最後に復元する。
+    """
+    # Protect "Experience Cloud" before CamelCase removal
+    text = text.replace("Experience Cloud", _EC_PLACEHOLDER)
     text = _translate_sf_objects(text)
     text = _translate_jargon(text)
     for pattern, repl in _TECH_REPL_BIZ:
         text = pattern.sub(repl, text)
+    text = text.replace(_EC_PLACEHOLDER, "Experience Cloud")
     return text.strip()
+
+
+def _translate_sf_fields(text: str) -> str:
+    """ロード済みメタデータの全フィールドAPI名（__c等）を日本語ラベルに置換する。
+    メタデータ未ロードの場合はそのまま返す（__c除去は _TECH_REPL_BIZ で後処理）。
+    """
+    for _obj_api, fields in _SF_FIELD_LABELS.items():
+        for field_api, ja_label in fields.items():
+            text = _re.sub(
+                rf'(?<![A-Za-z0-9_]){_re.escape(field_api)}(?![A-Za-z0-9_])',
+                ja_label, text,
+            )
+    return text
 
 
 def _clean_io_text(text: str) -> str:
     """inputs/outputs テキストの技術用語を日本語化する（処理概要の説明文用）。"""
+    text = text.replace("Experience Cloud", _EC_PLACEHOLDER)
     text = _translate_sf_objects(text)
+    text = _translate_sf_fields(text)
     text = _translate_jargon(text)
     for pattern, repl in _TECH_REPL_BIZ:
         text = pattern.sub(repl, text)
+    text = text.replace(_EC_PLACEHOLDER, "Experience Cloud")
     return text.strip()
 
 
@@ -707,115 +815,128 @@ def _infer_callees(data: dict) -> None:
 
 
 def _build_business_flow(data: dict) -> list[dict]:
-    """processing_purpose の活動概要から業務レベルのフロー steps を生成する。
+    """processing_purpose/screens/data_flow_overview から業務レベルフローを生成する。
 
-    「誰がどういう順番でどういう業務を行うのか」を日本語で表現する。
-    システム名・クラス名・APIアノテーションは一切使用しない。
+    ルール:
+    - 「誰が・何を起点に → 何が起きる → 誰が何を受け取る」を3〜4ステップで表現
+    - クラス名・API名・アノテーションは一切使わない
+    - 処理概要シートとの重複を避けるため、システム内部処理は書かない
     """
-    purpose = data.get("processing_purpose", "")
-    flow_overview = data.get("data_flow_overview", "")
-    if not purpose and not flow_overview:
-        return []
+    purpose  = data.get("processing_purpose", "")
+    flow_ov  = data.get("data_flow_overview", "")
+    notes    = data.get("notes", "")
+    screens  = data.get("screens", [])
+    combined = purpose + " " + flow_ov + " " + notes
 
-    comp_map = {c.get("api_name", ""): c for c in data.get("components", [])}
+    steps    = []
+    step_no  = 1
 
-    # data_flow_overview の → チェーンからステップを抽出（技術用語をすべて日本語化）
-    all_text = flow_overview.replace("\n", " ") if flow_overview else ""
-    raw_tokens = [t.strip() for t in _re.split(r'→', all_text) if t.strip()]
+    # ─── Step 1: 起点アクター＋起動アクション ─────────────────────────────
+    first_tok = (flow_ov.split("→")[0] if flow_ov else "").strip()
 
-    steps = []
-    step_no = 1
-    seen_actions: set[str] = set()
-
-    for i, token in enumerate(raw_tokens):
-        # 対応するコンポーネントを探す
-        matched_comp = None
-        for name, comp in comp_map.items():
-            if name and name in token:
-                matched_comp = comp
-                break
-
-        if matched_comp:
-            resp = matched_comp.get("responsibility", "")
-            biz_resp = _clean_tech_business(resp)
-            biz_resp = _PREAMBLE_RE.sub('', biz_resp).strip()
-            m_sent = _re.match(r'^(.+?)[。．\n]', biz_resp)
-            action = (m_sent.group(1) if m_sent else biz_resp)[:50].strip()
-            if not action:
-                action = _clean_tech_business(token)[:50].strip()
-
-            ctype = matched_comp.get("type", "Apex")
-            actor = "自動フロー" if ctype == "Flow" else "システム"
-        else:
-            # コンポーネント外のトークン: SF標準オブジェクト翻訳 + 技術用語除去
-            cleaned = _clean_tech_business(token)
-            cleaned = _re.sub(r'（[^）]*）|\([^)]*\)', '', cleaned).strip()
-            cleaned = _re.sub(r'[ \t]{2,}', ' ', cleaned).strip()
-
-            if i == 0:
-                actor = _extract_actor(token)
-                # 起動アクションを processing_purpose から推定
-                if actor in ("お客様",) and data.get("screens"):
-                    action = "フォームに情報を入力して送信する"
-                elif actor == "GF社担当者" and _re.search(r'依頼|受付', purpose):
-                    action = "作成依頼を確認し、処理を起動する"
-                else:
-                    action = cleaned if cleaned else "処理を開始する"
-            elif _re.search(r'顧客|お客様|通知', token):
-                actor = "お客様"
-                action = cleaned if cleaned else "通知を受け取り、書類を確認する"
-            elif _re.search(r'\bFlow\b|フロー|承認', token):
-                actor = "自動フロー"
-                action = cleaned if cleaned else "承認・後続処理を自動実行する"
-            else:
-                actor = "システム"
-                action = cleaned if cleaned else "処理を実行する"
-
-        if not action or action in seen_actions:
-            continue
-
-        seen_actions.add(action)
-        steps.append({
-            "step": step_no,
-            "actor": actor,
-            "action": action,
-            "system": "Salesforce",
-            "next": [],
-        })
+    if screens:
+        # 画面あり → お客様が画面から入力・送信
+        scr = screens[0].get("screen_name") or screens[0].get("component", "画面")
+        scr_clean = _clean_tech_business(scr)
+        action1 = f"{scr_clean}から必要情報を入力し、送信する"
+        steps.append({"step": step_no, "actor": "お客様", "action": action1, "next": []})
+        step_no += 1
+    elif _re.search(r'管理者|GF社|担当者|事務', first_tok):
+        # GF社担当者が直接操作して起動
+        clean = _clean_tech_business(first_tok)
+        steps.append({"step": step_no, "actor": "GF社担当者",
+                      "action": clean or "処理を起動する", "next": []})
+        step_no += 1
+    elif _re.search(r'承認.*[Ff]low|承認.*フロー|承認フロー', first_tok):
+        # 承認フロー起点 → 「誰かが何かを承認した後に動く」→ GF社担当者が承認
+        m_ctx = _re.search(r'(.{2,25}(?:確定|承認|依頼|完了))後', purpose)
+        ctx = _clean_tech_business(m_ctx.group(1)) if m_ctx else "業務処理"
+        steps.append({"step": step_no, "actor": "GF社担当者",
+                      "action": f"{ctx}後、処理を承認・起動する", "next": []})
+        step_no += 1
+    elif _re.search(r'お客様|顧客[^向]|Experience Cloud.*ポータル|ポータル.*画面', first_tok):
+        clean = _clean_tech_business(first_tok)
+        steps.append({"step": step_no, "actor": "お客様",
+                      "action": clean or "操作を行う", "next": []})
+        step_no += 1
+    else:
+        clean = _clean_tech_business(first_tok)
+        steps.append({"step": step_no, "actor": "GF社担当者",
+                      "action": clean or "処理を起動する", "next": []})
         step_no += 1
 
-    # 業務レベルのステップのみに絞り込む
-    # - お客様 / GF社担当者: 常に表示
-    # - 自動フロー: 承認・通知・送信など業務上可視の結果のみ表示
-    # - システム: 除外（処理概要シートで扱う）
-    biz_steps = [
-        s for s in steps
-        if s["actor"] in ("お客様", "GF社担当者")
-        or (s["actor"] == "自動フロー"
-            and _re.search(r'承認|通知|送信|完了|確認|審査|レビュー', s["action"]))
-    ]
+    # ─── Step 2: メイン業務処理（processing_purpose の主要部分） ──────────────
+    sents = [s.strip() for s in purpose.split("。") if s.strip()]
+    if sents:
+        first = sents[0]
+        # 「〜後の」前置き除去（「コンサルティング本確定後の」等）
+        core = _re.sub(r'^.{0,35}後の', '', first).strip()
+        main = _clean_tech_business(core or first)
+        main = _PREAMBLE_RE.sub('', main).strip()
+        # "〜を担う" 等の文末表現を除去（行動として読めるように）
+        main = _re.sub(r'を担う$|を行う$|を実施する$', '', main).strip()
+        main = _re.sub(r'^[、。・/\s]+|[、。・/\s]+$', '', main).strip()
+        if main and len(main) > 5:
+            steps.append({"step": step_no, "actor": "自動フロー",
+                          "action": main, "next": []})
+            step_no += 1
 
-    # ステップ番号を振り直し、next リンクを再設定
-    for i, step in enumerate(biz_steps, 1):
-        step["step"] = i
-        step["next"] = []
-    for i in range(len(biz_steps) - 1):
-        biz_steps[i]["next"] = [{"to": biz_steps[i + 1]["step"]}]
+    # ─── Step 3: 顧客向け結果（キーワードで判定） ─────────────────────────────
+    outcome = ""
+    if _re.search(r'初期パスワード|パスワード.{0,5}メール', combined):
+        outcome = "初期パスワードメールを受信し、Experience Cloudポータルにアクセスする"
+    elif _re.search(r'thankPage|thanksPage|thank.*page', combined, _re.IGNORECASE):
+        outcome = "フォーム送信後、受付完了ページで確認する"
+    elif _re.search(r'顧客向け通知|通知.*メール|ダウンロード.*通知|完了通知', combined):
+        outcome = "完了通知メールを受信し、書類を確認する"
+    elif _re.search(r'ダウンロード', combined) and _re.search(r'Experience Cloud|ポータル', combined):
+        outcome = "Experience Cloudポータルで書類をダウンロードする"
+    elif _re.search(r'メール.*送信|自動メール|顧客宛', combined) and not screens:
+        outcome = "自動送信されたメールを受信する"
 
-    return biz_steps
+    if outcome:
+        steps.append({"step": step_no, "actor": "お客様",
+                      "action": outcome, "next": []})
+        step_no += 1
+
+    # ─── next リンク設定 ───────────────────────────────────────────────
+    for i in range(len(steps) - 1):
+        steps[i]["next"] = [{"to": steps[i + 1]["step"]}]
+
+    return steps
+
+
+def _comp_type_label(comp: dict) -> str:
+    """コンポーネントの種別ラベルを日本語で返す（クラス名は出さない）。"""
+    api   = comp.get("api_name", "")
+    ctype = comp.get("type", "Apex")
+    if ctype == "Flow":
+        return "フロー"
+    if ctype == "LWC":
+        return "LWCコンポーネント"
+    if ctype == "Integration":
+        return "外部サービス連携"
+    if ctype == "Trigger" or ("Trigger" in api and "Handler" in api):
+        return "Apexトリガーハンドラー"
+    if "Trigger" in api:
+        return "Apexトリガー"
+    return "Apexクラス"
 
 
 def _build_process_steps(data: dict) -> list[dict]:
     """components の responsibility から日本語の処理概要 steps を生成する。
     API名・クラス名・英語技術用語はすべて日本語に変換する。
+    コンポーネント列は種別ラベル（Apexクラス／フロー等）を表示し、クラス名は出さない。
     """
     steps = []
+    n_comps = len(data.get("components", []))
     for i, comp in enumerate(data.get("components", []), 1):
         responsibility = comp.get("responsibility", "")
         comp_type = comp.get("type", "Apex")
 
-        # 責務を日本語化（ロール用クリーン）
-        desc_main = _clean_tech(responsibility)
+        # 責務を日本語化（SF オブジェクト名・フィールド名・ジャーゴン→日本語 → Apex用クリーン）
+        resp_j = _translate_sf_fields(_translate_jargon(_translate_sf_objects(responsibility)))
+        desc_main = _clean_tech(resp_j)
 
         # 入出力情報も日本語化
         io_parts = []
@@ -828,7 +949,7 @@ def _build_process_steps(data: dict) -> list[dict]:
             if err:
                 io_parts.append(f"■ エラー処理: {err}")
 
-        title = _short_title(responsibility) if responsibility else ""
+        title  = _short_title(responsibility) if responsibility else ""
         branch = "条件分岐あり" if comp_type == "Flow" else None
 
         desc_parts = [desc_main] + io_parts
@@ -836,18 +957,20 @@ def _build_process_steps(data: dict) -> list[dict]:
             "step": i,
             "title": title,
             "description": "\n".join(p for p in desc_parts if p),
-            "component": comp.get("api_name", ""),
+            "component": _comp_type_label(comp),
             "branch": branch,
-            "next": [{"to": i + 1}] if i < len(data.get("components", [])) else [],
+            "next": [{"to": i + 1}] if i < n_comps else [],
         })
 
     return steps
 
 
 def _obj_label_from_api(api: str) -> str:
-    """オブジェクトAPIから日本語ラベルを推定する。"""
+    """オブジェクトAPIから日本語ラベルを推定する（メタデータ優先）。"""
     if api in _STD_OBJ_LABELS:
         return _STD_OBJ_LABELS[api]
+    if api in _SF_OBJ_LABELS:
+        return _SF_OBJ_LABELS[api]
     raw = api.replace("__c", "").replace("__", "")
     return _re.sub(r'([A-Z])', r' \1', raw).strip()
 
@@ -877,10 +1000,10 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
         for text in [comp.get("inputs", "")]:
             if not text:
                 continue
-            for m in _re.finditer(r'\b([A-Z][A-Za-z0-9]*__c)\b', text):
+            for m in _re.finditer(r'(?<![A-Za-z0-9_])([A-Z][A-Za-z0-9]*__c)(?![A-Za-z0-9_])', text):
                 _register(m.group(1), name, "R")
             for std_api in _STD_OBJ_LABELS:
-                if _re.search(rf'\b{std_api}\b', text):
+                if _re.search(rf'(?<![A-Za-z0-9_]){_re.escape(std_api)}(?![A-Za-z0-9_])', text):
                     _register(std_api, name, "R")
 
         # outputs → W または INSERT
@@ -899,39 +1022,96 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
                         if not any(f["api_name"] == fn for f in obj_fields[obj_api]):
                             obj_fields[obj_api].append({
                                 "api_name": fn,
-                                "label": _re.sub(r'([A-Z])', r' \1', fn.replace("__c", "")).strip(),
+                                "label": _sf_field_label(obj_api, fn),
                                 "access": "W", "note": "",
                             })
 
             # "OBJ（insert）" や "insert" を含む → INSERT
-            if _re.search(r'\binsert\b|\b新規作成\b', text, _re.IGNORECASE):
-                for m in _re.finditer(r'\b([A-Z][A-Za-z0-9]*__c)\b', text):
+            if _re.search(r'\binsert\b|\b新規作成\b', text, _re.IGNORECASE | _re.ASCII):
+                for m in _re.finditer(r'(?<![A-Za-z0-9_])([A-Z][A-Za-z0-9]*__c)(?![A-Za-z0-9_])', text):
                     _register(m.group(1), name, "INSERT")
                 for std_api in _STD_OBJ_LABELS:
-                    if _re.search(rf'\b{std_api}\b', text):
+                    if _re.search(rf'(?<![A-Za-z0-9_]){_re.escape(std_api)}(?![A-Za-z0-9_])', text):
                         _register(std_api, name, "INSERT")
             else:
-                for m in _re.finditer(r'\b([A-Z][A-Za-z0-9]*__c)\b', text):
+                for m in _re.finditer(r'(?<![A-Za-z0-9_])([A-Z][A-Za-z0-9]*__c)(?![A-Za-z0-9_])', text):
                     _register(m.group(1), name, "W")
                 for std_api in _STD_OBJ_LABELS:
-                    if _re.search(rf'\b{std_api}\b', text):
+                    if _re.search(rf'(?<![A-Za-z0-9_]){_re.escape(std_api)}(?![A-Za-z0-9_])', text):
                         _register(std_api, name, "W")
 
-    # 他テキストから追加オブジェクトを収集（アクセス不明）
-    extra_texts = [data.get("data_flow_overview", ""), data.get("processing_purpose", "")]
-    combined_extra = " ".join(extra_texts)
-    for m in _re.finditer(r'\b([A-Z][A-Za-z0-9]*__c)\b', combined_extra):
-        obj_comp_ops.setdefault(m.group(1), {})
+    # data_flow_overview から「ObjName（Field__c等フラグ更新）」形式のフィールド情報を抽出
+    dfo = data.get("data_flow_overview", "")
+    if dfo:
+        # 標準オブジェクト: "Contact（IsConsignee__c等フラグ更新）" → Contact.IsConsignee__c = W
+        for std_api in _STD_OBJ_LABELS:
+            for m in _re.finditer(rf'{std_api}（([^）]{{1,120}})）', dfo):
+                parens = m.group(1)
+                fnames = _re.findall(r'([A-Za-z][A-Za-z0-9]*__c)', parens)
+                is_w = bool(_re.search(r'更新|フラグ|設定|保存', parens))
+                op = "W" if is_w else "R"
+                for fn in fnames:
+                    label = _sf_field_label(std_api, fn)
+                    obj_fields.setdefault(std_api, [])
+                    if not any(f["api_name"] == fn for f in obj_fields[std_api]):
+                        obj_fields[std_api].append(
+                            {"api_name": fn, "label": label, "access": op, "note": ""})
+        # カスタムオブジェクト: "Quote__c更新（QuoteLinkId__c・...）" → 既存パターンと同様
+        for m in _re.finditer(r'([A-Z][A-Za-z0-9]*__c)（([^）]+)）', dfo):
+            obj_api = m.group(1)
+            parens = m.group(2)
+            fnames = _re.findall(r'([A-Za-z][A-Za-z0-9]*__c)', parens)
+            is_w = bool(_re.search(r'更新|フラグ|設定|保存', parens))
+            op = "W" if is_w else "R"
+            for fn in fnames:
+                label = _sf_field_label(obj_api, fn)
+                obj_fields.setdefault(obj_api, [])
+                if not any(f["api_name"] == fn for f in obj_fields[obj_api]):
+                    obj_fields[obj_api].append(
+                        {"api_name": fn, "label": label, "access": op, "note": ""})
+
+    # 他テキストから追加オブジェクトを収集（標準オブジェクトのみ）
+    # ※ カスタムオブジェクトは inputs/outputs から取得済み。__c のスキャンは
+    #   フィールド名（IsConsignee__c等）を誤ってオブジェクトとして追加する恐れがあるため除外する
+    purpose_text = data.get("processing_purpose", "")
+    combined_extra = " ".join([dfo, purpose_text])
     for std_api in _STD_OBJ_LABELS:
-        if _re.search(rf'\b{std_api}\b', combined_extra):
-            obj_comp_ops.setdefault(std_api, {})
+        pat = rf'(?<![A-Za-z0-9_]){_re.escape(std_api)}(?![A-Za-z0-9_])'
+        if _re.search(pat, combined_extra):
+            if std_api not in obj_comp_ops:
+                # テキスト検出のみの場合、purpose から作成/更新を推定して仮登録
+                _write_kw = r'作成|登録|更新|送信|保存'
+                _write_ctx = rf'(?:{_re.escape(std_api)}.{{0,20}}(?:{_write_kw})|(?:{_write_kw}).{{0,20}}{_re.escape(std_api)})'
+                inferred_op = "W" if _re.search(_write_ctx, combined_extra) else "R"
+                obj_comp_ops[std_api] = {"（テキスト検出）": inferred_op}
 
     # related_objects 構築
     related_objects = []
     for obj_api, comp_ops in obj_comp_ops.items():
         fields = obj_fields.get(obj_api, [])
+
         if not fields:
-            fields = [{"api_name": "（詳細は個票参照）", "label": "（詳細は個票参照）", "access": "", "note": ""}]
+            # メタデータから主要フィールドを補完（メタデータが読み込まれている場合）
+            meta = _SF_FIELD_LABELS.get(obj_api, {})
+            if meta:
+                # コンポーネントのinputs/outputs テキストに言及されているフィールドのみ取得
+                all_texts = " ".join(
+                    c.get("inputs", "") + " " + c.get("outputs", "")
+                    for c in data.get("components", [])
+                ) + " " + dfo
+                for fapi, flabel in meta.items():
+                    if _re.search(rf'\b{_re.escape(fapi)}\b', all_texts):
+                        all_ops = list(comp_ops.values())
+                        op = "W" if any(o in ("W", "RW", "INSERT") for o in all_ops) else "R"
+                        fields.append({"api_name": fapi, "label": flabel, "access": op, "note": ""})
+
+        if not fields:
+            # 最終フォールバック: アクセス種別は comp_ops から取得（空白にしない）
+            all_ops = list(comp_ops.values())
+            op = ("RW" if "W" in all_ops and "R" in all_ops
+                  else all_ops[0] if all_ops else "")
+            fields = [{"api_name": "—", "label": "（対象項目は別途設計書を参照）", "access": op, "note": ""}]
+
         related_objects.append({
             "api_name": obj_api,
             "label": _obj_label_from_api(obj_api),
@@ -972,6 +1152,13 @@ def _normalize_schema(data: dict) -> dict:
     # feature_id
     if not data.get("feature_id") and data.get("group_id"):
         data["feature_id"] = data["group_id"]
+
+    # SFプロジェクトメタデータの自動ロード（project_name から判定）
+    proj = data.get("project_name", "")
+    if proj and not _SF_FIELD_LABELS:
+        sf_path = _SF_PROJECT_PATHS.get(proj)
+        if sf_path:
+            _load_sf_metadata(sf_path)
 
     # ── 概要フィールド（すべてAPI名・クラス名なしの日本語で） ────────────
     purpose_raw = data.get("processing_purpose", "")
