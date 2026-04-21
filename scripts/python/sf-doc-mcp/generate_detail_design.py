@@ -482,6 +482,82 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
 
 
+# ── GFスキーマ正規化 ────────────────────────────────────────────────
+def _normalize_schema(data: dict) -> dict:
+    """GFプロジェクト固有スキーマを generate_detail_design.py の標準スキーマに変換する。
+
+    GFスキーマ → 標準スキーマ の主なマッピング:
+      group_id           → feature_id
+      processing_purpose → summary
+      data_flow_overview → purpose
+      notes              → (概要の補足情報として summary に追記)
+      components[].responsibility → components[].role
+      interfaces[]       → process_steps[]  (process_steps が未定義の場合のみ)
+    """
+    # feature_id
+    if not data.get("feature_id") and data.get("group_id"):
+        data["feature_id"] = data["group_id"]
+
+    # 概要フィールド
+    if not data.get("summary"):
+        parts = [data.get("processing_purpose", "")]
+        if data.get("notes"):
+            parts.append(f"【備考】{data['notes']}")
+        data["summary"] = "\n".join(p for p in parts if p)
+
+    if not data.get("purpose") and data.get("data_flow_overview"):
+        data["purpose"] = data["data_flow_overview"]
+
+    # prerequisites → trigger
+    if not data.get("trigger") and data.get("prerequisites"):
+        data["trigger"] = data["prerequisites"]
+
+    # components: responsibility → role
+    for comp in data.get("components", []):
+        if not comp.get("role"):
+            role_parts = [comp.get("responsibility", "")]
+            if comp.get("inputs"):
+                role_parts.append(f"入力: {comp['inputs']}")
+            if comp.get("outputs"):
+                role_parts.append(f"出力: {comp['outputs']}")
+            if comp.get("error_handling"):
+                role_parts.append(f"エラー: {comp['error_handling']}")
+            comp["role"] = "\n".join(p for p in role_parts if p)
+        # callees が未定義の場合は空リストを保証
+        if "callees" not in comp:
+            comp["callees"] = []
+
+    # process_steps: interfaces → process_steps (未定義の場合のみ)
+    if not data.get("process_steps") and data.get("interfaces"):
+        steps = []
+        for i, iface in enumerate(data["interfaces"], 1):
+            desc = iface.get("description", "")
+            params = iface.get("input_params", "")
+            ret = iface.get("return_value", "")
+            exc = iface.get("exceptions", "")
+            detail_parts = []
+            if params:
+                detail_parts.append(f"入力: {params}")
+            if ret and ret != "void":
+                detail_parts.append(f"戻り値: {ret}")
+            if exc:
+                detail_parts.append(f"例外: {exc}")
+            full_desc = desc
+            if detail_parts:
+                full_desc += "\n" + " / ".join(detail_parts)
+            steps.append({
+                "step": i,
+                "title": f"{iface.get('component', '')} - {iface.get('method', '')}",
+                "description": full_desc,
+                "component": iface.get("component", ""),
+                "branch": None,
+                "next": [],
+            })
+        data["process_steps"] = steps
+
+    return data
+
+
 # ── 差分計算 ────────────────────────────────────────────────────────
 def _compute_diffs(prev_data: dict | None, new_data: dict) -> dict:
     if prev_data is None:
@@ -717,6 +793,7 @@ def main():
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    data = _normalize_schema(data)   # GFスキーマ → 標準スキーマ変換
     today  = _date.today().strftime("%Y-%m-%d")
     author = data.get("author", "")
 

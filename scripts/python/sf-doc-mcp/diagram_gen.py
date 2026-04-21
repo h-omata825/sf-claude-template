@@ -461,9 +461,12 @@ def render_component_diagram(components: list[dict], out_path: str) -> tuple[int
     コンポーネント一覧から依存関係図PNGを生成する。
 
     components: [{api_name, type, role, callees:[str]}]
+    callees が空の場合はタイプ別クラスタ表示でコンパクトにまとめる。
     """
     if not _HAS_GV:
         raise RuntimeError("graphviz が利用できません")
+
+    has_edges = any(comp.get("callees") for comp in components)
 
     g = _gv.Digraph(
         "components",
@@ -471,35 +474,60 @@ def render_component_diagram(components: list[dict], out_path: str) -> tuple[int
             "bgcolor": "white",
             "rankdir": "LR",
             "splines": "polyline",
-            "nodesep": "0.5",
-            "ranksep": "0.8",
+            "nodesep": "0.4",
+            "ranksep": "0.6",
             "fontname": FONT_JP,
-            "pad": "0.3",
+            "pad": "0.5",
             "dpi": str(DPI),
         },
     )
 
     known = {c.get("api_name", "") for c in components}
 
-    for comp in components:
-        name  = comp.get("api_name", "")
-        ctype = comp.get("type", "Apex")
-        fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-        g.node(name,
-               label=f"{name}\n[{ctype}]",
-               shape="box", style="filled,rounded",
-               fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="9", width="1.8")
+    if has_edges:
+        # callees あり: 通常の依存関係図
+        for comp in components:
+            name  = comp.get("api_name", "")
+            ctype = comp.get("type", "Apex")
+            fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
+            g.node(name,
+                   label=f"{name}\n[{ctype}]",
+                   shape="box", style="filled,rounded",
+                   fillcolor=fill, fontcolor=fg,
+                   fontname=FONT_JP, fontsize="9", width="1.8")
 
-    for comp in components:
-        src = comp.get("api_name", "")
-        for callee in comp.get("callees", []):
-            if callee not in known:
-                g.node(callee, label=callee,
-                       shape="box", style="filled,rounded",
-                       fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
-                       fontname=FONT_JP, fontsize="9")
-            g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
+        for comp in components:
+            src = comp.get("api_name", "")
+            for callee in comp.get("callees", []):
+                if callee not in known:
+                    g.node(callee, label=callee,
+                           shape="box", style="filled,rounded",
+                           fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
+                           fontname=FONT_JP, fontsize="9")
+                g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
+    else:
+        # callees なし: タイプ別クラスタ表示
+        from collections import defaultdict
+        type_groups: dict[str, list[str]] = defaultdict(list)
+        for comp in components:
+            type_groups[comp.get("type", "Apex")].append(comp.get("api_name", ""))
+
+        for ctype, names in type_groups.items():
+            fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
+            with g.subgraph(name=f"cluster_{ctype}") as sg:
+                sg.attr(
+                    label=ctype,
+                    style="filled,rounded",
+                    fillcolor="#F5F7FA",
+                    color="#B0B8C8",
+                    fontname=FONT_JP, fontsize="10",
+                )
+                for name in names:
+                    sg.node(name,
+                            label=name,
+                            shape="box", style="filled,rounded",
+                            fillcolor=fill, fontcolor=fg,
+                            fontname=FONT_JP, fontsize="9", width="1.8")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
