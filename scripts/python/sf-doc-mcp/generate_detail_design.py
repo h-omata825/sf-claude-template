@@ -393,8 +393,8 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
         _embed_image(ws, png_path, img_anchor, img_w=880)
 
 
-def _estimate_row_height(text: str, chars_per_line: int = 26,
-                         line_pt: int = 14, min_h: int = 24, max_h: int = 200) -> int:
+def _estimate_row_height(text: str, chars_per_line: int = 34,
+                         line_pt: int = 14, min_h: int = 24, max_h: int = 300) -> int:
     """テキストの折り返しを考慮して行の高さ（ポイント）を推定する。"""
     import math as _math
     if not text:
@@ -705,6 +705,11 @@ _TECH_REPL_BIZ = [
     # "/作成" 正規化・重複まとめ
     (_re.compile(r'/作成'), '・作成'),
     (_re.compile(r'(?:・作成){2,}'), '・作成'),
+    # Salesforce フィールド API名（__c/__r/__b 等）を除去
+    (_re.compile(r'[A-Za-z][A-Za-z0-9_]*(?:__c|__r|__C|__R)\b'), ''),
+    # フィールド名除去後の「の等」「の、」「の」 → 整理
+    (_re.compile(r'の(?=[等や・、。\s])'), ''),
+    (_re.compile(r'(?<=[^\s])(?=[等や])'), ''),
     # 整理
     (_re.compile(r'[ \t]{2,}'), ' '),
     (_re.compile(r'[・、]{2,}'), '・'),
