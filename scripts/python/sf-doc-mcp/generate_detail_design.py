@@ -341,13 +341,15 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
         n_fields      = len(fields)
         obj_start_row = r
 
+        # 読み書き区分・備考はオブジェクト単位で統一（フィールドごとに変わらないため縦結合）
+        access    = fields[0].get("access", "") if fields else ""
+        access_ja = _ACCESS_JA.get(access, access)
+        note      = fields[0].get("note", "") if fields else ""
+        if not note:
+            note = _compute_obj_note(obj_api, access, data)
+
         for fi, field in enumerate(fields):
             set_h(ws, r, 22)
-            access    = field.get("access", "")
-            access_ja = _ACCESS_JA.get(access, access)
-            note      = field.get("note", "")
-            if not note:
-                note = _compute_obj_note(obj_api, access, data)
 
             # オブジェクト名列: 全行書くが後で縦結合する
             MW(ws, r, OBJ_NAME_CS, OBJ_NAME_CE,
@@ -357,33 +359,41 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
                     border=B_all())
             c3 = MW(ws, r, OBJ_FAPI_CS, OBJ_FAPI_CE, field.get("api_name", ""),
                     border=B_all())
-            c4 = MW(ws, r, OBJ_ACC_CS,  OBJ_ACC_CE,  access_ja,
+            # 読み書き区分・備考は初行のみ書き込み（後で縦結合）
+            c4 = MW(ws, r, OBJ_ACC_CS,  OBJ_ACC_CE,  access_ja if fi == 0 else "",
                     border=B_all(), h="center")
-            c5 = MW(ws, r, OBJ_NOTE_CS, OBJ_NOTE_CE, note,
+            c5 = MW(ws, r, OBJ_NOTE_CS, OBJ_NOTE_CE, note if fi == 0 else "",
                     border=B_all(), wrap=True, v="top")
             if is_changed:
                 for c in (c2, c3, c4, c5):
                     dr.apply_red(c)
             r += 1
 
-        # オブジェクト名列を縦結合（フィールドが複数ある場合）
-        if n_fields > 1:
-            # 個別行の横結合を解除してから縦結合
-            for ri in range(obj_start_row, r):
+        def _merge_col(ws, row_start, row_end, cs, ce, value, is_changed_flag, h="left", v="center"):
+            for ri in range(row_start, row_end + 1):
                 try:
-                    ws.unmerge_cells(start_row=ri, start_column=OBJ_NAME_CS,
-                                     end_row=ri, end_column=OBJ_NAME_CE)
+                    ws.unmerge_cells(start_row=ri, start_column=cs,
+                                     end_row=ri, end_column=ce)
                 except Exception:
                     pass
-            ws.merge_cells(start_row=obj_start_row, start_column=OBJ_NAME_CS,
-                           end_row=r - 1, end_column=OBJ_NAME_CE)
-            mc = ws.cell(row=obj_start_row, column=OBJ_NAME_CS)
-            mc.value     = obj_label
+            ws.merge_cells(start_row=row_start, start_column=cs,
+                           end_row=row_end, end_column=ce)
+            mc = ws.cell(row=row_start, column=cs)
+            mc.value     = value
             mc.font      = _fnt()
-            mc.alignment = _aln(v="center", wrap=True)
+            mc.alignment = _aln(h=h, v=v, wrap=True)
             mc.border    = B_all()
-            if is_changed:
+            if is_changed_flag:
                 dr.apply_red(mc)
+
+        # オブジェクト名・読み書き区分・備考を縦結合
+        if n_fields > 1:
+            _merge_col(ws, obj_start_row, r - 1, OBJ_NAME_CS, OBJ_NAME_CE,
+                       obj_label, is_changed, v="center")
+            _merge_col(ws, obj_start_row, r - 1, OBJ_ACC_CS, OBJ_ACC_CE,
+                       access_ja, is_changed, h="center", v="center")
+            _merge_col(ws, obj_start_row, r - 1, OBJ_NOTE_CS, OBJ_NOTE_CE,
+                       note, is_changed, v="top")
 
     # スペーサー + 図エリア（動的位置）
     spacer_row = r
@@ -493,9 +503,13 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 import re as _re
 
 # ── SFプロジェクト → メタデータパス マッピング ───────────────────────────
+# flows/classes は greenfield、フィールドラベル翻訳は両方から取得（GF_UATが補完）
 _SF_PROJECT_PATHS: dict[str, str] = {
     "greenfield": "C:/workspace/16_グリーンフィールド/greenfield",
 }
+_SF_EXTRA_LABEL_PATHS: list[str] = [
+    "C:/workspace/16_グリーンフィールド/GF_UAT",
+]
 # メタデータから構築するフィールドラベルマップ {obj_api: {field_api: ja_label}}
 _SF_FIELD_LABELS: dict[str, dict[str, str]] = {}
 # オブジェクトラベルマップ {obj_api: ja_label}
@@ -615,6 +629,68 @@ def _load_sf_metadata(sf_project_path: str) -> None:
                 m = _re.search(r'<label>([^<]+)</label>', content)
                 if m:
                     _SF_FIELD_LABELS.setdefault(obj_api, {})[field_api] = m.group(1).strip()
+
+    # 追加翻訳パス（GF_UAT等）からobjectTranslationsのみ補完ロード
+    for extra_path in _SF_EXTRA_LABEL_PATHS:
+        extra_trans = Path(extra_path) / "force-app/main/default/objectTranslations"
+        if not extra_trans.exists():
+            continue
+        for obj_dir in extra_trans.iterdir():
+            if not obj_dir.name.endswith("-ja"):
+                continue
+            obj_api = obj_dir.name[:-3]
+            for fxml in obj_dir.glob("*.fieldTranslation-meta.xml"):
+                field_api = fxml.name.replace(".fieldTranslation-meta.xml", "")
+                if field_api in _SF_FIELD_LABELS.get(obj_api, {}):
+                    continue  # 既に取得済み
+                try:
+                    content = fxml.read_text(encoding="utf-8")
+                except Exception:
+                    continue
+                m = _re.search(r'<label><!--\s*(.*?)\s*--></label>', content)
+                if m and m.group(1):
+                    _SF_FIELD_LABELS.setdefault(obj_api, {})[field_api] = m.group(1).strip()
+
+    # 標準オブジェクトの主要フィールド日本語ラベル（翻訳ファイルが存在しない場合の補完）
+    _STD_FIELD_LABELS_BUILTIN: dict[str, dict[str, str]] = {
+        "User": {
+            "Username": "ユーザー名", "Email": "メールアドレス", "IsActive": "有効",
+            "FirstName": "名", "LastName": "姓", "Name": "フルネーム",
+            "ContactId": "取引先責任者", "AccountId": "取引先", "ProfileId": "プロファイル",
+            "UserRoleId": "ロール", "Title": "役職", "Department": "部門",
+            "Phone": "電話", "MobilePhone": "携帯", "LanguageLocaleKey": "言語",
+            "LocaleSidKey": "ロケール", "TimeZoneSidKey": "タイムゾーン",
+        },
+        "Account": {
+            "Name": "取引先名", "Phone": "電話", "Website": "Webサイト",
+            "BillingAddress": "請求先住所", "ShippingAddress": "配送先住所",
+            "Industry": "業種", "AnnualRevenue": "年間売上", "NumberOfEmployees": "従業員数",
+            "OwnerId": "所有者", "Type": "取引先種別", "ParentId": "親取引先",
+        },
+        "Contact": {
+            "FirstName": "名", "LastName": "姓", "Name": "氏名",
+            "Email": "メールアドレス", "Phone": "電話", "MobilePhone": "携帯",
+            "AccountId": "取引先", "Title": "役職", "Department": "部門",
+            "OwnerId": "所有者", "Birthdate": "生年月日",
+        },
+        "Lead": {
+            "FirstName": "名", "LastName": "姓", "Name": "氏名",
+            "Company": "会社名", "Email": "メールアドレス", "Phone": "電話",
+            "MobilePhone": "携帯", "Title": "役職", "Industry": "業種",
+            "LeadSource": "リードソース", "Status": "ステータス",
+            "Street": "住所（番地）", "City": "市区町村", "State": "都道府県",
+            "PostalCode": "郵便番号", "Country": "国", "OwnerId": "所有者",
+            "HasOptedOutOfEmail": "メール配信停止", "IsConverted": "取引先に変換済み",
+        },
+        "Opportunity": {
+            "Name": "商談名", "AccountId": "取引先", "CloseDate": "完了予定日",
+            "StageName": "フェーズ", "Amount": "金額", "Probability": "確度",
+            "OwnerId": "所有者", "LeadSource": "リードソース", "Type": "種別",
+        },
+    }
+    for obj_api, fld_map in _STD_FIELD_LABELS_BUILTIN.items():
+        for fapi, flabel in fld_map.items():
+            _SF_FIELD_LABELS.setdefault(obj_api, {}).setdefault(fapi, flabel)
 
 
 def _sf_field_label(obj_api: str, field_api: str) -> str:
@@ -1205,7 +1281,7 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
                             })
 
             # "OBJ（insert）" や "insert" を含む → INSERT
-            if _re.search(r'\binsert\b|\b新規作成\b', text, _re.IGNORECASE | _re.ASCII):
+            if _re.search(r'(?i)\binsert\b|新規作成|新規登録', text):
                 for m in _re.finditer(r'(?<![A-Za-z0-9_])([A-Z][A-Za-z0-9]*__c)(?![A-Za-z0-9_])', text):
                     _register(m.group(1), name, "INSERT")
                 for std_api in _STD_OBJ_LABELS:

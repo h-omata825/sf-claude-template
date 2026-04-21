@@ -1787,8 +1787,8 @@ def generate_object_component_matrix(
 ) -> bool:
     """コンポーネント×オブジェクト参照マトリクスをmatplotlibで生成する。
 
-    行: オブジェクト（フィールド単位で展開）。同オブジェクトのフィールド行は縦結合。
-    列: Apexコンポーネント。操作セルもオブジェクト単位で縦結合表示。
+    行: オブジェクト単位（項目は表示しない）。
+    列: コンポーネント。セルに操作種別（参照/更新/新規作成）を表示。
     """
     if not HAS_MPL:
         return False
@@ -1841,21 +1841,21 @@ def generate_object_component_matrix(
         lines = _tw.wrap(short, width=width)
         return '\n'.join(lines) if lines else name
 
-    # コンポーネント列幅: 名前の長さに応じて動的調整（上限2.8）
+    # コンポーネント列幅: 名前の長さに応じて動的調整
     _max_name_len = max((len(_strip_type_suffix(c)) for c in comp_names), default=8)
-    cell_w      = min(2.8, max(2.0, _max_name_len * 0.13))
+    cell_w    = min(3.2, max(2.2, _max_name_len * 0.14))
 
-    # レイアウト定数
-    obj_col_w   = 3.0    # オブジェクト名列（縦結合）
-    field_col_w = 2.6    # 項目ラベル列
-    cell_h      = 0.75   # 1フィールドの行高
-    hdr_h       = 1.8    # ヘッダ行高（折り返し対応で高め）
-    legend_h    = 0.6    # 凡例エリア高
-    margin      = 0.1
+    # レイアウト定数（オブジェクト単位 = 項目列なし）
+    obj_col_w = 3.5    # オブジェクト名列
+    obj_h     = 0.9    # 1オブジェクトの行高
+    hdr_h     = 1.8    # ヘッダ行高
+    legend_h  = 0.65
+    margin    = 0.1
 
-    n_cols        = len(comp_names)
-    total_data_h  = sum(len(fields) * cell_h for _, _, fields in obj_groups)
-    fig_w = margin * 2 + obj_col_w + field_col_w + cell_w * n_cols
+    n_cols      = len(comp_names)
+    n_rows      = len(obj_groups)
+    total_data_h = n_rows * obj_h
+    fig_w = margin * 2 + obj_col_w + cell_w * n_cols
     fig_h = margin + legend_h + total_data_h + hdr_h + margin
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=150)
@@ -1874,64 +1874,48 @@ def generate_object_component_matrix(
     ax.text(margin + obj_col_w / 2, hdr_y + hdr_h / 2, "オブジェクト",
             ha="center", va="center", color=HDR_FG, **_fpkw(12, bold=True))
 
-    _rect(margin + obj_col_w, hdr_y, field_col_w, hdr_h, HDR_BG, ec=HDR_BG)
-    ax.text(margin + obj_col_w + field_col_w / 2, hdr_y + hdr_h / 2, "項目",
-            ha="center", va="center", color=HDR_FG, **_fpkw(12, bold=True))
-
     for ci, comp in enumerate(comp_names):
-        x = margin + obj_col_w + field_col_w + ci * cell_w
+        x = margin + obj_col_w + ci * cell_w
         _rect(x, hdr_y, cell_w, hdr_h, HDR_BG, ec=HDR_BG)
         ax.text(x + cell_w / 2, hdr_y + hdr_h / 2, _wrap_hdr(comp, width=10),
                 ha="center", va="center", color=HDR_FG,
                 multialignment="center", **_fpkw(11, bold=True))
 
-    # ── データ行（オブジェクト単位でフィールドを展開） ──────────
-    accum_h = 0.0
-    for obj_api, obj_label, fields in obj_groups:
-        n_f      = len(fields)
-        obj_h    = n_f * cell_h
-        obj_y    = fig_h - margin - hdr_h - accum_h - obj_h
+    # ── データ行（オブジェクト単位） ─────────────────────────────
+    for ri, (obj_api, obj_label, _fields) in enumerate(obj_groups):
+        row_y = fig_h - margin - hdr_h - (ri + 1) * obj_h
 
-        # オブジェクト名セル（縦結合相当: 1つの大きな矩形）
-        _rect(margin, obj_y, obj_col_w, obj_h, OBJ_BG)
-        ax.text(margin + 0.15, obj_y + obj_h / 2, obj_label,
+        # オブジェクト名セル
+        bg_row = "#F0F3F8" if ri % 2 == 0 else "#FAFBFC"
+        _rect(margin, row_y, obj_col_w, obj_h, bg_row)
+        ax.text(margin + 0.2, row_y + obj_h / 2, obj_label,
                 ha="left", va="center", **_fpkw(12))
 
-        # フィールド行（上から下へ）
-        for fi, field in enumerate(fields):
-            fy = obj_y + (n_f - fi - 1) * cell_h
-            _rect(margin + obj_col_w, fy, field_col_w, cell_h, FIELD_BG)
-            ax.text(margin + obj_col_w + 0.12, fy + cell_h / 2,
-                    field.get("label", ""),
-                    ha="left", va="center", **_fpkw(11))
-
-        # コンポーネント操作セル（縦結合相当: オブジェクト全体に対応）
+        # コンポーネント操作セル
         for ci, comp in enumerate(comp_names):
-            x  = margin + obj_col_w + field_col_w + ci * cell_w
+            x  = margin + obj_col_w + ci * cell_w
             op = matrix[obj_api][comp]
             bg = _OP_COLOR.get(op, "white")
-            _rect(x, obj_y, cell_w, obj_h, bg)
-            ax.text(x + cell_w / 2, obj_y + obj_h / 2,
+            _rect(x, row_y, cell_w, obj_h, bg)
+            ax.text(x + cell_w / 2, row_y + obj_h / 2,
                     op if op else "－",
                     ha="center", va="center",
                     color="#AAAAAA" if not op else "#000000",
                     **_fpkw(12, bold=bool(op)))
 
-        accum_h += obj_h
-
     # ── 凡例 ─────────────────────────────────────────────────────
     legend_items = [
-        ("参照",     _OP_COLOR["参照"]),
-        ("更新",     _OP_COLOR["更新"]),
+        ("参照",      _OP_COLOR["参照"]),
+        ("更新",      _OP_COLOR["更新"]),
         ("参照・更新", _OP_COLOR["参照・更新"]),
-        ("新規作成",  _OP_COLOR["新規作成"]),
+        ("新規作成",   _OP_COLOR["新規作成"]),
     ]
     lx = margin
-    ly = margin * 0.4
-    for label, color in legend_items:
-        _rect(lx, ly, 0.4, 0.32, color, ec="#888888", lw=0.6)
-        ax.text(lx + 0.5, ly + 0.16, label, va="center", **_fpkw(10))
-        lx += 1.8
+    ly = margin * 0.5
+    for lbl, color in legend_items:
+        _rect(lx, ly, 0.45, 0.35, color, ec="#888888", lw=0.6)
+        ax.text(lx + 0.55, ly + 0.17, lbl, va="center", **_fpkw(10))
+        lx += 2.0
 
     plt.tight_layout(pad=0.1)
     plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
