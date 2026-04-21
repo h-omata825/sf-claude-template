@@ -519,6 +519,8 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
 
     import re as _re
 
+    _FC_FONT = "Meiryo"  # プロポーショナルフォント: ASCII/日本語の混在で文字がつぶれない
+
     g = _gv.Digraph(
         "flowchart",
         graph_attr={
@@ -527,9 +529,10 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "splines": "ortho",
             "nodesep": "0.6",
             "ranksep": "0.8",
-            "fontname": FONT_JP,
+            "fontname": _FC_FONT,
             "pad": "0.4",
             "dpi": "100",
+            "forcelabels": "true",  # xlabel を強制表示
         },
     )
 
@@ -552,15 +555,16 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             g.node(sid, label=label,
                    shape="diamond", style="filled",
                    fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=FONT_JP, fontsize="9",
+                   fontname=_FC_FONT, fontsize="9",
                    margin="0.25,0.18")
         else:
             g.node(sid, label=label,
                    shape="box", style="filled,rounded",
                    fillcolor=C_STEP_BG, fontcolor="white",
-                   fontname=FONT_JP, fontsize="9",
+                   fontname=_FC_FONT, fontsize="9",
                    margin="0.25,0.18",
-                   xlabel=component)  # コンポーネント名はノード外側に表示
+                   xlabel=component,
+                   xlp="0,-20")  # コンポーネント名をノード直下に配置
 
     has_next = any(step.get("next") for step in steps)
     if has_next:
