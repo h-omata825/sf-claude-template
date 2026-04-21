@@ -206,11 +206,11 @@ def render_er_diagram(
         graph_attr={
             "bgcolor": "white",
             "rankdir": "TB",
-            "splines": "polyline",
+            "splines": "ortho",
             "nodesep": "0.6",
-            "ranksep": "0.8",
+            "ranksep": "1.0",
             "fontname": FONT_JP,
-            "pad": "0.3",
+            "pad": "0.4",
             "dpi": str(DPI),
         },
     )
@@ -231,12 +231,12 @@ def render_er_diagram(
         obj_ids.add(api)
         lbl, kind = obj_label_map.get(api, ("", ""))
         kind_color = "#1F3864" if kind in ("カスタム", "Custom") else "#2E75B6"
-        # ラベルが空の場合はAPIノードのみ1行表示（空セルはgraphvizエラーになる）
+        # 日本語ラベルを主表示、APIを副表示（空セルはgraphvizエラーになるため条件分岐）
         if lbl:
             label = (
                 f'<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">'
-                f'<TR><TD BGCOLOR="{kind_color}"><FONT COLOR="white"><B>{api}</B></FONT></TD></TR>'
-                f'<TR><TD BGCOLOR="#D9E1F2"><FONT COLOR="#1F3864">{lbl}</FONT></TD></TR>'
+                f'<TR><TD BGCOLOR="{kind_color}"><FONT COLOR="white"><B>{lbl}</B></FONT></TD></TR>'
+                f'<TR><TD BGCOLOR="#D9E1F2"><FONT COLOR="#666666">{api}</FONT></TD></TR>'
                 f"</TABLE>>"
             )
         else:
@@ -275,7 +275,7 @@ def render_er_diagram(
         field_label = rel.get("field", "")
         g.edge(
             pid, cid,
-            label=field_label,
+            xlabel=field_label,   # ortho splines は label 非対応のため xlabel を使用
             arrowhead=arrow,
             style=style,
             color=C_EDGE,

@@ -253,16 +253,25 @@ def parse_swimlanes(path: Path) -> dict:
 
 
 def parse_catalog_index(path: Path) -> list[dict]:
+    """
+    _index.md をパースする。
+    列順: 表示名(col0) | API名(col1, バッククォート付き) | 項目数(col2) | ...
+    """
     if not path.exists(): return []
     t = path.read_text(encoding="utf-8")
     objs = []
+    _SKIP = {"オブジェクト", "API名", "---", ""}
     for line in t.splitlines():
         if not line.strip().startswith("|"): continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 2 and cols[0] and cols[0] not in ("API名", "---"):
-            objs.append({"api": cols[0], "label": cols[1] if len(cols)>1 else "",
-                         "type": cols[2] if len(cols)>2 else ""})
-    return objs[:30]
+        cols = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+        if len(cols) < 2: continue
+        label = cols[0]  # 表示名（日本語）
+        api   = cols[1]  # API名
+        if not api or label in _SKIP or re.fullmatch(r'[-\s:]+', label):
+            continue
+        objs.append({"api": api, "label": label,
+                     "type": cols[2] if len(cols)>2 else ""})
+    return objs[:50]
 
 
 def parse_data_model(path: Path) -> list[dict]:
@@ -342,6 +351,8 @@ def _build_cover(ws, org: dict, req: dict, author: str):
     r = _title_row(ws, r, "プロジェクト概要書")
     r = _margin(ws, r)
     r = _section_row(ws, r, "プロジェクト基本情報")
+    # 値がある行のみ表示（空白行は省略）
+    _REQUIRED = {"project_name", "system_name", "background", "scope_in"}
     for label, src, key in [
         ("プロジェクト名",     org, "project_name"),
         ("システム名",        org, "system_name"),
@@ -352,16 +363,36 @@ def _build_cover(ws, org: dict, req: dict, author: str):
         ("終了予定日",       org, "end_date"),
         ("本番公開日",       org, "go_live_date"),
     ]:
-        r = _meta_row(ws, r, label, src.get(key, ""))
+        val = src.get(key, "")
+        if not val and key not in _REQUIRED:
+            continue  # 値がない任意項目はスキップ
+        r = _meta_row(ws, r, label, val)
 
     r = _margin(ws, r)
     r = _section_row(ws, r, "体制")
-    r = _hdr_row(ws, r, [(2,6,"役割"),(7,16,"氏名 / 組織"),(17,22,"担当領域"),(23,31,"備考")])
-    for s in org.get("stakeholders", []):
-        r = _data_row(ws, r, [(2,6,s["role"]),(7,16,s["name"]),(17,22,s.get("area","")),
-                               (23,31,s.get("note",""))])
-    if len(org.get("stakeholders", [])) < 6:
-        r = _empty_rows(ws, r, 6 - len(org.get("stakeholders", [])), [(2,6),(7,16),(17,22),(23,31)])
+    # データにある列のみ表示（空の担当領域・備考は省略）
+    stk = org.get("stakeholders", [])
+    has_area = any(s.get("area") for s in stk)
+    has_note = any(s.get("note") for s in stk)
+    if has_area and has_note:
+        r = _hdr_row(ws, r, [(2,6,"役割"),(7,16,"氏名 / 組織"),(17,22,"担当領域"),(23,31,"備考")])
+        for s in stk:
+            r = _data_row(ws, r, [(2,6,s["role"]),(7,16,s["name"]),(17,22,s.get("area","")),
+                                   (23,31,s.get("note",""))])
+        if len(stk) < 6:
+            r = _empty_rows(ws, r, 6 - len(stk), [(2,6),(7,16),(17,22),(23,31)])
+    elif has_area:
+        r = _hdr_row(ws, r, [(2,6,"役割"),(7,19,"氏名 / 組織"),(20,31,"担当領域")])
+        for s in stk:
+            r = _data_row(ws, r, [(2,6,s["role"]),(7,19,s["name"]),(20,31,s.get("area",""))])
+        if len(stk) < 6:
+            r = _empty_rows(ws, r, 6 - len(stk), [(2,6),(7,19),(20,31)])
+    else:
+        r = _hdr_row(ws, r, [(2,8,"役割"),(9,31,"氏名 / 組織")])
+        for s in stk:
+            r = _data_row(ws, r, [(2,8,s["role"]),(9,31,s["name"])])
+        if len(stk) < 6:
+            r = _empty_rows(ws, r, 6 - len(stk), [(2,8),(9,31)])
 
     r = _margin(ws, r)
     r = _section_row(ws, r, "改版履歴")
