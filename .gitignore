@@ -1,5 +1,6 @@
 # ===== Salesforce CLI =====
 .sf/
+!docs/.sf/
 .sfdx/
 .localdevserver/
 deploy-options.json

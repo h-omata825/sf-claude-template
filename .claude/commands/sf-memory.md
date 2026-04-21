@@ -1,5 +1,5 @@
 ---
-description: "Salesforce組織・プロジェクトの情報を収集し、docs/ 配下に情報ファイルを保存・更新するコマンド。組織概要・オブジェクト構成・マスタデータ・設計・機能グループの5カテゴリを会話形式で選択して実行する。sf-org-analyst エージェントに委譲して実行する。"
+description: "カテゴリ1〜5の専用エージェント（sf-analyst-cat1〜cat5）と sf-org-analyst に委譲して Salesforce 組織情報を docs/ に保存するコマンド。組織概要・オブジェクト構成・マスタデータ・設計・機能グループの5カテゴリを会話形式で選択して実行する。5カテゴリ選択式。"
 ---
 
 > **注意**: このコマンドはClaude Codeの組み込みmemory機能・CLAUDE.mdへの書き込みは一切行わない。
@@ -25,6 +25,9 @@ AskUserQuestion ツールで以下の選択肢を表示する。
 - オブジェクト・項目構成
 - マスタデータ・ワークフロー設定
 - 設計・機能グループ定義（設計書 docs/design/ 生成 + docs/.sf/feature_groups.yml 生成）
+- 機能グループ定義のみ再生成（docs/design/ 手動修正後に feature_groups.yml だけ更新したい場合）
+
+> **「全て」選択時**: 追加質問（対象オブジェクト指定・機能指定）はスキップして全オブジェクト・全機能をデフォルトとしてそのまま進む。
 
 ### カテゴリ1で生成されるファイル（参考）
 
@@ -79,7 +82,7 @@ AskUserQuestion ツールで確認:
 ### 「全て」選択時
 
 ```
-Step 1: カテゴリ1 をエージェントへ委譲（順次）
+Phase 1: カテゴリ1 をエージェントへ委譲（順次）
   sf-analyst-cat1（カテゴリ1: 組織概要・環境情報）
     → docs/overview/org-profile.md
     → docs/requirements/requirements.md
@@ -88,21 +91,26 @@ Step 1: カテゴリ1 をエージェントへ委譲（順次）
     → docs/flow/swimlanes.json
     → 完了サマリを返す
 
-Step 2: カテゴリ2〜4 を並列でエージェントへ委譲
+Phase 2: カテゴリ2 をエージェントへ委譲（順次）
   ※ カテゴリ1完了後に実行（org-profile.md を参照するため）
-  sf-analyst-cat2（カテゴリ2: オブジェクト・項目構成）       ┐
-  sf-analyst-cat3（カテゴリ3: マスタデータ・ワークフロー設定）│ 並列実行
+  sf-analyst-cat2（カテゴリ2: オブジェクト・項目構成）
+    → docs/catalog/ を生成
+    → 完了サマリを返す
+
+Phase 3: カテゴリ3・4 を並列でエージェントへ委譲
+  ※ カテゴリ2完了後に実行（docs/catalog/ を参照するため）
+  sf-analyst-cat3（カテゴリ3: マスタデータ・ワークフロー設定）┐ 並列実行
   sf-analyst-cat4（カテゴリ4: 設計・機能仕様）               ┘
     → 各カテゴリの docs/ を生成
     → 完了サマリを返す
 
-Step 3: カテゴリ5 をカテゴリ4完了後に単独で委譲
+Phase 4: カテゴリ5 をカテゴリ4完了後に単独で委譲
   ※ cat5はcat4の出力（docs/design/）を参照するため、cat4完了後に実行する
   sf-analyst-cat5（カテゴリ5: 機能グループ定義）
     → docs/.sf/feature_groups.yml を生成
     → 完了サマリを返す
 
-Step 4: 2周目（横断補完）
+Phase 5: 2周目（横断補完）
   sf-org-analyst に全 docs/ を読み込んで横断補完を実施させる
 ```
 
@@ -114,6 +122,7 @@ Step 4: 2周目（横断補完）
 | オブジェクト・項目構成 | `sf-analyst-cat2` |
 | マスタデータ・ワークフロー設定 | `sf-analyst-cat3` |
 | 設計・機能グループ定義 | `sf-analyst-cat4` → 完了後に `sf-analyst-cat5`（順次実行） |
+| 機能グループ定義のみ再生成 | `sf-analyst-cat5`（cat4 実行なし） |
 
 ---
 

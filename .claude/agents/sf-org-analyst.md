@@ -37,7 +37,7 @@ ls docs/overview/org-profile.md 2>/dev/null && echo "cat1 OK" || echo "cat1 未�
 ls docs/flow/usecases.md 2>/dev/null && echo "cat1-flow OK" || echo "cat1-flow 未完了"
 ls docs/catalog/_index.md 2>/dev/null && echo "cat2 OK" || echo "cat2 未完了"
 ls docs/data/master-data.md 2>/dev/null && echo "cat3 OK" || echo "cat3 未完了"
-ls docs/design/ 2>/dev/null | head -5 && echo "cat4 OK" || echo "cat4 未完了"
+ls docs/design/apex/*.md 2>/dev/null | head -1 && echo "cat4 OK" || echo "cat4 未完了"
 ls docs/.sf/feature_groups.yml 2>/dev/null && echo "cat5 OK" || echo "cat5 未完了"
 ```
 

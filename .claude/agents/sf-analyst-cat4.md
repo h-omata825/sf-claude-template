@@ -31,20 +31,7 @@ tools:
 
 ## ファイル読み込み
 
-| 形式 | 方法 |
-|---|---|
-| .md / .txt / .csv / .json / .yml / .cls / .js / .html | Read ツールで直接読み込み |
-| .xml（flow-meta.xml 等） | Read ツールで直接読み込み |
-| .pdf | Read ツール（1回20ページまで。大きいPDFはページ指定で分割） |
-| .xlsx | `python -c "import pandas as pd, sys; xl=pd.ExcelFile(sys.argv[1]); [print(f'=== {s} ===\n{pd.read_excel(xl,s).to_markdown(index=False)}\n') for s in xl.sheet_names]" "<ファイルパス>"` |
-| .docx | `python -c "import docx, sys; doc=docx.Document(sys.argv[1]); [print(p.text) for p in doc.paragraphs]; [print('\|'+'\|'.join(c.text for c in r.cells)+'\|') for t in doc.tables for r in t.rows]" "<ファイルパス>"` |
-| .pptx | `python -c "from pptx import Presentation; import sys; prs=Presentation(sys.argv[1]); [print(f'=== スライド{i+1} ===\n'+'\n'.join(s.text for s in slide.shapes if s.has_text_frame)) for i,slide in enumerate(prs.slides)]" "<ファイルパス>"` |
-
-**sf コマンドが Git Bash で失敗する場合**:
-```bash
-SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
-"$SF_CLIENT_BIN/node.exe" "$SF_CLIENT_BIN/run.js" <サブコマンド> <引数>
-```
+[共通ルール参照](.claude/CLAUDE.md#ファイル読み込み共通) — 対応形式・sf コマンド代替実行パスは CLAUDE.md の「ファイル読み込み（共通）」セクションを参照。
 
 ---
 
@@ -135,6 +122,7 @@ sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE St
 **ファイル命名規則**: `docs/design/{種別}/【{機能ID}】{コンポーネント名-kebab-case}.md`
 
 機能IDは `docs/.sf/feature_ids.yml` を参照（読み取り専用）。台帳に存在しない場合は `TBD`。独自採番禁止。
+> `docs/.sf/feature_ids.yml` は **手動メンテナンスの台帳**（自動生成されない）。初回実行時は存在しないため機能IDは全て TBD になる。ファイルの作成・採番はプロジェクトリーダーが行う。
 
 #### 設計書テンプレート（全種別共通・この順序で記述）
 
@@ -255,6 +243,7 @@ flowchart TD
 
 **Flow**:
 - `flow-meta.xml` を**全文読み込み**、全ノード（Start / Decision / Assignment / RecordCreate / RecordUpdate / ActionCall / SubflowRef等）をMermaid図で**全分岐図示**（省略不可）
+  - ただし 1000行超の大規模 Flow は概要（ノード一覧・主要分岐）を先に出力し、詳細は節ごとに分割して読み込む（コンテキスト節約）
 - 入力変数・出力変数を全量テーブルで記述（型・必須/任意・初期値）
 - Apex呼び出し箇所（`<actionType>APEX</actionType>`）は対象クラス名を明記
 - 起動条件（Record-Triggered の場合: オブジェクト・タイミング・条件式）を基本情報に記述

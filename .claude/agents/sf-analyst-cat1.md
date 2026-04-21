@@ -32,19 +32,7 @@ tools:
 
 ## ファイル読み込み
 
-| 形式 | 方法 |
-|---|---|
-| .md / .txt / .csv / .json | Read ツールで直接読み込み |
-| .pdf | Read ツール（1回20ページまで。大きいPDFはページ指定で分割） |
-| .xlsx | `python -c "import pandas as pd, sys; xl=pd.ExcelFile(sys.argv[1]); [print(f'=== {s} ===\n{pd.read_excel(xl,s).to_markdown(index=False)}\n') for s in xl.sheet_names]" "<ファイルパス>"` |
-| .docx | `python -c "import docx, sys; doc=docx.Document(sys.argv[1]); [print(p.text) for p in doc.paragraphs]; [print('\|'+'\|'.join(c.text for c in r.cells)+'\|') for t in doc.tables for r in t.rows]" "<ファイルパス>"` |
-| .pptx | `python -c "from pptx import Presentation; import sys; prs=Presentation(sys.argv[1]); [print(f'=== スライド{i+1} ===\n'+'\n'.join(s.text for s in slide.shapes if s.has_text_frame)) for i,slide in enumerate(prs.slides)]" "<ファイルパス>"` |
-
-**sf コマンドが Git Bash で失敗する場合**:
-```bash
-SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
-"$SF_CLIENT_BIN/node.exe" "$SF_CLIENT_BIN/run.js" <サブコマンド> <引数>
-```
+[共通ルール参照](.claude/CLAUDE.md#ファイル読み込み共通) — 対応形式・sf コマンド代替実行パスは CLAUDE.md の「ファイル読み込み（共通）」セクションを参照。
 
 ---
 
@@ -194,7 +182,7 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
   "flows": [
     {
       "id": "overall",
-      "flow_type": "overall | usecase | exception | dataflow",
+      "flow_type": "overall | usecase | asis | exception | dataflow",
       "title": "フロータイトル",
       "description": "概要（任意）",
       "usecase_id": "UC-XX（usecase タイプの場合）",
@@ -234,14 +222,7 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 - **承認経路を必ず入れる**: 申請→承認→差戻しの分岐を描く。条件（金額・役職等）も `condition` に記載
 - **データ作成タイミングを入れる**: 「Contract__c を作成」「Opportunity のステータスを『受注』に更新」のように具体的に
 
-### Phase 5: CLAUDE.md の自動更新
-
-ルートの `CLAUDE.md` を読み込み、**空欄・プレースホルダーのみ**補完する（手動記入済みは上書きしない）:
-- Salesforce組織情報（org alias・接続先URL）
-- 主要カスタムオブジェクト（検出されたものを列挙）
-- 命名規則（共通プレフィックスを検出した場合に反映）
-
-### Phase 6: changelog への記録
+### Phase 5: changelog への記録
 
 `docs/logs/changelog.md` に追記する（日時・実行カテゴリ・生成/更新ファイル・主な変更点）。
 
