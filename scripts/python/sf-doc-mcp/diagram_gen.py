@@ -282,6 +282,30 @@ def render_er_diagram(
 # レーン背景色（薄い色でクラスター塗りつぶし）
 _LANE_COLORS = ["#EEF4FB", "#F5FBF0", "#FFFBF0", "#FBF5FF", "#F8FAFD"]
 
+# レーン → グループ マッピングルール（順番に評価、最初にマッチしたものを使用）
+_LANE_GROUP_RULES: list[tuple[list[str], str]] = [
+    (["お客様", "customer", "顧客", "委託企業"],                       "お客様"),
+    (["salesforce", "sfdc", "experience cloud", "experiencecloud"],  "Salesforce / EC"),
+    (["外部連携", "外部システム", "oproarts", "ラポート", "account engagement"], "外部連携"),
+]
+_DEFAULT_LANE_GROUP = "GF社"
+
+_GROUP_FILL_COLORS = {
+    "お客様":         "#D9E9F8",
+    "GF社":           "#E8F5E9",
+    "Salesforce / EC": "#FFF9E6",
+    "外部連携":       "#F3E5F5",
+}
+_GROUP_ORDER = ["お客様", "GF社", "Salesforce / EC", "外部連携"]
+
+
+def _lane_to_group(lane_name: str) -> str:
+    lower = lane_name.lower()
+    for keywords, group in _LANE_GROUP_RULES:
+        if any(k in lower for k in keywords):
+            return group
+    return _DEFAULT_LANE_GROUP
+
 
 def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
     """
@@ -320,45 +344,71 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
         },
     )
 
-    # 各レーンを cluster subgraph として描画
-    lane_names = [l.get("name", f"Lane{i+1}") for i, l in enumerate(lanes_in)]
-    lane_idx = {name: i for i, name in enumerate(lane_names)}
+    # レーンをグループ（お客様 / GF社 / Salesforce / 外部連携）に集約して描画
+    from collections import defaultdict, OrderedDict
 
-    for i, lane_name in enumerate(lane_names):
-        bg = _LANE_COLORS[i % len(_LANE_COLORS)]
-        with g.subgraph(name=f"cluster_lane_{i}") as sg:
-            sg.attr(
-                label=lane_name,
+    lane_names = [l.get("name", f"Lane{i+1}") for i, l in enumerate(lanes_in)]
+
+    # グループ → [lane_name, ...] のマッピング（順序保持）
+    group_to_lanes: dict[str, list[str]] = OrderedDict()
+    for lane_name in lane_names:
+        grp = _lane_to_group(lane_name)
+        group_to_lanes.setdefault(grp, []).append(lane_name)
+
+    # グループ順を _GROUP_ORDER に従って並び替え
+    sorted_groups = [g_name for g_name in _GROUP_ORDER if g_name in group_to_lanes]
+    sorted_groups += [g_name for g_name in group_to_lanes if g_name not in sorted_groups]
+
+    known_lanes = set(lane_names)
+    lane_color_idx = 0  # レーン色の連番
+
+    for gi, grp_name in enumerate(sorted_groups):
+        grp_fill = _GROUP_FILL_COLORS.get(grp_name, "#F8FAFD")
+        with g.subgraph(name=f"cluster_group_{gi}") as gg:
+            gg.attr(
+                label=grp_name,
                 style="filled",
-                fillcolor=bg,
+                fillcolor=grp_fill,
                 color=C_LANE_HDR,
-                penwidth="1.5",
+                penwidth="2",
                 fontname=FONT_JP,
                 fontcolor=C_LANE_HDR,
-                fontsize="11",
+                fontsize="13",
             )
-            # このレーンのステップを追加
-            for step in steps_in:
-                if str(step.get("lane", "")) == lane_name:
-                    sid = str(step.get("id", ""))
-                    label = str(step.get("label", "") or step.get("title", "") or step.get("name", "") or sid)
-                    sg.node(
-                        sid,
-                        label=label,
-                        shape="box",
-                        style="filled,rounded",
-                        fillcolor=C_STEP_BG,
-                        fontcolor=C_STEP_FG,
+            for lane_name in group_to_lanes[grp_name]:
+                bg = _LANE_COLORS[lane_color_idx % len(_LANE_COLORS)]
+                lane_color_idx += 1
+                with gg.subgraph(name=f"cluster_lane_{gi}_{lane_name[:8]}") as sg:
+                    sg.attr(
+                        label=lane_name,
+                        style="filled",
+                        fillcolor=bg,
+                        color=C_LANE_HDR,
+                        penwidth="1",
                         fontname=FONT_JP,
+                        fontcolor=C_LANE_HDR,
                         fontsize="10",
-                        width="1.6",
-                        height="0.6",
-                        penwidth="1.5",
-                        color=C_STEP_BORDER,
                     )
+                    for step in steps_in:
+                        if str(step.get("lane", "")) == lane_name:
+                            sid = str(step.get("id", ""))
+                            label = str(step.get("label", "") or step.get("title", "") or step.get("name", "") or sid)
+                            sg.node(
+                                sid,
+                                label=label,
+                                shape="box",
+                                style="filled,rounded",
+                                fillcolor=C_STEP_BG,
+                                fontcolor=C_STEP_FG,
+                                fontname=FONT_JP,
+                                fontsize="10",
+                                width="1.6",
+                                height="0.6",
+                                penwidth="1.5",
+                                color=C_STEP_BORDER,
+                            )
 
-    # 未分類ステップ（lane 指定なし）
-    known_lanes = set(lane_names)
+    # 未分類ステップ（lane 指定なし or 未知のレーン）
     for step in steps_in:
         if str(step.get("lane", "")) not in known_lanes:
             sid = str(step.get("id", ""))

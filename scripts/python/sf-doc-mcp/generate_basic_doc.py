@@ -152,7 +152,8 @@ def _table_val(text: str, key: str) -> str:
     return m.group(1).strip() if m else ""
 
 def _section_text(text: str, heading: str) -> str:
-    m = re.search(rf'##\s+{re.escape(heading)}\s*\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    # ## / ### / #### 見出しにキーワードが含まれていれば一致（番号付き見出し対応）
+    m = re.search(rf'#{2,4}[^\n]*{re.escape(heading)}[^\n]*\n(.*?)(?=\n#{2,4}[^\n]|\Z)', text, re.DOTALL)
     return m.group(1).strip() if m else ""
 
 
@@ -160,6 +161,7 @@ def parse_org(path: Path) -> dict:
     if not path.exists(): return {}
     t = path.read_text(encoding="utf-8")
     def tv(k): return _table_val(t, k)
+
     # 用語集
     glossary = []
     sec = _section_text(t, "用語集") or _section_text(t, "Glossary")
@@ -169,38 +171,71 @@ def parse_org(path: Path) -> dict:
         if len(cols) >= 2 and cols[0] and cols[0] not in ("業務用語", "---", "用語"):
             glossary.append({"biz": cols[0], "sf": cols[1] if len(cols) > 1 else "",
                              "desc": cols[2] if len(cols) > 2 else ""})
-    # 体制
+
+    # 体制（担当ベンダー表も対象）
     stakeholders = []
-    for sec_name in ("ステークホルダー", "体制", "関係者"):
+    for sec_name in ("担当ベンダー", "ステークホルダー", "体制", "関係者"):
         sec = _section_text(t, sec_name)
         for line in sec.splitlines():
             if not line.strip().startswith("|"): continue
             cols = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cols) >= 2 and cols[0] and cols[0] not in ("役割", "---"):
+            if len(cols) >= 2 and cols[0] and cols[0] not in ("役割", "---", "会社/担当者"):
                 stakeholders.append({"role": cols[0], "name": cols[1] if len(cols)>1 else "",
                                      "area": cols[2] if len(cols)>2 else "",
                                      "note": cols[3] if len(cols)>3 else ""})
         if stakeholders: break
+
+    # 背景・目的（AS-IS課題 + TO-BE目的 を結合）
+    bg_asis = _section_text(t, "導入背景") or _section_text(t, "AS-IS課題")
+    bg_tobe = _section_text(t, "導入目的") or _section_text(t, "TO-BE")
+    background = "\n\n".join(s for s in [bg_asis, bg_tobe] if s)
+
+    system_name = tv("システム名") or tv("会社名")
+    project_name = tv("プロジェクト名") or (f"{system_name} Salesforce導入プロジェクト" if system_name else "")
+
     return {
-        "project_name": tv("プロジェクト名"),
-        "system_name":  tv("システム名") or tv("会社名"),
+        "project_name": project_name,
+        "system_name":  system_name,
         "sf_edition":   tv("Salesforce Edition") or tv("Edition"),
-        "start_date":   tv("開始日") or tv("プロジェクト開始日"),
+        "start_date":   tv("開始日") or tv("プロジェクト開始日") or tv("Salesforce利用開始"),
         "end_date":     tv("終了予定日") or tv("リリース予定日"),
         "go_live_date": tv("本番公開日"),
         "target_biz":   tv("対象業務"),
         "stakeholders": stakeholders[:6],
         "glossary":     glossary[:30],
+        "background":   background,
     }
 
 
 def parse_requirements(path: Path) -> dict:
     if not path.exists(): return {}
     t = path.read_text(encoding="utf-8")
-    bg = _section_text(t, "背景・目的") or _section_text(t, "目的") or ""
-    scope_in  = _section_text(t, "対象")
-    scope_out = _section_text(t, "対象外")
-    return {"background": bg[:600], "scope_in": scope_in[:300], "scope_out": scope_out[:300]}
+
+    # 背景（複数のセクション名を試みる）
+    bg = (_section_text(t, "背景・目的") or _section_text(t, "目的") or
+          _section_text(t, "導入背景") or "")
+
+    # スコープ（対象）: 1stステップ表から項目名を抽出
+    scope_in_sec = _section_text(t, "1stステップ") or _section_text(t, "対象")
+    scope_in_items = []
+    for line in scope_in_sec.splitlines():
+        if not line.strip().startswith("|"): continue
+        cols = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cols) >= 2 and cols[0] and not re.fullmatch(r'[-:\s]+', cols[0]) and \
+                cols[0] not in ("スコープ項目", "スコープ", "---"):
+            scope_in_items.append(cols[0])
+    scope_in = "\n".join(f"・{i}" for i in scope_in_items) if scope_in_items else scope_in_sec[:300]
+
+    # スコープ（対象外）: 2ndステップ箇条書きを抽出
+    scope_out_sec = _section_text(t, "2ndステップ") or _section_text(t, "対象外")
+    scope_out_items = []
+    for line in scope_out_sec.splitlines():
+        stripped = line.strip()
+        if re.match(r'^[-*・]\s+', stripped):
+            scope_out_items.append(re.sub(r'^[-*・]\s+', '', stripped))
+    scope_out = "\n".join(f"・{i}" for i in scope_out_items) if scope_out_items else scope_out_sec[:300]
+
+    return {"background": bg[:600], "scope_in": scope_in[:400], "scope_out": scope_out[:300]}
 
 
 def parse_system_json(path: Path) -> dict:
@@ -362,7 +397,7 @@ def _build_system_overview(ws, req: dict, system: dict, sys_img_path: str | None
     r = _section_row(ws, r, "システム全体構成")
     if sys_img_path:
         n_img_rows = dg.embed_image_in_sheet(ws, sys_img_path, anchor_row=r,
-                                             anchor_col=GRID_LEFT, max_width_px=1100)
+                                             anchor_col=GRID_LEFT, max_width_px=1800)
         r += n_img_rows
     else:
         r = _text_area(ws, r, 15, "（system.json が見つかりません）")
@@ -386,14 +421,23 @@ def _build_flow_sheet(ws, asis_flow: dict | None, tobe_flow: dict | None,
         # 手順テーブルを先に（表が図に埋もれないよう）
         sub = label.split("（")[0]
         r = _sub_section_row(ws, r, f"{sub} 手順")
-        r = _hdr_row(ws, r, [(2,3,"No"),(4,8,"担当"),(9,22,"操作・処理内容"),(23,31,"備考")])
+        r = _hdr_row(ws, r, [(2,3,"No"),(4,8,"担当"),(9,22,"操作・処理内容"),(23,31,"分岐条件")])
         steps = (flow or {}).get("steps", [])[:20]
+        # ステップIDごとの遷移条件を収集（分岐が発生する場合に備考欄へ表示）
+        step_conds: dict[str, list[str]] = {}
+        for tr in (flow or {}).get("transitions", []):
+            src = str(tr.get("from", ""))
+            cond = tr.get("condition", "")
+            if cond and src:
+                step_conds.setdefault(src, []).append(cond)
         for i, s in enumerate(steps):
+            sid = str(s.get("id",""))
+            cond_text = " / ".join(step_conds.get(sid, []))
             r = _data_row(ws, r, [
-                (2,3,str(s.get("id",""))),
+                (2,3,sid),
                 (4,8,str(s.get("lane",""))),
                 (9,22,str(s.get("label","") or s.get("title",""))),
-                (23,31,""),
+                (23,31,cond_text),
             ], row_h=18)
         if len(steps) < 5:
             r = _empty_rows(ws, r, 5 - len(steps), [(2,3),(4,8),(9,22),(23,31)], row_h=18)
@@ -470,6 +514,10 @@ def generate(docs_dir: Path, output: Path, author: str, project_name: str):
 
     if project_name:
         org["project_name"] = project_name
+
+    # requirements.mdに背景がなければorg-profile.mdの背景を使う
+    if not req.get("background") and org.get("background"):
+        req["background"] = org["background"]
 
     asis_flow, tobe_flow = _pick_flows(swim)
 
