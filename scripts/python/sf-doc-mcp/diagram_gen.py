@@ -466,13 +466,32 @@ def _short_label(text: str, max_len: int = 18) -> str:
     return text if len(text) <= max_len else text[:max_len] + "…"
 
 
+def _wrap_name(name: str, max_per_line: int = 14) -> str:
+    """CamelCase/スネークケースの長い名前を max_per_line 文字で折り返す（\\n区切り）。"""
+    if len(name) <= max_per_line:
+        return name
+    import re
+    # CamelCase を単語に分割
+    words = re.sub(r'([A-Z][a-z]+)', r' \1', name).split()
+    lines, cur = [], ""
+    for w in words:
+        if cur and len(cur) + len(w) + 1 > max_per_line:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = (cur + " " + w).strip() if cur else w
+    if cur:
+        lines.append(cur)
+    return "\\n".join(lines) if lines else name
+
+
 def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
     """
     process_steps から処理フロー図PNGを生成する。
 
     steps: [{step, title, description, component, branch, next:[{to, condition}]}]
-    各ノード: コンポーネント名（誰が）+ 短い処理概要（何をする）
-    分岐は next の condition で表現する。
+    - 横向き（LR）でExcel1画面に収まるサイズに生成
+    - 各ノード: コンポーネント名（誰が）+ ステップ番号 + 短い処理概要（何をする）
     """
     if not _HAS_GV:
         raise RuntimeError("graphviz が利用できません")
@@ -481,26 +500,26 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         "flowchart",
         graph_attr={
             "bgcolor": "white",
-            "rankdir": "TB",
+            "rankdir": "LR",
             "splines": "ortho",
-            "nodesep": "0.4",
+            "nodesep": "0.3",
             "ranksep": "0.5",
             "fontname": FONT_JP,
-            "pad": "0.3",
-            "dpi": str(DPI),
-            "size": "6,9!",  # 幅6in・高さ9inに収める
+            "pad": "0.2",
+            "dpi": "100",
+            "size": "9,4!",
         },
     )
 
     for step in steps:
         sid       = str(step.get("step", ""))
-        title     = _short_label(step.get("title", "") or step.get("description", ""), 20)
-        component = step.get("component", "")
+        title     = _short_label(step.get("title", "") or step.get("description", ""), 14)
+        component = _wrap_name(step.get("component", ""), 14)
         branch    = step.get("branch", "")
 
-        # コンポーネント名を上段、処理タイトルを下段に表示
+        # 上段: コンポーネント名（誰が）、下段: ステップ番号＋処理概要
         if component:
-            lbl = f"{component}\\n{sid}. {title}"
+            lbl = f"{component}\\n──\\n{sid}. {title}"
         else:
             lbl = f"{sid}. {title}"
 
@@ -508,20 +527,19 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             g.node(sid, label=lbl,
                    shape="diamond", style="filled",
                    fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=FONT_JP, fontsize="9", width="2.2", height="0.7")
+                   fontname=FONT_JP, fontsize="9", width="1.6", height="0.8")
         else:
             g.node(sid, label=lbl,
                    shape="box", style="filled,rounded",
                    fillcolor=C_STEP_BG, fontcolor=C_STEP_FG,
-                   fontname=FONT_JP, fontsize="9", width="2.2", height="0.6")
+                   fontname=FONT_JP, fontsize="9", width="1.6", height="0.8")
 
-    # next フィールドがあれば優先、なければ連番でエッジ生成
     has_next = any(step.get("next") for step in steps)
     if has_next:
         for step in steps:
             src = str(step.get("step", ""))
             for nxt in (step.get("next") or []):
-                cond = _short_label(nxt.get("condition", ""), 16)
+                cond = _short_label(nxt.get("condition", ""), 12)
                 g.edge(src, str(nxt["to"]), xlabel=cond,
                        color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE,
                        arrowsize="0.7")
@@ -529,8 +547,7 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         for i, step in enumerate(steps[:-1]):
             src = str(step.get("step", ""))
             dst = str(steps[i + 1].get("step", ""))
-            branch = step.get("branch", "")
-            g.edge(src, dst, xlabel=_short_label(branch, 16),
+            g.edge(src, dst,
                    color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE,
                    arrowsize="0.7")
 
@@ -610,12 +627,12 @@ def render_component_diagram(
             "bgcolor": "white",
             "rankdir": "LR",
             "splines": "ortho",
-            "nodesep": "0.5",
-            "ranksep": "0.8",
+            "nodesep": "0.4",
+            "ranksep": "0.6",
             "fontname": FONT_JP,
-            "pad": "0.4",
-            "dpi": str(DPI),
-            "size": "10,5!",
+            "pad": "0.3",
+            "dpi": "100",
+            "size": "9,3!",
         },
     )
 
@@ -626,20 +643,19 @@ def render_component_diagram(
                label=trigger_node,
                shape="box", style="filled,rounded",
                fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="10", width="1.2")
+               fontname=FONT_JP, fontsize="10", width="1.0")
 
-    # コンポーネントノード（ロール短縮を表示）
+    # コンポーネントノード（名前 + 種別のみ。ロールは表に記載するため除外）
     for comp in components:
         name  = comp.get("api_name", "")
         ctype = comp.get("type", "Apex")
-        role  = _short_label(comp.get("role", "") or comp.get("responsibility", ""), 22)
         fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-        lbl = f"{name}\\n[{ctype}]\\n{role}" if role else f"{name}\\n[{ctype}]"
+        lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
         g.node(name,
                label=lbl,
                shape="box", style="filled,rounded",
                fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="8", width="2.0")
+               fontname=FONT_JP, fontsize="9", width="1.8")
 
     # callees の明示依存エッジ
     for comp in components:
