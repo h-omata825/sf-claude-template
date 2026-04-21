@@ -116,14 +116,12 @@ OBJ_COL_GROUPS = [
 # 処理概要: テーブルヘッダは row4、データは row5 から動的追加
 PROC_DATA_ROW_START = 5
 PROC_STEP_CS, PROC_STEP_CE = 2,  3
-PROC_DESC_CS, PROC_DESC_CE = 4,  15
-PROC_COMP_CS, PROC_COMP_CE = 16, 22
-PROC_COND_CS, PROC_COND_CE = 23, 31
+PROC_DESC_CS, PROC_DESC_CE = 4,  19
+PROC_COMP_CS, PROC_COMP_CE = 20, 31
 PROC_COL_GROUPS = [
     (PROC_STEP_CS, PROC_STEP_CE),
     (PROC_DESC_CS, PROC_DESC_CE),
     (PROC_COMP_CS, PROC_COMP_CE),
-    (PROC_COND_CS, PROC_COND_CE),
 ]
 
 # 関連コンポーネント: テーブルヘッダは row4、データは row5 から動的追加
@@ -437,10 +435,8 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
                 border=B_all(), wrap=True, v="top")
         c3 = MW(ws, r, PROC_COMP_CS, PROC_COMP_CE, component,
                 border=B_all(), wrap=True, v="top")
-        c4 = MW(ws, r, PROC_COND_CS, PROC_COND_CE, branch,
-                border=B_all(), wrap=True, v="top")
         if is_changed:
-            for c in (c1, c2, c3, c4):
+            for c in (c1, c2, c3):
                 dr.apply_red(c)
         r += 1
 
@@ -1039,15 +1035,7 @@ def _build_process_steps(data: dict) -> list[dict]:
         title  = _short_title(responsibility) if responsibility else ""
         branch = None  # 実際の条件内容が取れない場合は空にする
 
-        # セル表示: タイトル（1行目）＋詳細（2行目以降）。
-        # タイトルと詳細の冒頭20字が重複する場合 or 詳細がタイトルを包含する場合は詳細のみ表示
-        _t_norm = _re.sub(r'\s', '', title)
-        _d_norm = _re.sub(r'\s', '', desc_main)
-        _overlap = len(title) > 0 and (_t_norm[:20] in _d_norm or _d_norm[:20] in _t_norm)
-        if title and desc_main and not _overlap:
-            display_desc = f"{title}\n\n{desc_main}"
-        else:
-            display_desc = desc_main or title
+        display_desc = desc_main or title
 
         steps.append({
             "step": i,

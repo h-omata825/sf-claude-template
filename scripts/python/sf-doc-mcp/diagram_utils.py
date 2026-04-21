@@ -1843,7 +1843,7 @@ def generate_object_component_matrix(
 
     # コンポーネント列幅: 名前の長さに応じて動的調整（上限2.8）
     _max_name_len = max((len(_strip_type_suffix(c)) for c in comp_names), default=8)
-    cell_w      = min(2.8, max(1.6, _max_name_len * 0.13))
+    cell_w      = min(2.8, max(2.0, _max_name_len * 0.13))
 
     # レイアウト定数
     obj_col_w   = 2.6    # オブジェクト名列（縦結合）
@@ -1858,7 +1858,7 @@ def generate_object_component_matrix(
     fig_w = margin * 2 + obj_col_w + field_col_w + cell_w * n_cols
     fig_h = margin + legend_h + total_data_h + hdr_h + margin
 
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=96)
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=150)
     ax.set_xlim(0, fig_w)
     ax.set_ylim(0, fig_h)
     ax.axis("off")
@@ -1934,6 +1934,6 @@ def generate_object_component_matrix(
         lx += 1.8
 
     plt.tight_layout(pad=0.1)
-    plt.savefig(out_path, dpi=96, bbox_inches="tight", facecolor="white")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return True
