@@ -424,7 +424,7 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
         step_no = ps.get("step", i + 1)
         is_changed = step_no in changed_step_nos
 
-        desc_text = f"{ps.get('title', '')}\n{ps.get('description', '')}".strip()
+        desc_text = ps.get("description", "").strip()
         row_h = _estimate_row_height(desc_text)
         set_h(ws, r, row_h)
 
@@ -599,16 +599,26 @@ _JARGON_JA: list[tuple] = [
     (_re.compile(r'\b[A-Z][A-Za-z]*Tmp\b', _A), '一時データ'),
     (_re.compile(r'\bInvocableMethod\b', _A), 'フローアクション'),
     (_re.compile(r'\bAuraEnabled\b', _A), 'LWC公開メソッド'),
+    # Apex 非同期アノテーション（後続の「で非同期実行する」も一緒に置換して重複を防ぐ）
+    (_re.compile(r'@future(?:で非同期実行する|で実行される?)?'), '非同期で実行する'),
+    (_re.compile(r'@\w+', _A), ''),
 ]
 
 # 技術用語→日本語変換ルール（役割・説明文用）
 _TECH_REPL = [
+    # アノテーション → 日本語フレーズ
     (_re.compile(r'@InvocableMethod[としてで\s]*'), 'フローから呼び出され、'),
     (_re.compile(r'@AuraEnabled[としてで\s]*'), 'LWCから呼び出され、'),
     (_re.compile(r'@RemoteAction[としてで\s]*'), '非同期処理として呼び出され、'),
-    (_re.compile(r'@\w+'), ''),
+    # クラス名.メソッド名 を除去
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+\([^)]*\)'), ''),
     (_re.compile(r'[A-Z][A-Za-z0-9]+\.[A-Za-z]\w+'), ''),
+    # Apex トリガーイベント文脈（処理前/後）を除去: "OBJ作成時（処理前（新規）/処理後（新規））に"
+    # は設計書読者に不要な技術詳細。メインの責務テキストのみ残す
+    (_re.compile(r'[^\s。]{2,20}(?:作成|更新|削除)時（処理前（(?:新規|更新|削除)）(?:/処理後（(?:新規|更新|削除)）)?）[にので]?'), ''),
+    # 助詞・接続詞が文末に孤立するケース（クラス名除去の後）を修正
+    (_re.compile(r'[はがをにでへのも][。．]'), '。'),
+    # 連続記号・空白の整理
     (_re.compile(r'[ \t]{2,}'), ' '),
     (_re.compile(r'(、){2,}'), '、'),
     (_re.compile(r'(。){2,}'), '。'),
@@ -938,25 +948,13 @@ def _build_process_steps(data: dict) -> list[dict]:
         resp_j = _translate_sf_fields(_translate_jargon(_translate_sf_objects(responsibility)))
         desc_main = _clean_tech(resp_j)
 
-        # 入出力情報も日本語化
-        io_parts = []
-        if comp.get("inputs"):
-            io_parts.append(f"■ 受け取るデータ: {_clean_io_text(comp['inputs'])}")
-        if comp.get("outputs"):
-            io_parts.append(f"■ 出力・更新内容: {_clean_io_text(comp['outputs'])}")
-        if comp.get("error_handling"):
-            err = _clean_io_text(comp.get("error_handling", ""))
-            if err:
-                io_parts.append(f"■ エラー処理: {err}")
-
         title  = _short_title(responsibility) if responsibility else ""
         branch = "条件分岐あり" if comp_type == "Flow" else None
 
-        desc_parts = [desc_main] + io_parts
         steps.append({
             "step": i,
             "title": title,
-            "description": "\n".join(p for p in desc_parts if p),
+            "description": desc_main,
             "component": _comp_type_label(comp),
             "branch": branch,
             "next": [{"to": i + 1}] if i < n_comps else [],
@@ -966,13 +964,16 @@ def _build_process_steps(data: dict) -> list[dict]:
 
 
 def _obj_label_from_api(api: str) -> str:
-    """オブジェクトAPIから日本語ラベルを推定する（メタデータ優先）。"""
+    """オブジェクトAPIから日本語ラベルを推定する（メタデータ優先）。
+    カスタムオブジェクト（__c）は「〜オブジェクト」サフィックスを付加して標準オブジェクトと区別する。
+    """
     if api in _STD_OBJ_LABELS:
         return _STD_OBJ_LABELS[api]
     if api in _SF_OBJ_LABELS:
-        return _SF_OBJ_LABELS[api]
+        return _SF_OBJ_LABELS[api] + "オブジェクト"
     raw = api.replace("__c", "").replace("__", "")
-    return _re.sub(r'([A-Z])', r' \1', raw).strip()
+    base = _re.sub(r'([A-Z])', r' \1', raw).strip()
+    return base + "オブジェクト"
 
 
 def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict]]:
