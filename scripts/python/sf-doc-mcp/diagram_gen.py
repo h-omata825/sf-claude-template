@@ -517,25 +517,6 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
     def _badge(n: int) -> str:
         return _BADGES[n - 1] if 1 <= n <= len(_BADGES) else f"({n})"
 
-    # アクション一言: 日本語動詞句を 6 文字以内で抽出
-    def _action(title: str) -> str:
-        import re
-        t = (title or "").strip()
-        # 「〜を〜する/作成/確認/更新/送信/取得/登録/削除」→ 動詞句を返す
-        m = re.search(r'を([\u3040-\u9fff]{2,6})(?:する|します|行う|実行)?', t)
-        if m:
-            verb = m.group(1)
-            return verb + "する" if not verb.endswith(("する", "確認", "作成", "更新")) else verb
-        # 「〜の〜確認/作成/更新」→ 名詞句
-        m = re.search(r'の([\u3040-\u9fff]{2,5}(?:確認|作成|更新|取得|送信|登録|削除))', t)
-        if m:
-            return m.group(1)
-        # 最後の日本語ブロックを使う
-        blocks = re.findall(r'[\u3040-\u9fff]{2,}', t)
-        if blocks:
-            return blocks[-1][:6]
-        return t[:6]
-
     g = _gv.Digraph(
         "flowchart",
         graph_attr={
@@ -543,7 +524,7 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "rankdir": "LR",
             "splines": "ortho",
             "nodesep": "0.5",
-            "ranksep": "0.6",
+            "ranksep": "0.7",
             "fontname": FONT_JP,
             "pad": "0.3",
             "dpi": "100",
@@ -555,12 +536,11 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         sid        = str(step.get("step", ""))
         n          = int(step.get("step", 0))
         badge      = _badge(n)
-        action     = _action(step.get("title", "") or step.get("description", ""))
+        title      = _wrap_jp(step.get("title", "") or step.get("description", ""), 10)
         component  = step.get("component", "")
         branch     = step.get("branch", "")
 
         if branch:
-            # 分岐ステップ: ひし形風の黄色バッジ
             badge_color  = "#7F6000"
             badge_bg     = "#FFF2CC"
             badge_border = "#BF9000"
@@ -569,10 +549,14 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             badge_bg     = C_STEP_BG
             badge_border = "#1F3864"
 
-        # HTMLラベル: 上段=バッジ（番号+アクション）、下段=コンポーネント名（小文字・灰色）
+        # 番号バッジ（大）＋タイトル全文（小フォント・折り返し）＋コンポーネント名（外側）
+        title_lines = "".join(
+            f'<FONT POINT-SIZE="8" COLOR="{badge_color}">{line}</FONT><BR ALIGN="LEFT"/>'
+            for line in title.split("\\n")
+        )
         comp_row = (
             f'<TR><TD ALIGN="CENTER">'
-            f'<FONT POINT-SIZE="7" COLOR="#666666">{component}</FONT>'
+            f'<FONT POINT-SIZE="7" COLOR="#888888">{component}</FONT>'
             f'</TD></TR>'
         ) if component else ""
 
@@ -582,10 +566,9 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             f'<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" '
             f'BGCOLOR="{badge_bg}" COLOR="{badge_border}" STYLE="ROUNDED">'
             f'<TR><TD ALIGN="CENTER">'
-            f'<FONT POINT-SIZE="13" COLOR="{badge_color}"><B>{badge}</B></FONT>'
-            f'<BR/>'
-            f'<FONT POINT-SIZE="10" COLOR="{badge_color}">{action}</FONT>'
+            f'<FONT POINT-SIZE="14" COLOR="{badge_color}"><B>{badge}</B></FONT>'
             f'</TD></TR>'
+            f'<TR><TD ALIGN="LEFT">{title_lines}</TD></TR>'
             f'</TABLE>'
             f'</TD></TR>'
             f'{comp_row}'
