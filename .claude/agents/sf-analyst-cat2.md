@@ -193,7 +193,7 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, Field FROM FieldDefi
 インデックスに含める情報:
 - オブジェクト名（API名・ラベル）・レコード件数・用途（1行）・関連UC
 
-差分更新時は手動追記を保持しバージョンをインクリメントする。`docs/changelog.md` に追記する。
+差分更新時は手動追記を保持しバージョンをインクリメントする。`docs/logs/changelog.md` に追記する。
 
 ### 完了後: CLAUDE.md の自動更新
 

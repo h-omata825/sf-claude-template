@@ -273,7 +273,7 @@ flowchart TD
 
 ### Phase 3: 差分更新 / 変更履歴
 
-差分更新時は手動追記を保持し、更新した設計書のみ記録する。`docs/changelog.md` に追記する。
+差分更新時は手動追記を保持し、更新した設計書のみ記録する。`docs/logs/changelog.md` に追記する。
 
 ---
 

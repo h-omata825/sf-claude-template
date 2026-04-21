@@ -102,6 +102,10 @@ fi
 API_VERSION=$(sf org display -o "$ALIAS" --json 2>/dev/null | grep -o '"apiVersion":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "62.0")
 info "APIバージョン: $API_VERSION"
 
+# --- docs/logs フォルダの作成 ---
+mkdir -p docs/logs
+info "docs/logs/ フォルダを作成しました"
+
 # --- 標準セットの package.xml を生成 ---
 mkdir -p manifest
 cat > manifest/package.xml << XMLEOF

@@ -59,7 +59,7 @@ SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
 | `docs/architecture/system.json` | システム・利用者・外部連携・データストアの関係 | 2周目が参照 |
 | `docs/flow/usecases.md` | 業務UC一覧（新規申込・解約申込・見積依頼等） | cat5（FG定義）が必須参照 |
 | `docs/flow/swimlanes.json` | 全体／UC別／例外／データフローのスイムレーン | 2周目が参照 |
-| `docs/changelog.md` | 実行履歴・変更点 | — |
+| `docs/logs/changelog.md` | 実行履歴・変更点 | — |
 
 ### Phase 0: 実行モード判定
 
@@ -243,7 +243,7 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 
 ### Phase 6: changelog への記録
 
-`docs/changelog.md` に追記する（日時・実行カテゴリ・生成/更新ファイル・主な変更点）。
+`docs/logs/changelog.md` に追記する（日時・実行カテゴリ・生成/更新ファイル・主な変更点）。
 
 ---
 

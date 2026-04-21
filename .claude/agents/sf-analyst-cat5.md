@@ -235,7 +235,7 @@ FG確定後、以下の観点で割り当てを検証する:
 
 ### Phase 4: 変更履歴の記録
 
-`docs/changelog.md` にカテゴリ5実行履歴を追記する。
+`docs/logs/changelog.md` にカテゴリ5実行履歴を追記する。
 
 ---
 
