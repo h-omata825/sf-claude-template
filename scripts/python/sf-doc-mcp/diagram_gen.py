@@ -659,7 +659,19 @@ def render_component_diagram(
         for c in comp.get("callees", []):
             called_by.add(c)
 
-    n_nodes = len(components) + 1  # trigger node included
+    # トップレベルコンポーネント（誰からも呼ばれていない）の型を確認
+    # comp_type_mapはまだ未構築のためcomponentsから直接取得
+    _type_lookup = {c.get("api_name", ""): c.get("type", "") for c in components}
+    top_level_types = {
+        _type_lookup.get(c.get("api_name", ""), "")
+        for c in components if c.get("api_name", "") not in called_by
+    }
+
+    # LWCがトップレベルにある場合 → LWC自体が起点なので[Flow]ノード不要
+    if any(t in {"LWC", "Aura"} for t in top_level_types):
+        trigger_node = None
+
+    n_nodes = len(components) + (1 if trigger_node else 0)
     _dh = max(3.0, n_nodes * 0.9)
     g = _gv.Digraph(
         "components",
@@ -748,9 +760,13 @@ def render_object_access_matrix(
     if not _HAS_GV:
         raise RuntimeError("graphviz が利用できません")
 
-    # 全コンポーネントを列に使う
-    apex_comps = components if components else []
-    comp_names = [c.get("api_name", "") for c in apex_comps]
+    # DML操作のあるコンポーネントのみ列に使う（object_access に登場する順序を保持）
+    seen: list[str] = []
+    for entry in object_access:
+        comp = entry.get("component", "")
+        if comp and comp not in seen:
+            seen.append(comp)
+    comp_names = seen
 
     obj_names  = [o.get("api_name", "") for o in related_objects]
     obj_labels = {o.get("api_name", ""): o.get("label", o.get("api_name", ""))
