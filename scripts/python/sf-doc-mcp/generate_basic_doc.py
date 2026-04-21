@@ -153,7 +153,9 @@ def _table_val(text: str, key: str) -> str:
 
 def _section_text(text: str, heading: str) -> str:
     # ## / ### / #### 見出しにキーワードが含まれていれば一致（番号付き見出し対応）
-    m = re.search(rf'#{2,4}[^\n]*{re.escape(heading)}[^\n]*\n(.*?)(?=\n#{2,4}[^\n]|\Z)', text, re.DOTALL)
+    # 注: f-string では {n,m} が tuple に展開されるため string 連結で構築する
+    pat = r'#{2,4}[^\n]*' + re.escape(heading) + r'[^\n]*\n(.*?)(?=\n#{2,4}[^\n]|\Z)'
+    m = re.search(pat, text, re.DOTALL)
     return m.group(1).strip() if m else ""
 
 
@@ -264,46 +266,52 @@ def parse_catalog_index(path: Path) -> list[dict]:
 
 
 def parse_data_model(path: Path) -> list[dict]:
-    """親オブジェクト/子オブジェクト列を持つテーブルのみをパースする。"""
+    """
+    _data-model.md から関連定義をパースする。
+    Mermaid ERD 形式（||--o{ など）を優先し、なければ親/子テーブル形式を試みる。
+    """
     if not path.exists(): return []
     t = path.read_text(encoding="utf-8")
     rels = []
+
+    # ── Mermaid ERD 形式: "  ObjectA ||--o{ ObjectB : "label"" ──
+    mermaid_pat = re.compile(
+        r'^\s*([\w]+)\s+\|[|o]--[o|>]?\{?\s+([\w]+)\s*:\s*"([^"]*)"',
+        re.MULTILINE,
+    )
+    for m in mermaid_pat.finditer(t):
+        parent, child, label = m.group(1), m.group(2), m.group(3)
+        rel_type = "master-detail" if ("MD" in label or "主従" in label) else "1-N"
+        rels.append({"parent": parent, "rel": rel_type, "child": child, "field": label})
+    if rels:
+        return rels[:30]
+
+    # ── フォールバック: 親オブジェクト/子オブジェクト列のテーブル ──
     in_rel_table = False
     col_parent = col_child = col_rel = col_field = -1
-
     for line in t.splitlines():
         stripped = line.strip()
         if not stripped.startswith("|"):
             in_rel_table = False
             continue
-
         cols = [c.strip() for c in stripped.strip("|").split("|")]
-
-        # ヘッダー行検出
         if "親オブジェクト" in cols and "子オブジェクト" in cols:
             col_parent = cols.index("親オブジェクト")
             col_child  = cols.index("子オブジェクト")
             col_rel    = next((i for i, c in enumerate(cols)
-                               if c in ("関係", "リレーション", "種別", "rel", "Rel")), -1)
+                               if c in ("関係", "リレーション", "種別", "rel")), -1)
             col_field  = next((i for i, c in enumerate(cols)
-                               if "項目" in c or "field" in c.lower() or "参照" in c), -1)
+                               if "項目" in c or "field" in c.lower()), -1)
             in_rel_table = True
             continue
-
         if not in_rel_table:
             continue
-
-        # セパレータ行をスキップ
         if all(re.fullmatch(r'[-: ]+', c) for c in cols if c):
             continue
-
         parent = cols[col_parent] if col_parent < len(cols) else ""
         child  = cols[col_child]  if col_child  < len(cols) else ""
-        rel    = cols[col_rel]    if 0 <= col_rel   < len(cols) else ""
-        field  = cols[col_field]  if 0 <= col_field < len(cols) else ""
-
-        if parent and child:
-            rels.append({"parent": parent, "rel": rel, "child": child, "field": field})
+        if parent and child and not parent.isdigit() and not child.isdigit():
+            rels.append({"parent": parent, "rel": "", "child": child, "field": ""})
 
     return rels[:20]
 
@@ -464,16 +472,16 @@ def _build_er_sheet(ws, objects: list, relations: list, er_img: str | None):
 
     # 関連定義表を先に（表が図に埋もれないよう）
     r = _section_row(ws, r, "関連定義表")
-    r = _hdr_row(ws, r, [(2,8,"親オブジェクト"),(9,10,"関係"),
-                          (11,17,"子オブジェクト"),(18,23,"参照関係項目"),(24,31,"備考")])
-    for rel in relations[:20]:
+    r = _hdr_row(ws, r, [(2,8,"親オブジェクト"),(9,11,"種別"),
+                          (12,18,"子オブジェクト"),(19,31,"関係・用途")])
+    for rel in relations[:25]:
         r = _data_row(ws, r, [
-            (2,8,rel["parent"]), (9,10,rel["rel"]),
-            (11,17,rel["child"]), (18,23,rel.get("field","")), (24,31,""),
+            (2,8,rel["parent"]), (9,11,rel["rel"]),
+            (12,18,rel["child"]), (19,31,rel.get("field","")),
         ])
     if len(relations) < 5:
         r = _empty_rows(ws, r, 5 - len(relations),
-                        [(2,8),(9,10),(11,17),(18,23),(24,31)])
+                        [(2,8),(9,11),(12,18),(19,31)])
     r = _margin(ws, r)
 
     # ER図（表の後、max_width 拡大で可読性向上）

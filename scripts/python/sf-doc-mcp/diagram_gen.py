@@ -215,19 +215,36 @@ def render_er_diagram(
         },
     )
 
-    # オブジェクトノード（HTML ラベルで2段）
+    # 関連に登場するオブジェクトAPIのみ描画（孤立ノードを除外して図を見やすく）
+    related_apis: set[str] = set()
+    for rel in relations:
+        if not rel["parent"].isdigit() and not rel["child"].isdigit():
+            related_apis.add(rel["parent"])
+            related_apis.add(rel["child"])
+
+    # objects リストから label を引く辞書
+    obj_label_map = {o["api"]: (o.get("label", ""), o.get("type", "")) for o in objects}
+
     obj_ids = set()
-    for obj in objects:
-        nid = obj["api"].replace("__c", "_c").replace("__", "_")
-        obj_ids.add(obj["api"])
-        kind = obj.get("type", "")
+    for api in sorted(related_apis):  # ソートして毎回同じ順で配置
+        nid = api.replace("__c", "_c").replace("__", "_")
+        obj_ids.add(api)
+        lbl, kind = obj_label_map.get(api, ("", ""))
         kind_color = "#1F3864" if kind in ("カスタム", "Custom") else "#2E75B6"
-        label = (
-            f'<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">'
-            f'<TR><TD BGCOLOR="{kind_color}"><FONT COLOR="white"><B>{obj["api"]}</B></FONT></TD></TR>'
-            f'<TR><TD BGCOLOR="#D9E1F2"><FONT COLOR="#1F3864">{obj.get("label", "")}</FONT></TD></TR>'
-            f"</TABLE>>"
-        )
+        # ラベルが空の場合はAPIノードのみ1行表示（空セルはgraphvizエラーになる）
+        if lbl:
+            label = (
+                f'<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">'
+                f'<TR><TD BGCOLOR="{kind_color}"><FONT COLOR="white"><B>{api}</B></FONT></TD></TR>'
+                f'<TR><TD BGCOLOR="#D9E1F2"><FONT COLOR="#1F3864">{lbl}</FONT></TD></TR>'
+                f"</TABLE>>"
+            )
+        else:
+            label = (
+                f'<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">'
+                f'<TR><TD BGCOLOR="{kind_color}"><FONT COLOR="white"><B>{api}</B></FONT></TD></TR>'
+                f"</TABLE>>"
+            )
         g.node(
             nid,
             label=label,
@@ -460,7 +477,7 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "nodesep": "0.8",
             "ranksep": "0.8",
             "fontname": FONT_JP,
-            "pad": "3.5",  # 余白を大きくして画像幅をスイムレーンと揃える
+            "pad": "0.5",
             "dpi": str(DPI),
         },
     )
