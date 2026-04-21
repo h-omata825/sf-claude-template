@@ -40,6 +40,7 @@ tools:
 | `feature_list` | scan_features.py の出力（コンポーネント一覧 JSON。Apex/Batch/Flow/Integration/Trigger 以外も含む全件。Phase 1 でエージェント自身がフィルタする） |
 | `target_ids` | 対象機能IDリスト（全機能の場合は全件） |
 | `feat_id` | 各 feature の ID（`feature_list` 各要素の `id` フィールド値。例: `F-001`）。Phase 0.7 のハッシュチェックや既存 Excel 検索で使用する |
+| `feature_list_dir` | 機能一覧の出力先フォルダ（`{output_dir}/../01_基本設計` 相当のパス。sf-design コマンドが明示的に渡す） |
 | `version_increment` | `"minor"` または `"major"`（初回生成時は `"minor"`・スクリプト側が v1.0 から開始） |
 
 ---
@@ -427,24 +428,24 @@ else:
 
 > **重要**: `overview` は **Phase 1 で `{tmp_dir}/{api_name}_design.json` に保存した設計 JSON の `overview` フィールド**を使うこと。sf-doc から渡された `feature_list`（scan_features.py 出力）の `overview` は javadoc の1行抜粋であり品質が低いため、絶対に使わない。
 
-> **出力先の補足**: `/sf-design` コマンドはユーザー指定の `output_dir` の下に `03_プログラム設計/` を作り、そこに設計書と機能一覧を出力する。`/sf-doc` が `01_基本設計/機能一覧_v*.xlsx` を生成するのとは別に、このエージェントが生成する機能一覧は **Phase 1 でソースを精読した overview を反映した高品質版**として `{output_dir}/機能一覧.xlsx`（`03_プログラム設計/` 直下）に出力される。
+> **出力先**: 機能一覧は `{feature_list_dir}/機能一覧.xlsx` へ出力する（`01_基本設計/` 直下）。`/sf-doc` との共通フォルダに統一し、プログラム設計実行のたびに高品質版で上書き更新する設計。
 
-既存の機能一覧.xlsx が `{output_dir}/機能一覧.xlsx` に存在する場合は `--source-file` で渡す（差分検出・バージョン管理に使用）:
+既存の機能一覧.xlsx が `{feature_list_dir}/機能一覧.xlsx` に存在する場合は `--source-file` で渡す（差分検出・バージョン管理に使用）:
 
 ```bash
 # 既存ファイルあり（更新）
 python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py \
   --input "{tmp_dir}/feature_list.json" \
-  --output-dir "{output_dir}" \
+  --output-dir "{feature_list_dir}" \
   --author "{author}" \
   --project-name "{project_name}" \
   --version-increment {version_increment} \
-  --source-file "{output_dir}/機能一覧.xlsx"
+  --source-file "{feature_list_dir}/機能一覧.xlsx"
 
 # 新規作成（初回）
 python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py \
   --input "{tmp_dir}/feature_list.json" \
-  --output-dir "{output_dir}" \
+  --output-dir "{feature_list_dir}" \
   --author "{author}" \
   --project-name "{project_name}" \
   --version-increment {version_increment}

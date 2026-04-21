@@ -372,6 +372,7 @@ sf-screen-writer の完了を確認してから次へ進む。
 project_dir:       {project_dir}
 output_dir:        {output_dir}/03_プログラム設計
 tmp_dir:           {output_dir}/03_プログラム設計/.tmp
+feature_list_dir:  {output_dir}/01_基本設計
 author:            {author}
 project_name:      {project_name}
 feature_list:      {feature_list}（Apex系のみに絞り込み。{tmp_dir}/feature_list.json の内容）
@@ -380,7 +381,7 @@ version_increment: minor
 上位設計参照:      {output_dir}/02_詳細設計/.tmp/ に存在する JSON（なければ省略）
 ```
 
-sf-design-writer は機能一覧（全コンポーネント索引 Excel）も生成する。sf-screen-writer の design JSON が `{tmp_dir}` に揃っている状態で起動すること。
+sf-design-writer は機能一覧（全コンポーネント索引 Excel）を `{output_dir}/01_基本設計/機能一覧.xlsx` に生成する。sf-screen-writer の design JSON が `{tmp_dir}` に揃っている状態で起動すること。
 
 テンプレートパス:
 - Apex/Flow/Batch/Integration: `{project_dir}/scripts/python/sf-doc-mcp/プログラム設計書テンプレート.xlsx`
