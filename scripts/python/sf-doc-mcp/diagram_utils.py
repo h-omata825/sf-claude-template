@@ -1846,12 +1846,12 @@ def generate_object_component_matrix(
     cell_w      = min(2.8, max(2.0, _max_name_len * 0.13))
 
     # レイアウト定数
-    obj_col_w   = 2.6    # オブジェクト名列（縦結合）
-    field_col_w = 2.2    # 項目ラベル列
-    cell_h      = 0.6    # 1フィールドの行高
-    hdr_h       = 1.4    # ヘッダ行高（折り返し対応で高め）
-    legend_h    = 0.55   # 凡例エリア高
-    margin      = 0.3
+    obj_col_w   = 3.0    # オブジェクト名列（縦結合）
+    field_col_w = 2.6    # 項目ラベル列
+    cell_h      = 0.75   # 1フィールドの行高
+    hdr_h       = 1.8    # ヘッダ行高（折り返し対応で高め）
+    legend_h    = 0.6    # 凡例エリア高
+    margin      = 0.1
 
     n_cols        = len(comp_names)
     total_data_h  = sum(len(fields) * cell_h for _, _, fields in obj_groups)
@@ -1872,18 +1872,18 @@ def generate_object_component_matrix(
 
     _rect(margin, hdr_y, obj_col_w, hdr_h, HDR_BG, ec=HDR_BG)
     ax.text(margin + obj_col_w / 2, hdr_y + hdr_h / 2, "オブジェクト",
-            ha="center", va="center", color=HDR_FG, **_fpkw(9, bold=True))
+            ha="center", va="center", color=HDR_FG, **_fpkw(12, bold=True))
 
     _rect(margin + obj_col_w, hdr_y, field_col_w, hdr_h, HDR_BG, ec=HDR_BG)
     ax.text(margin + obj_col_w + field_col_w / 2, hdr_y + hdr_h / 2, "項目",
-            ha="center", va="center", color=HDR_FG, **_fpkw(9, bold=True))
+            ha="center", va="center", color=HDR_FG, **_fpkw(12, bold=True))
 
     for ci, comp in enumerate(comp_names):
         x = margin + obj_col_w + field_col_w + ci * cell_w
         _rect(x, hdr_y, cell_w, hdr_h, HDR_BG, ec=HDR_BG)
         ax.text(x + cell_w / 2, hdr_y + hdr_h / 2, _wrap_hdr(comp, width=10),
                 ha="center", va="center", color=HDR_FG,
-                multialignment="center", **_fpkw(8, bold=True))
+                multialignment="center", **_fpkw(11, bold=True))
 
     # ── データ行（オブジェクト単位でフィールドを展開） ──────────
     accum_h = 0.0
@@ -1895,7 +1895,7 @@ def generate_object_component_matrix(
         # オブジェクト名セル（縦結合相当: 1つの大きな矩形）
         _rect(margin, obj_y, obj_col_w, obj_h, OBJ_BG)
         ax.text(margin + 0.15, obj_y + obj_h / 2, obj_label,
-                ha="left", va="center", **_fpkw(8.5))
+                ha="left", va="center", **_fpkw(12))
 
         # フィールド行（上から下へ）
         for fi, field in enumerate(fields):
@@ -1903,7 +1903,7 @@ def generate_object_component_matrix(
             _rect(margin + obj_col_w, fy, field_col_w, cell_h, FIELD_BG)
             ax.text(margin + obj_col_w + 0.12, fy + cell_h / 2,
                     field.get("label", ""),
-                    ha="left", va="center", **_fpkw(8))
+                    ha="left", va="center", **_fpkw(11))
 
         # コンポーネント操作セル（縦結合相当: オブジェクト全体に対応）
         for ci, comp in enumerate(comp_names):
@@ -1915,7 +1915,7 @@ def generate_object_component_matrix(
                     op if op else "－",
                     ha="center", va="center",
                     color="#AAAAAA" if not op else "#000000",
-                    **_fpkw(9, bold=bool(op)))
+                    **_fpkw(12, bold=bool(op)))
 
         accum_h += obj_h
 
@@ -1930,7 +1930,7 @@ def generate_object_component_matrix(
     ly = margin * 0.4
     for label, color in legend_items:
         _rect(lx, ly, 0.4, 0.32, color, ec="#888888", lw=0.6)
-        ax.text(lx + 0.5, ly + 0.16, label, va="center", **_fpkw(7.5))
+        ax.text(lx + 0.5, ly + 0.16, label, va="center", **_fpkw(10))
         lx += 1.8
 
     plt.tight_layout(pad=0.1)

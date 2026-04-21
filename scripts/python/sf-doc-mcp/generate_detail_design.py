@@ -1037,12 +1037,15 @@ def _build_process_steps(data: dict) -> list[dict]:
 
         display_desc = desc_main or title
 
+        _raw_api = comp.get("api_name", "")
+        comp_name = _re.sub(r'（[^）]+）$', '', _raw_api).strip() or _raw_api
+
         steps.append({
             "step": i,
             "title": title,
             "description": display_desc,
-            "component": _comp_type_label(comp),
-            "comp_api_name": comp.get("api_name", ""),
+            "component": comp_name,
+            "comp_api_name": _raw_api,
             "branch": branch,
             "next": [{"to": i + 1}] if i < n_comps else [],
         })
