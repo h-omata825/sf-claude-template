@@ -501,12 +501,32 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
     """
     process_steps から処理フロー図PNGを生成する。
 
+    設計方針:
+      - 図の中: 番号バッジ + 6〜8文字の一言アクション（何をするか）
+      - 図の外: コンポーネント名を各ノード下に小テキストで表示（HTMLラベル使用）
+      - 詳細な処理内容・分岐条件は図下の表で補完
+
     steps: [{step, title, description, component, branch, next:[{to, condition}]}]
-    - 横向き（LR）でExcel1画面に収まるサイズに生成
-    - 各ノード: コンポーネント名（誰が）+ ステップ番号 + 短い処理概要（何をする）
     """
     if not _HAS_GV:
         raise RuntimeError("graphviz が利用できません")
+
+    # step番号 → バッジ文字（①②…⑳、超えたら(N)）
+    _BADGES = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+    def _badge(n: int) -> str:
+        return _BADGES[n - 1] if 1 <= n <= len(_BADGES) else f"({n})"
+
+    # アクション一言: 最初の動詞句を 8 文字以内で抽出
+    def _action(title: str) -> str:
+        t = (title or "").strip()
+        # 「〜を〜する」→「〜する」に短縮: 「する」「します」「行う」で切る
+        for pat in ["を", "から", "（", "、", "，", "。"]:
+            idx = t.find(pat)
+            if 0 < idx <= 8:
+                t = t[:idx]
+                break
+        return t[:8]
 
     g = _gv.Digraph(
         "flowchart",
@@ -514,54 +534,72 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "bgcolor": "white",
             "rankdir": "LR",
             "splines": "ortho",
-            "nodesep": "0.3",
-            "ranksep": "0.5",
+            "nodesep": "0.5",
+            "ranksep": "0.6",
             "fontname": FONT_JP,
-            "pad": "0.2",
+            "pad": "0.3",
             "dpi": "100",
-            "size": "9,4!",
+            "size": "9,3!",
         },
     )
+    g.attr("node", shape="none", margin="0")
 
     for step in steps:
-        sid       = str(step.get("step", ""))
-        title     = _wrap_jp(step.get("title", "") or step.get("description", ""), 11)
-        component = _wrap_name(step.get("component", ""), 13)
-        branch    = step.get("branch", "")
-
-        # 上段: コンポーネント名（誰が）、下段: ステップ番号＋処理概要（折り返し）
-        if component:
-            lbl = f"{component}\\n{sid}. {title}"
-        else:
-            lbl = f"{sid}. {title}"
+        sid        = str(step.get("step", ""))
+        n          = int(step.get("step", 0))
+        badge      = _badge(n)
+        action     = _action(step.get("title", "") or step.get("description", ""))
+        component  = step.get("component", "")
+        branch     = step.get("branch", "")
 
         if branch:
-            g.node(sid, label=lbl,
-                   shape="diamond", style="filled",
-                   fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=FONT_JP, fontsize="9")
+            # 分岐ステップ: ひし形風の黄色バッジ
+            badge_color  = "#7F6000"
+            badge_bg     = "#FFF2CC"
+            badge_border = "#BF9000"
         else:
-            g.node(sid, label=lbl,
-                   shape="box", style="filled,rounded",
-                   fillcolor=C_STEP_BG, fontcolor=C_STEP_FG,
-                   fontname=FONT_JP, fontsize="9")
+            badge_color  = "white"
+            badge_bg     = C_STEP_BG
+            badge_border = "#1F3864"
+
+        # HTMLラベル: 上段=バッジ（番号+アクション）、下段=コンポーネント名（小文字・灰色）
+        comp_row = (
+            f'<TR><TD ALIGN="CENTER">'
+            f'<FONT POINT-SIZE="7" COLOR="#666666">{component}</FONT>'
+            f'</TD></TR>'
+        ) if component else ""
+
+        html = (
+            f'<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0">'
+            f'<TR><TD>'
+            f'<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" '
+            f'BGCOLOR="{badge_bg}" COLOR="{badge_border}" STYLE="ROUNDED">'
+            f'<TR><TD ALIGN="CENTER">'
+            f'<FONT POINT-SIZE="13" COLOR="{badge_color}"><B>{badge}</B></FONT>'
+            f'<BR/>'
+            f'<FONT POINT-SIZE="10" COLOR="{badge_color}">{action}</FONT>'
+            f'</TD></TR>'
+            f'</TABLE>'
+            f'</TD></TR>'
+            f'{comp_row}'
+            f'</TABLE>>'
+        )
+        g.node(sid, label=html, fontname=FONT_JP)
 
     has_next = any(step.get("next") for step in steps)
     if has_next:
         for step in steps:
             src = str(step.get("step", ""))
             for nxt in (step.get("next") or []):
-                cond = _short_label(nxt.get("condition", ""), 12)
+                cond = _short_label(nxt.get("condition", ""), 8)
                 g.edge(src, str(nxt["to"]), xlabel=cond,
                        color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE,
-                       arrowsize="0.7")
+                       arrowsize="0.8")
     else:
         for i, step in enumerate(steps[:-1]):
             src = str(step.get("step", ""))
             dst = str(steps[i + 1].get("step", ""))
-            g.edge(src, dst,
-                   color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE,
-                   arrowsize="0.7")
+            g.edge(src, dst, color=C_EDGE, arrowsize="0.8")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
