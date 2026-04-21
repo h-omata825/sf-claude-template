@@ -519,63 +519,69 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
 
     import re as _re
 
-    _FC_FONT = "Meiryo"  # プロポーショナルフォント: ASCII/日本語の混在で文字がつぶれない
+    _FC_FONT = "Meiryo"
 
     g = _gv.Digraph(
         "flowchart",
         graph_attr={
             "bgcolor": "white",
-            "rankdir": "LR",
+            "rankdir": "TB",   # TB で rank=same を使い上段/下段を分ける
             "splines": "ortho",
             "nodesep": "0.6",
-            "ranksep": "0.8",
+            "ranksep": "0.3",  # 上段(ステップ)と下段(コンポーネント名)の間隔
             "fontname": _FC_FONT,
             "pad": "0.4",
             "dpi": "100",
-            "forcelabels": "true",  # xlabel を強制表示
         },
     )
 
-    for step in steps:
-        sid        = str(step.get("step", ""))
-        n          = int(step.get("step", 0))
-        badge      = _badge(n)
-        raw_title  = step.get("title", "") or step.get("description", "")
-        # 括弧内に英数字を含む技術補足を除去
-        raw_title  = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
-        # 10文字折り返し
-        wrapped    = _wrap_jp(raw_title, 10)
-        component  = step.get("component", "")
-        branch     = step.get("branch", "")
+    # 上段: ステップノード（同ランク＝横並び）
+    with g.subgraph() as top:
+        top.attr(rank="same")
+        for step in steps:
+            sid       = str(step.get("step", ""))
+            n         = int(step.get("step", 0))
+            badge     = _badge(n)
+            raw_title = step.get("title", "") or step.get("description", "")
+            raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
+            wrapped   = _wrap_jp(raw_title, 10)
+            branch    = step.get("branch", "")
+            label     = badge + "\\n" + wrapped
 
-        # ノードラベル: バッジ + 折り返しタイトル（\n区切り）
-        label = badge + "\\n" + wrapped
+            if branch:
+                top.node(sid, label=label,
+                         shape="diamond", style="filled",
+                         fillcolor="#FFF2CC", fontcolor="#7F6000",
+                         fontname=_FC_FONT, fontsize="8", margin="0.25,0.18")
+            else:
+                top.node(sid, label=label,
+                         shape="box", style="filled,rounded",
+                         fillcolor=C_STEP_BG, fontcolor="white",
+                         fontname=_FC_FONT, fontsize="8", margin="0.25,0.18")
 
-        # コンポーネント名をノード内の下段に区切り線付きで表示
-        if component:
-            label += "\\n─────\\n" + _wrap_name(component, 14)
+    # 下段: コンポーネント名ラベル（同ランク＝横並び・枠なし）
+    with g.subgraph() as bot:
+        bot.attr(rank="same")
+        for step in steps:
+            sid       = str(step.get("step", ""))
+            component = step.get("component", "")
+            cid       = f"_c{sid}"
+            bot.node(cid,
+                     label=_wrap_name(component, 16) if component else "",
+                     shape="none", margin="0",
+                     fontname=_FC_FONT, fontsize="7", fontcolor="#555555")
+            # 上段ノードと下段ラベルを不可視エッジで紐付け（縦位置を揃える）
+            g.edge(sid, cid, style="invis", weight="100")
 
-        if branch:
-            g.node(sid, label=label,
-                   shape="diamond", style="filled",
-                   fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=_FC_FONT, fontsize="8",
-                   margin="0.25,0.18")
-        else:
-            g.node(sid, label=label,
-                   shape="box", style="filled,rounded",
-                   fillcolor=C_STEP_BG, fontcolor="white",
-                   fontname=_FC_FONT, fontsize="8",
-                   margin="0.25,0.18")
-
+    # フロー矢印（ステップ間）
     has_next = any(step.get("next") for step in steps)
     if has_next:
         for step in steps:
             src = str(step.get("step", ""))
             for nxt in (step.get("next") or []):
                 cond = _short_label(nxt.get("condition", ""), 8)
-                g.edge(src, str(nxt["to"]), xlabel=cond,
-                       color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE,
+                g.edge(src, str(nxt["to"]), label=cond,
+                       color=C_EDGE, fontname=_FC_FONT, fontsize="7", fontcolor=C_EDGE,
                        arrowsize="0.8")
     else:
         for i, step in enumerate(steps[:-1]):
