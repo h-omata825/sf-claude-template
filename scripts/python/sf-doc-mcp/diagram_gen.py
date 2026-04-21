@@ -551,20 +551,22 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         # ノードラベル: バッジ + 折り返しタイトル（\n区切り）
         label = badge + "\\n" + wrapped
 
+        # コンポーネント名をノード内の下段に区切り線付きで表示
+        if component:
+            label += "\\n─────\\n" + _wrap_name(component, 14)
+
         if branch:
             g.node(sid, label=label,
                    shape="diamond", style="filled",
                    fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=_FC_FONT, fontsize="9",
+                   fontname=_FC_FONT, fontsize="8",
                    margin="0.25,0.18")
         else:
             g.node(sid, label=label,
                    shape="box", style="filled,rounded",
                    fillcolor=C_STEP_BG, fontcolor="white",
-                   fontname=_FC_FONT, fontsize="9",
-                   margin="0.25,0.18",
-                   xlabel=component,
-                   xlp="0,-20")  # コンポーネント名をノード直下に配置
+                   fontname=_FC_FONT, fontsize="8",
+                   margin="0.25,0.18")
 
     has_next = any(step.get("next") for step in steps)
     if has_next:
