@@ -964,16 +964,14 @@ def _build_process_steps(data: dict) -> list[dict]:
 
 
 def _obj_label_from_api(api: str) -> str:
-    """オブジェクトAPIから日本語ラベルを推定する（メタデータ優先）。
-    カスタムオブジェクト（__c）は「〜オブジェクト」サフィックスを付加して標準オブジェクトと区別する。
-    """
+    """オブジェクトAPIから日本語ラベルを推定する（メタデータ優先）。"""
     if api in _STD_OBJ_LABELS:
         return _STD_OBJ_LABELS[api]
     if api in _SF_OBJ_LABELS:
-        return _SF_OBJ_LABELS[api] + "オブジェクト"
+        return _SF_OBJ_LABELS[api]
     raw = api.replace("__c", "").replace("__", "")
     base = _re.sub(r'([A-Z])', r' \1', raw).strip()
-    return base + "オブジェクト"
+    return base
 
 
 def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict]]:
@@ -1111,7 +1109,12 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
             all_ops = list(comp_ops.values())
             op = ("RW" if "W" in all_ops and "R" in all_ops
                   else all_ops[0] if all_ops else "")
-            fields = [{"api_name": "—", "label": "（対象項目は別途設計書を参照）", "access": op, "note": ""}]
+            # INSERT（レコード新規登録）の場合は項目明示不要
+            if op == "INSERT" or all(o == "INSERT" for o in all_ops if o):
+                label = "（レコード新規登録）"
+            else:
+                label = "（対象項目は別途設計書を参照）"
+            fields = [{"api_name": "—", "label": label, "access": op, "note": ""}]
 
         related_objects.append({
             "api_name": obj_api,
@@ -1120,11 +1123,11 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
             "relations": [],
         })
 
-    # object_access 構築
+    # object_access 構築（テキスト検出の仮コンポーネントは除外）
     object_access = []
     for obj_api, comp_ops in obj_comp_ops.items():
         for comp_name, op in comp_ops.items():
-            if comp_name and op:
+            if comp_name and op and comp_name != "（テキスト検出）":
                 object_access.append({"component": comp_name, "object": obj_api, "operation": op})
 
     return related_objects, object_access
@@ -1308,7 +1311,7 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
     if components:
         try:
             cm_path = str(Path(tmp_dir) / "component.png")
-            dg.render_component_diagram(components, cm_path)
+            dg.render_component_diagram(components, cm_path, steps=steps)
             paths["component"] = cm_path
             print("  [OK] コンポーネント図")
         except Exception as e:

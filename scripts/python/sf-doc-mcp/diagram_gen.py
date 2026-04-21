@@ -128,7 +128,8 @@ def render_system_diagram(system: dict, out_path: str) -> tuple[int, int]:
     # 外部システム（右）
     with g.subgraph(name="cluster_ext") as sg:
         sg.attr(rank="max", style="invis")
-        for i, ext in enumerate(system.get("external_systems", [])[:8]):
+        active_ext = [e for e in system.get("external_systems", []) if e.get("direction", "out") != "none"]
+        for i, ext in enumerate(active_ext[:8]):
             nid = f"ext_{i}"
             proto = ext.get("protocol", "")
             freq = ext.get("frequency", "")
@@ -459,11 +460,19 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
 # 4. フローチャート（graphviz）
 # ════════════════════════════════════════════════════════════════
 
+def _short_label(text: str, max_len: int = 18) -> str:
+    """テキストを max_len 文字で打ち切り、超えたら末尾に…を付ける。"""
+    text = (text or "").strip()
+    return text if len(text) <= max_len else text[:max_len] + "…"
+
+
 def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
     """
-    process_steps からフローチャートPNGを生成する。
+    process_steps から処理フロー図PNGを生成する。
 
-    steps: [{step, title, description, branch, soql, dml}]
+    steps: [{step, title, description, component, branch, next:[{to, condition}]}]
+    各ノード: コンポーネント名（誰が）+ 短い処理概要（何をする）
+    分岐は next の condition で表現する。
     """
     if not _HAS_GV:
         raise RuntimeError("graphviz が利用できません")
@@ -473,38 +482,57 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         graph_attr={
             "bgcolor": "white",
             "rankdir": "TB",
-            "splines": "polyline",
-            "nodesep": "0.8",
-            "ranksep": "0.8",
+            "splines": "ortho",
+            "nodesep": "0.4",
+            "ranksep": "0.5",
             "fontname": FONT_JP,
-            "pad": "0.5",
+            "pad": "0.3",
             "dpi": str(DPI),
+            "size": "6,9!",  # 幅6in・高さ9inに収める
         },
     )
 
     for step in steps:
-        sid   = str(step.get("step", ""))
-        title = step.get("title", "") or step.get("description", "")
-        branch = step.get("branch", "")
+        sid       = str(step.get("step", ""))
+        title     = _short_label(step.get("title", "") or step.get("description", ""), 20)
+        component = step.get("component", "")
+        branch    = step.get("branch", "")
+
+        # コンポーネント名を上段、処理タイトルを下段に表示
+        if component:
+            lbl = f"{component}\\n{sid}. {title}"
+        else:
+            lbl = f"{sid}. {title}"
 
         if branch:
-            g.node(sid, label=f"{sid}. {title}",
+            g.node(sid, label=lbl,
                    shape="diamond", style="filled",
                    fillcolor="#FFF2CC", fontcolor="#7F6000",
-                   fontname=FONT_JP, fontsize="9", width="1.5")
+                   fontname=FONT_JP, fontsize="9", width="2.2", height="0.7")
         else:
-            g.node(sid, label=f"{sid}. {title}",
+            g.node(sid, label=lbl,
                    shape="box", style="filled,rounded",
                    fillcolor=C_STEP_BG, fontcolor=C_STEP_FG,
-                   fontname=FONT_JP, fontsize="9", width="1.5")
+                   fontname=FONT_JP, fontsize="9", width="2.2", height="0.6")
 
-    for i, step in enumerate(steps[:-1]):
-        src = str(step.get("step", ""))
-        dst = str(steps[i + 1].get("step", ""))
-        branch = step.get("branch", "")
-        g.edge(src, dst,
-               label=branch,
-               color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE)
+    # next フィールドがあれば優先、なければ連番でエッジ生成
+    has_next = any(step.get("next") for step in steps)
+    if has_next:
+        for step in steps:
+            src = str(step.get("step", ""))
+            for nxt in (step.get("next") or []):
+                cond = _short_label(nxt.get("condition", ""), 16)
+                g.edge(src, str(nxt["to"]), xlabel=cond,
+                       color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE,
+                       arrowsize="0.7")
+    else:
+        for i, step in enumerate(steps[:-1]):
+            src = str(step.get("step", ""))
+            dst = str(steps[i + 1].get("step", ""))
+            branch = step.get("branch", "")
+            g.edge(src, dst, xlabel=_short_label(branch, 16),
+                   color=C_EDGE, fontname=FONT_JP, fontsize="8", fontcolor=C_EDGE,
+                   arrowsize="0.7")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
@@ -526,78 +554,118 @@ _COMP_COLORS: dict[str, tuple[str, str]] = {
     "Batch":   ("#5A5A5A",  "#FFFFFF"),
 }
 
-def render_component_diagram(components: list[dict], out_path: str) -> tuple[int, int]:
+def render_component_diagram(
+    components: list[dict],
+    out_path: str,
+    steps: list[dict] | None = None,
+) -> tuple[int, int]:
     """
     コンポーネント一覧から依存関係図PNGを生成する。
 
     components: [{api_name, type, role, callees:[str]}]
-    callees が空の場合はタイプ別クラスタ表示でコンパクトにまとめる。
+    steps:      process_steps（任意）。呼び出し順序と起動元の補完に使用。
+
+    描画ルール:
+      - callees で明示された依存は矢印で描画
+      - steps の component 順序から、直接呼び出し関係がないコンポーネント同士を
+        順番ラベル付き矢印で補完
+      - steps の trigger / 最初のステップから起動元（Flow/Trigger）を推定してノード追加
     """
     if not _HAS_GV:
         raise RuntimeError("graphviz が利用できません")
 
-    has_edges = any(comp.get("callees") for comp in components)
+    steps = steps or []
+    known = {c.get("api_name", "") for c in components}
+
+    # steps から呼び出し順マップを構築: api_name → step番号
+    step_order: dict[str, int] = {}
+    for s in steps:
+        comp = s.get("component", "")
+        if comp and comp not in step_order:
+            step_order[comp] = int(s.get("step", 0))
+
+    # 起動元ノードを推定（最初のステップのトリガー or business_flow の actor）
+    trigger_node: str | None = None
+    trigger_type = "Flow"
+    if steps:
+        first = steps[0]
+        desc = (first.get("description", "") + first.get("title", "")).lower()
+        if "trigger" in desc or "triggger" in desc:
+            trigger_type = "Trigger"
+        elif "batch" in desc:
+            trigger_type = "Batch"
+        elif "lwc" in desc or "lightning" in desc:
+            trigger_type = "LWC"
+        trigger_node = f"[{trigger_type}]"
+
+    # callees で参照されているコンポーネント（被呼び出し側）
+    called_by: set[str] = set()
+    for comp in components:
+        for c in comp.get("callees", []):
+            called_by.add(c)
 
     g = _gv.Digraph(
         "components",
         graph_attr={
             "bgcolor": "white",
             "rankdir": "LR",
-            "splines": "polyline",
-            "nodesep": "0.4",
-            "ranksep": "0.6",
+            "splines": "ortho",
+            "nodesep": "0.5",
+            "ranksep": "0.8",
             "fontname": FONT_JP,
-            "pad": "0.5",
+            "pad": "0.4",
             "dpi": str(DPI),
+            "size": "10,5!",
         },
     )
 
-    known = {c.get("api_name", "") for c in components}
+    # 起動元ノード
+    if trigger_node:
+        fill, fg = _COMP_COLORS.get(trigger_type, ("#00B0F0", "#000000"))
+        g.node(trigger_node,
+               label=trigger_node,
+               shape="box", style="filled,rounded",
+               fillcolor=fill, fontcolor=fg,
+               fontname=FONT_JP, fontsize="10", width="1.2")
 
-    if has_edges:
-        # callees あり: 通常の依存関係図
-        for comp in components:
-            name  = comp.get("api_name", "")
-            ctype = comp.get("type", "Apex")
-            fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-            g.node(name,
-                   label=f"{name}\n[{ctype}]",
-                   shape="box", style="filled,rounded",
-                   fillcolor=fill, fontcolor=fg,
-                   fontname=FONT_JP, fontsize="9", width="1.8")
+    # コンポーネントノード（ロール短縮を表示）
+    for comp in components:
+        name  = comp.get("api_name", "")
+        ctype = comp.get("type", "Apex")
+        role  = _short_label(comp.get("role", "") or comp.get("responsibility", ""), 22)
+        fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
+        lbl = f"{name}\\n[{ctype}]\\n{role}" if role else f"{name}\\n[{ctype}]"
+        g.node(name,
+               label=lbl,
+               shape="box", style="filled,rounded",
+               fillcolor=fill, fontcolor=fg,
+               fontname=FONT_JP, fontsize="8", width="2.0")
 
-        for comp in components:
-            src = comp.get("api_name", "")
-            for callee in comp.get("callees", []):
-                if callee not in known:
-                    g.node(callee, label=callee,
-                           shape="box", style="filled,rounded",
-                           fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
-                           fontname=FONT_JP, fontsize="9")
-                g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
-    else:
-        # callees なし: タイプ別クラスタ表示
-        from collections import defaultdict
-        type_groups: dict[str, list[str]] = defaultdict(list)
-        for comp in components:
-            type_groups[comp.get("type", "Apex")].append(comp.get("api_name", ""))
+    # callees の明示依存エッジ
+    for comp in components:
+        src = comp.get("api_name", "")
+        for callee in comp.get("callees", []):
+            if callee not in known:
+                g.node(callee, label=callee,
+                       shape="box", style="filled,rounded",
+                       fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
+                       fontname=FONT_JP, fontsize="9")
+            g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
 
-        for ctype, names in type_groups.items():
-            fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-            with g.subgraph(name=f"cluster_{ctype}") as sg:
-                sg.attr(
-                    label=ctype,
-                    style="filled,rounded",
-                    fillcolor="#F5F7FA",
-                    color="#B0B8C8",
-                    fontname=FONT_JP, fontsize="10",
-                )
-                for name in names:
-                    sg.node(name,
-                            label=name,
-                            shape="box", style="filled,rounded",
-                            fillcolor=fill, fontcolor=fg,
-                            fontname=FONT_JP, fontsize="9", width="1.8")
+    # 起動元 → 直接呼び出されていないトップレベルコンポーネントをエッジ追加
+    # （step順でソートして ①②③ ラベルを付ける）
+    if trigger_node:
+        top_level = [
+            c.get("api_name", "") for c in components
+            if c.get("api_name", "") not in called_by
+        ]
+        top_level_sorted = sorted(top_level, key=lambda n: step_order.get(n, 999))
+        for i, name in enumerate(top_level_sorted, 1):
+            g.edge(trigger_node, name,
+                   xlabel=f"⑤"[:1] + str(i),  # ①②③...
+                   color=C_EDGE, arrowsize="0.7",
+                   fontname=FONT_JP, fontsize="9", fontcolor=C_EDGE,
+                   style="dashed")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
