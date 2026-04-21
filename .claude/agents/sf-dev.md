@@ -43,26 +43,10 @@ tools:
 ## 品質基準
 
 ### Apex — バルク処理パターン（必須）
-```apex
-trigger AccountTrigger on Account (before insert, before update) {
-    AccountTriggerHandler.handle(Trigger.new, Trigger.oldMap);
-}
 
-public with sharing class AccountTriggerHandler {
-    public static void handle(List<Account> newRecords, Map<Id, Account> oldMap) {
-        // SOQLはループ外
-        List<Account> targets = [SELECT Id, Name FROM Account WHERE ...];
-        List<Account> toUpdate = new List<Account>();
-        for (Account acc : newRecords) {
-            // ループ内にDML・SOQL禁止
-            toUpdate.add(new Account(Id = acc.Id, ...));
-        }
-        if (!toUpdate.isEmpty()) {
-            Database.update(toUpdate, false);
-        }
-    }
-}
-```
+- SOQL・DMLは必ずループ外に配置
+- トリガー本体はロジックを持たずハンドラークラスに委譲（1オブジェクト1トリガー）
+- `with sharing` をデフォルト。外す場合は理由をコメントで明記
 
 詳細なコーディング規約・テスト要件・種別選定は「メタデータ種別ごとの振る舞い > Apex」を参照。
 
@@ -81,28 +65,13 @@ public with sharing class AccountTriggerHandler {
 ## よく使うSF CLIコマンド
 
 ```bash
-# メタデータ取得
 sf project retrieve start --manifest manifest/package.xml --target-org project-dev
-
-# デプロイ検証（必ずこれを先に実行）
 sf project deploy validate --manifest manifest/package.xml --target-org project-dev --test-level RunLocalTests
-
-# デプロイ実行
 sf project deploy start --manifest manifest/package.xml --target-org project-dev --test-level RunLocalTests
-
-# デプロイ状況確認
 sf project deploy report --job-id <jobId>
-
-# Apexテスト実行
 sf apex run test --target-org project-dev --test-level RunLocalTests --result-format human --code-coverage
-
-# 特定クラスのテスト実行
 sf apex run test --target-org project-dev --class-names MyClassTest --result-format human
-
-# 匿名Apex実行
 sf apex run --target-org project-dev --file scripts/apex/yourScript.apex
-
-# 組織一覧
 sf org list --all
 ```
 
@@ -374,12 +343,7 @@ sf org list --all
 
 #### テストクラス（実装とセットで必ず提供）
 
-- `@TestSetup` でテストデータを生成
-- `Test.startTest()` / `Test.stopTest()` で対象処理を囲む
-- 正常系・異常系・バルク（200件）を必ず網羅
-- 外部コールアウトがある場合は `HttpCalloutMock` を実装してセットで提供
-- カバレッジ目標: 90%以上（デプロイ要件の75%より高い水準を維持）
-- `System.assertEquals` / `System.assertNotEquals` でアサートを必ず入れる（カバレッジだけのテストは禁止）
+qa-engineer.md の「Apexテストクラス品質基準」に準拠する。外部コールアウトがある場合は `HttpCalloutMock` を実装してセットで提供すること。
 
 #### バッチ / Queueable / Scheduled の追加確認
 
