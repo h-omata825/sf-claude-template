@@ -330,12 +330,13 @@ def _pick_flows(swimlanes: dict) -> tuple[dict | None, dict | None]:
     flows = swimlanes.get("flows", [])
     asis = tobe = overall = None
     for f in flows:
+        ftype = (f.get("flow_type") or "").lower()
         title = (f.get("title") or "").lower()
-        if "as-is" in title or "現状" in title or "asis" in title:
+        if ftype == "asis" or "as-is" in title or "現状" in title or "asis" in title:
             asis = f
         elif "to-be" in title or "導入後" in title or "tobe" in title:
             tobe = f
-        elif f.get("flow_type") == "overall" and overall is None:
+        elif ftype == "overall" and overall is None:
             overall = f
     # As-Is が未設定なら overall を当てる
     if asis is None and overall is not None:
