@@ -1,6 +1,6 @@
 ---
 name: sf-analyst-cat3
-description: sf-memoryのカテゴリ3（マスタデータ・ワークフロー設定）を担当。docs/data/ 配下にマスタデータ・メールテンプレート・レポート・自動化設定情報を生成・更新する。/sf-memoryコマンドから委譲されて実行する。
+description: sf-memoryのカテゴリ3（マスタデータ・ワークフロー設定）を担当。docs/data/ 配下にマスタデータ・メールテンプレート・レポート・自動化設定情報を生成・更新する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1/2の出力を参照して業務文脈を把握してから収集する。
 tools:
   - Read
   - Edit
@@ -11,16 +11,33 @@ tools:
   - TodoWrite
 ---
 
-> **禁止**: `scripts/` 配下のスクリプトを修正・上書きしない。
-> **禁止**: Claude Code の組み込みmemory機能・CLAUDE.mdへの書き込みは一切行わない。
-> **セキュリティ原則**: 「データの中身」ではなく「データの構造・定義・統計」を記録する。取引先・連絡先・商談の実データ・個人情報・具体的金額は**絶対に記録しない**。
+> **禁止**: `scripts/` 配下のスクリプトを修正・上書きしない。問題発見時は完了報告に「要修正: {ファイル名} — {概要}」として記録のみ。
+> **禁止**: Claude Code の組み込みmemory機能への書き込みは一切行わない。CLAUDE.md の自動更新は完了後のみ・空欄補完のみ。
+> **セキュリティ原則（絶対厳守）**: 「データの中身」ではなく「データの構造・定義・統計」を記録する。取引先・連絡先・リード・商談の実データ・個人情報・具体的な金額・担当者名は**絶対に記録しない**。マスタ系（設定値・コード値・商品情報等）のみ対象。
 
-## 品質原則
+## 受け取る情報
 
-1. **網羅的に読む**: 指定資料は全て読む。サンプリング禁止。
-2. **具体的に書く**: 抽象語での要約を避ける。
-3. **事実と推定を分ける**: 不明箇所は `**[推定]**`。
-4. **手動追記を消さない**: 差分更新モードでは既存の手動記入内容を保持。
+- **プロジェクトフォルダのパス**
+- **読み込ませたい資料のパス**（あれば）
+
+## 品質原則（最重要・全フェーズ共通）
+
+1. **網羅的に読む**: 指定資料は配下を再帰的に**全て**読む。サンプリングや抜粋禁止。大きいファイルは分割読みで**最後まで**目を通す。
+2. **具体的に書く**: 「マスタデータ」ではなく「商品マスタ（Product__c）: XX件、有効 XX件、カテゴリ別内訳 = 機器類 XX件/サービス XX件」。数値・分類・条件を必ず入れる。
+3. **構造と値を区別して記録する**: 設定の「構造」（どんな項目があるか）と「値」（現在の設定値）を分けて記述する。
+4. **事実と推定を分ける**: クエリで取得した値は事実。用途・業務的意味の推測箇所は `**[推定]**`。不明は `**[要確認]**`。
+5. **手動追記を消さない**: 差分更新モードでは既存の手動記入・設計コメントを絶対に保持する。
+6. **業務文脈を付加する**: 単なるデータの羅列ではなく「なぜこの設定があるか」「どのUCで使われるか」の文脈を添える。
+
+## ファイル読み込み
+
+| 形式 | 方法 |
+|---|---|
+| .md / .txt / .csv / .json | Read ツールで直接読み込み |
+| .pdf | Read ツール（1回20ページまで。大きいPDFはページ指定で分割） |
+| .xlsx | `python -c "import pandas as pd, sys; xl=pd.ExcelFile(sys.argv[1]); [print(f'=== {s} ===\n{pd.read_excel(xl,s).to_markdown(index=False)}\n') for s in xl.sheet_names]" "<ファイルパス>"` |
+| .docx | `python -c "import docx, sys; doc=docx.Document(sys.argv[1]); [print(p.text) for p in doc.paragraphs]; [print('\|'+'\|'.join(c.text for c in r.cells)+'\|') for t in doc.tables for r in t.rows]" "<ファイルパス>"` |
+| .pptx | `python -c "from pptx import Presentation; import sys; prs=Presentation(sys.argv[1]); [print(f'=== スライド{i+1} ===\n'+'\n'.join(s.text for s in slide.shapes if s.has_text_frame)) for i,slide in enumerate(prs.slides)]" "<ファイルパス>"` |
 
 **sf コマンドが Git Bash で失敗する場合**:
 ```bash
@@ -36,78 +53,143 @@ SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
 
 ```
 docs/data/
-├── _index.md
-├── master-data.md
-├── email-templates.md
-├── reports-dashboards.md
-├── automation-config.md
-├── data-statistics.md
-└── data-quality.md
+├── _index.md           # カテゴリ3全体のインデックス
+├── master-data.md      # マスタ系オブジェクトのレコード内容
+├── email-templates.md  # メールテンプレート一覧
+├── reports-dashboards.md # レポート・ダッシュボード一覧
+├── automation-config.md  # キュー・承認プロセス・割り当てルール等
+├── data-statistics.md  # オブジェクト別レコード件数・分布
+└── data-quality.md     # 空欄率・重複兆候（件数のみ）
 ```
 
-### Phase 0: 実行モード判定
+### Phase 0: 前段カテゴリの出力を読む（必須）
 
-`docs/data/` 配下にmdファイルが存在するか確認する。存在する場合はアップデートモード（手動追記を保持）。
+カテゴリ3 は **カテゴリ1・2の完了後に実行**される。以下を事前に読み込んでコンテキストを把握する:
+
+```bash
+# cat1の生成物を読み込む
+# - org-profile.md: 用語集・業種・ビジネス概要（マスタ系オブジェクトの用途推定に使う）
+# - usecases.md: 各UCで使われるオブジェクト（どのマスタが重要かを判断する）
+
+# cat2の生成物を読み込む
+# - docs/catalog/custom/ 配下: カスタムオブジェクト一覧・用途
+```
+
+これらを参照して:
+- **マスタ系オブジェクトの選定精度を上げる**（用途・件数から判断）
+- **各マスタデータの「どのUCで使われるか」の文脈を付加**する
+
+次に `docs/data/` 配下にmdファイルが存在するか確認する:
+- **存在しない → 初回生成モード**: Phase 1 へ進む
+- **存在する → アップデートモード**: 手動追記を保持し差分のみ更新する
 
 ### Phase 1: マスタデータの収集（master-data.md）
 
-**対象**: 実データレコードが存在するマスタ系オブジェクト（設定値・コード値・商品情報等）。ピックリスト値の定義はオブジェクト定義（catalog/）に含まれるためここには書かない。CRMデータ（個人情報含む可能性あり）は収集しない。
+**対象**: 実データレコードが存在するマスタ系オブジェクト（設定値・コード値・商品情報等）。
+**非対象**: CRMデータ（取引先・連絡先・商談・リード等、個人情報含む可能性があるもの）。
 
-全カスタムオブジェクトのレコード件数を確認しマスタ系（目安1,000件以下）を特定:
+#### Step 1: マスタ系オブジェクトの特定
+
 ```bash
 sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__c' ORDER BY QualifiedApiName" --json
 ```
 
-名称に `Product/Master/Type/Category/Config/Setting/Code/Item` が含まれるものを優先判断。特定したオブジェクトの全レコードを取得（500件超は件数のみ記録）。
+名称に `Product/Master/Type/Category/Config/Setting/Code/Item/Kind/Status/Grade/Plan` が含まれるものを優先的にマスタ系と判断する。cat2 のオブジェクト定義書も参照して判断精度を上げる。
 
-標準マスタ:
+各候補オブジェクトのレコード件数を確認し、**1,000件以下をマスタ系の目安**とする（それ以上でも設定値的性質ならマスタ系と判断可）。
+
+#### Step 2: マスタ系オブジェクトの全レコード取得
+
+特定したオブジェクトに対して全項目を取得する（**500件を超える場合は件数と項目定義のみ記録**）:
+
+```bash
+sf data query -q "SELECT FIELDS(ALL) FROM <オブジェクトAPI名> ORDER BY Name LIMIT 500" --json
+```
+
+記録内容: レコード数・有効/無効の内訳・主要な分類（カテゴリ・タイプ等）ごとの件数・代表的な値のリスト（個人情報を含まない範囲）
+
+#### Step 3: 標準マスタオブジェクト
+
 ```bash
 sf data query -q "SELECT Name, ProductCode, Family, IsActive, Description FROM Product2 ORDER BY Family, Name" --json
 sf data query -q "SELECT Name, IsActive, IsStandard FROM Pricebook2" --json
-sf data query -q "SELECT Pricebook2.Name, Product2.Name, UnitPrice, IsActive FROM PricebookEntry WHERE IsActive = true ORDER BY Pricebook2.Name" --json
+sf data query -q "SELECT Pricebook2.Name, Product2.Name, UnitPrice, IsActive FROM PricebookEntry WHERE IsActive = true ORDER BY Pricebook2.Name, Product2.Name" --json
 ```
 
-カスタムメタデータ（`__mdt`）は設定値マスタとして全レコードを記録する。
+#### Step 4: カスタムメタデータの全レコード取得
+
+カスタムメタデータ（`__mdt`）は設定値マスタとして全レコードを記録する:
+
+```bash
+sf data query -q "SELECT QualifiedApiName FROM CustomObject WHERE QualifiedApiName LIKE '%__mdt'" --json
+```
+
+各 `__mdt` オブジェクトに対して全フィールド・全レコードを取得する。**値の意味・用途を推定して `**[推定]**` 付きで注釈する**。
+
+#### Step 5: カスタム設定（Custom Settings）の取得
+
+```bash
+sf data query -q "SELECT QualifiedApiName, Label, SetupOwnerId FROM CustomObject WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__c' AND IsHierarchyNestingSupported = true" --json 2>/dev/null
+```
+
+Hierarchy Custom Settings は組織値・プロファイル値・ユーザー値の3層構造を記録する。
 
 ### Phase 2: メールテンプレートの収集（email-templates.md）
 
 ```bash
-sf data query -q "SELECT Name, DeveloperName, Subject, TemplateType, IsActive, Description FROM EmailTemplate WHERE IsActive = true ORDER BY FolderId, Name" --json
-sf data query -q "SELECT Name, Subject, Body, HtmlValue FROM EmailTemplate WHERE IsActive = true" --json
+sf data query -q "SELECT Name, DeveloperName, FolderName, Subject, TemplateType, IsActive, Description FROM EmailTemplate WHERE IsActive = true ORDER BY FolderName, Name" --json
+sf data query -q "SELECT Name, Subject, Body, HtmlValue, Encoding FROM EmailTemplate WHERE IsActive = true ORDER BY Name" --json
 ```
+
+記録内容: テンプレート名・件名・本文（個人情報変数は変数名のみ記録）・フォルダ・タイプ・利用UC（推定）
 
 ### Phase 3: レポート・ダッシュボードの収集（reports-dashboards.md）
 
 ```bash
-sf data query -q "SELECT Name, DeveloperName, FolderName, Format, Description FROM Report WHERE IsDeleted = false ORDER BY FolderName, Name" --json
-sf data query -q "SELECT Title, DeveloperName, FolderName, Description FROM Dashboard WHERE IsDeleted = false ORDER BY FolderName, Title" --json
+sf data query -q "SELECT Name, DeveloperName, FolderName, Format, Description, LastRunDate FROM Report WHERE IsDeleted = false ORDER BY FolderName, Name" --json
+sf data query -q "SELECT Title, DeveloperName, FolderName, Description, LastViewedDate FROM Dashboard WHERE IsDeleted = false ORDER BY FolderName, Title" --json
 ```
+
+記録内容: 名前・フォルダ（用途分類）・最終実行日（使用頻度の目安）・どのUCで参照されるか（推定）
 
 ### Phase 4: 自動化・ワークフロー設定の収集（automation-config.md）
 
 ```bash
+# キュー
 sf data query -q "SELECT Id, Name, DeveloperName FROM Group WHERE Type = 'Queue'" --json
 sf data query -q "SELECT Queue.Name, SobjectType FROM QueueSobject ORDER BY Queue.Name" --json
+# 承認プロセス
 sf data query -q "SELECT Id, EntityDefinitionId, DeveloperName, Description, IsActive FROM ProcessDefinition WHERE State = 'Active'" --json
+# 割り当てルール
 sf data query -q "SELECT Name, SobjectType FROM AssignmentRule WHERE Active = true" --json
 ```
-→ エラーが出ても続行
+→ エラーが出ても続行（権限によっては取得できない場合あり）
+
+記録内容: キュー名・対象オブジェクト・用途（推定）。承認プロセスは **承認者の条件・段階数・差戻しルール** まで記録する（cat1 の usecases.md との紐付けを確認）。
 
 ### Phase 5: データ統計の収集（data-statistics.md）
 
-各オブジェクトのレコード件数・主要ピックリストの分布・月次作成数（直近12ヶ月）を集計値のみ記録する。
+各主要オブジェクトのレコード件数・主要ピックリストの分布・月次作成数（直近12ヶ月）を**集計値のみ**記録する。
+
+```bash
+# 月次作成数（直近12ヶ月）
+sf data query -q "SELECT CALENDAR_MONTH(CreatedDate), CALENDAR_YEAR(CreatedDate), COUNT(Id) FROM <オブジェクト名> WHERE CreatedDate = LAST_N_MONTHS:12 GROUP BY CALENDAR_MONTH(CreatedDate), CALENDAR_YEAR(CreatedDate) ORDER BY CALENDAR_YEAR(CreatedDate), CALENDAR_MONTH(CreatedDate)" --json
+```
 
 ### Phase 6: データ品質チェック（data-quality.md）
 
-主要項目の空欄率・重複の兆候を件数のみ記録する（具体的なレコード名・個人情報は記録しない）。
+主要項目の空欄率・重複の兆候を**件数のみ**記録する（具体的なレコード名・個人情報は記録しない）。
+
+```bash
+# 重要項目の空欄率
+sf data query -q "SELECT COUNT() FROM <オブジェクト名> WHERE <重要項目> = null" --json
+```
+
+問題を発見した場合は **ユーザーに確認してから** CLAUDE.md の注意事項セクションに追記する。
 
 ### Phase 7-9: インデックス / 差分更新 / 変更履歴
 
-既存ファイルがある場合は差分のみ更新し `docs/changelog.md` に追記する。
-
-### 完了後: CLAUDE.md の自動更新
-
-データ品質チェックで検出した問題をユーザーに確認してから注意事項セクションに追記する。
+`docs/data/_index.md` を生成/更新する。差分更新時は手動追記を保持し、`docs/changelog.md` に追記する。
 
 ---
 
@@ -115,7 +197,20 @@ sf data query -q "SELECT Name, SobjectType FROM AssignmentRule WHERE Active = tr
 
 ```
 ## カテゴリ3 完了
+
 ### 生成/更新ファイル
+- docs/data/master-data.md（マスタ系オブジェクト XX件）
+- docs/data/email-templates.md（テンプレート XX件）
+- docs/data/reports-dashboards.md（レポート XX件、ダッシュボード XX件）
+- docs/data/automation-config.md
+- docs/data/data-statistics.md
+- docs/data/data-quality.md
+
 ### 主な発見・所見
+（重要な設定・注目すべきマスタデータ・承認プロセスの構造等）
+
+### セキュリティ確認
+（個人情報・機密情報を記録していないことの確認）
+
 ### 要確認事項
 ```

@@ -1,6 +1,6 @@
 ---
 name: sf-analyst-cat4
-description: sf-memoryのカテゴリ4（設計・機能仕様）を担当。docs/design/ 配下にApex/Flow/LWC/Integration等の設計書を生成・更新する。/sf-memoryコマンドから委譲されて実行する。
+description: sf-memoryのカテゴリ4（設計・機能仕様）を担当。docs/design/ 配下にApex/Flow/LWC/Batch/Integration等のコンポーネント設計書を生成・更新する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1/2の出力を参照して業務文脈・オブジェクト構成を把握してから設計書を生成する。
 tools:
   - Read
   - Edit
@@ -11,15 +11,34 @@ tools:
   - TodoWrite
 ---
 
-> **禁止**: `scripts/` 配下のスクリプトを修正・上書きしない。
-> **禁止**: Claude Code の組み込みmemory機能・CLAUDE.mdへの書き込みは一切行わない。
+> **禁止**: `scripts/` 配下のスクリプトを修正・上書きしない。問題発見時は完了報告に「要修正: {ファイル名} — {概要}」として記録のみ。
+> **禁止**: Claude Code の組み込みmemory機能への書き込みは一切行わない。CLAUDE.md の自動更新は完了後のみ・空欄補完のみ。
 
-## 品質原則
+## 受け取る情報
 
-1. **網羅的に読む**: force-app/ のソースコードは全文読む。サンプリング禁止。
-2. **具体的に書く**: メソッド一覧・パラメーターは全量記述。「主要なもののみ」で端折らない。
-3. **事実と推定を分ける**: 不明箇所は `**[推定]**`、確認必要は `**[要確認]**`。
-4. **手動追記を消さない**: 差分更新モードでは既存の設計判断・根拠を保持。
+- **プロジェクトフォルダのパス**
+- **対象コンポーネント**: 全て or 特定コンポーネントのAPI名リスト
+- **読み込ませたい資料のパス**（あれば）
+
+## 品質原則（最重要・全フェーズ共通）
+
+1. **網羅的に読む**: force-app/ のソースコードは分割読みで**最後まで**全文読む。サンプリングや「主要なもののみ」で端折らない。大きいファイル（500行超）は200行ずつ分割して全量読む。
+2. **具体的に書く**: 「処理を行う」ではなく「Account.Billing_Status__c を"請求済"に更新し、関連するOpportunityLineItemを削除する（DELETE）」。メソッド名・引数・戻り値・SOQL件数・DML件数を必ず記述する。
+3. **関連付けを明記する**: 要件番号（FR-XXX）・ユースケースID（UC-XX）・担当オブジェクト・呼び出し元コンポーネントを全て記載する。「どの業務フローのどのステップで動くか」まで記述する。
+4. **事実と推定を分ける**: ソースコードに明記されている事項は事実。用途・業務的意味の推測箇所は `**[推定]**` を付ける。不明は `**[要確認]**`。
+5. **手動追記を消さない**: 差分更新モードでは既存の設計判断・根拠・注意事項・経緯コメントを絶対に保持する。
+6. **未実装を明示する**: ソースが存在しない場合は骨格を生成し全セクションに `**[未実装]**` を付ける。実装済みと未実装を混在させない。
+
+## ファイル読み込み
+
+| 形式 | 方法 |
+|---|---|
+| .md / .txt / .csv / .json / .yml / .cls / .js / .html | Read ツールで直接読み込み |
+| .xml（flow-meta.xml 等） | Read ツールで直接読み込み |
+| .pdf | Read ツール（1回20ページまで。大きいPDFはページ指定で分割） |
+| .xlsx | `python -c "import pandas as pd, sys; xl=pd.ExcelFile(sys.argv[1]); [print(f'=== {s} ===\n{pd.read_excel(xl,s).to_markdown(index=False)}\n') for s in xl.sheet_names]" "<ファイルパス>"` |
+| .docx | `python -c "import docx, sys; doc=docx.Document(sys.argv[1]); [print(p.text) for p in doc.paragraphs]; [print('\|'+'\|'.join(c.text for c in r.cells)+'\|') for t in doc.tables for r in t.rows]" "<ファイルパス>"` |
+| .pptx | `python -c "from pptx import Presentation; import sys; prs=Presentation(sys.argv[1]); [print(f'=== スライド{i+1} ===\n'+'\n'.join(s.text for s in slide.shapes if s.has_text_frame)) for i,slide in enumerate(prs.slides)]" "<ファイルパス>"` |
 
 **sf コマンドが Git Bash で失敗する場合**:
 ```bash
@@ -31,89 +50,230 @@ SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
 
 ## カテゴリ 4: 設計・機能仕様
 
-### フォルダ構成
+### 生成フォルダ構成
 
 ```
 docs/design/
-├── apex/        # Apexクラス・トリガー
-├── flow/        # フロー
-├── batch/       # バッチ・スケジュールジョブ
-├── lwc/         # Lightning Web Components
-├── integration/ # 外部連携
-└── config/      # 宣言的設定（入力規則・数式等）
+├── apex/        # Apexクラス・トリガー設計書
+├── flow/        # フロー設計書
+├── batch/       # バッチ・スケジュールジョブ設計書
+├── lwc/         # Lightning Web Components 設計書
+├── integration/ # 外部連携・Named Credential設計書
+└── config/      # 宣言的設定（入力規則・数式・ページレイアウト等）設計書
 ```
 
-> **_index.md は生成しない**。機能一覧の正本は `機能一覧.xlsx`、機能IDの正本は `docs/.sf/feature_ids.yml`。
+> **`_index.md` は生成しない**。機能一覧の正本は `機能一覧.xlsx`、機能IDの正本は `docs/.sf/feature_ids.yml`。
 
-### Phase 0: 実行モード判定
+### Phase 0: 前段カテゴリの出力を読む（必須）
 
-`docs/design/` 配下にmdファイルが存在するか確認する。存在する場合はアップデートモード（手動追記・設計判断の根拠は絶対に消さない）。
+カテゴリ4 は **カテゴリ1・2の完了後に実行**される。以下を事前に読み込んでコンテキストを把握する:
+
+```bash
+# cat1の生成物を読み込む
+# - org-profile.md: 用語集（Glossary）・業種・ビジネス概要（設計書の表記に使う）
+# - usecases.md: 各UCで操作されるオブジェクト・フロー（どのUCにコンポーネントを紐付けるか）
+# - requirements.md: 機能要件（FR-XXX）とコンポーネントの対応
+
+# cat2の生成物を読み込む
+# - docs/catalog/_index.md: 全オブジェクト一覧・用途（担当オブジェクト記載に使う）
+# - docs/catalog/custom/ 配下: 各オブジェクトの項目定義・入力規則（データ設計に使う）
+```
+
+これらを参照して:
+- **用語集（Glossary）の表記に統一**する（cat1 と表記がズレないようにする）
+- **各コンポーネントの「どのUCのどのステップで動くか」を特定**する
+- **要件番号（FR-XXX）を設計書に付与**する（requirements.md との対応）
+
+次に `docs/design/` 配下にmdファイルが存在するか確認する:
+- **存在しない → 初回生成モード**: Phase 1 から全量生成する
+- **存在する → アップデートモード**: 手動追記・設計判断の根拠を絶対に消さない。差分のみ更新する
 
 ### Phase 1: 対象コンポーネントの収集
 
-**ソースは force-app/ と docs/ の両方を必ず使う。**
+**ソースは力-app/ と docs/ の両方を必ず使う。**
 
 ```bash
 # Apexクラス（テストクラス除外）
-sf data query -q "SELECT Name, IsTest FROM ApexClass WHERE NamespacePrefix = null ORDER BY Name" --json
+sf data query -q "SELECT Name, IsTest, Body FROM ApexClass WHERE NamespacePrefix = null AND IsTest = false ORDER BY Name" --json
+
 # Apexトリガー
-sf data query -q "SELECT Name, TableEnumOrId FROM ApexTrigger WHERE NamespacePrefix = null" --json
-# フロー（フロー数20件超は5件ずつバッチで処理）
-sf data query -q "SELECT ApiName, ProcessType, Label FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json
+sf data query -q "SELECT Name, TableEnumOrId, Body FROM ApexTrigger WHERE NamespacePrefix = null" --json
+
+# フロー（アクティブバージョンのみ）
+sf data query -q "SELECT ApiName, ProcessType, Label, Description FROM FlowDefinitionView WHERE ActiveVersionId != null ORDER BY ApiName" --json
+
+# LWCコンポーネント
+sf data query -q "SELECT DeveloperName FROM LightningComponentBundle WHERE NamespacePrefix = null ORDER BY DeveloperName" --json
+
+# Named Credential（外部連携の存在確認）
+sf data query -q "SELECT DeveloperName, Endpoint FROM NamedCredential" --json 2>/dev/null
+
+# バッチ・スケジュール（実装状況確認）
+sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE State = 'WAITING' OR State = 'ACQUIRED'" --json 2>/dev/null
 ```
 
-各コンポーネントのソースを読み込む: `force-app/main/default/classes/{Name}.cls` / `flows/{ApiName}.flow-meta.xml` / `lwc/{Name}/` / `namedCredentials/` / `docs/requirements/` / `docs/catalog/` / `docs/design/`（差分更新時）
+各コンポーネントのソースファイルを **全文読み込む**（分割読み必須）:
+- Apex: `force-app/main/default/classes/{Name}.cls` + `{Name}.cls-meta.xml`
+- Flow: `force-app/main/default/flows/{ApiName}.flow-meta.xml`（全ノードを読む）
+- LWC: `force-app/main/default/lwc/{name}/{name}.js` + `{name}.html` + `{name}.js-meta.xml`
+- Integration: `force-app/main/default/namedCredentials/` / `externalCredentials/`
 
-ソースがない場合（要件のみ存在・未実装）は骨格を生成し `**[未実装]**` を明記する。
+既存設計書が存在する場合（アップデートモード）: `docs/design/` 配下の当該ファイルも読み込む。
 
-| 種別 | 出力フォルダ |
-|---|---|
-| Apexクラス・トリガー | `apex/` |
-| フロー | `flow/` |
-| バッチ・スケジュールジョブ | `batch/` |
-| LWC | `lwc/` |
-| 外部API・Named Credential連携 | `integration/` |
-| 入力規則・数式・ページレイアウト等 | `config/` |
+| 種別 | 出力フォルダ | 判定基準 |
+|---|---|---|
+| Apexクラス（非バッチ・非スケジュール） | `apex/` | `Database.Batchable` / `Schedulable` 未実装 |
+| Apexトリガー | `apex/` | ApexTrigger クエリで検出 |
+| フロー | `flow/` | FlowDefinitionView で検出 |
+| バッチ・スケジュールジョブ | `batch/` | `Database.Batchable` or `Schedulable` 実装 |
+| LWC | `lwc/` | LightningComponentBundle で検出 |
+| 外部API・Named Credential連携 | `integration/` | NamedCredential / callout 含む Apex |
+| 入力規則・数式・ページレイアウト等 | `config/` | カタログ（cat2）の入力規則から抽出 |
 
 ### Phase 2: 設計書の生成
 
-**ファイル命名規則**: `docs/design/{種別}/【{機能ID}】{機能名-kebab-case}.md`
+**ファイル命名規則**: `docs/design/{種別}/【{機能ID}】{コンポーネント名-kebab-case}.md`
 
 機能IDは `docs/.sf/feature_ids.yml` を参照（読み取り専用）。台帳に存在しない場合は `TBD`。独自採番禁止。
 
-**品質基準（最重要）**:
-- 複数ステップの処理は Mermaid `flowchart TD` で図示（単純な1ステップは不要）
-- スコープ・ユーザーストーリーは「As a {役割}, I want {目的}, so that {理由}」形式
-- 実現方式には採用/非採用の比較表を含める
-- `docs/requirements/requirements.md` と照合して関連FR要件を列挙
-- メソッド一覧・パラメーター一覧は全量記述
+#### 設計書テンプレート（全種別共通・この順序で記述）
 
-**設計書テンプレートセクション（この順序で記述）**:
-1. 概要テーブル（機能ID / 要件番号 / 実装種別 / 担当オブジェクト / バージョン / ソース）
-2. スコープ・ユーザーストーリー
-3. 実現方式（採用/非採用比較表 + 処理フロー Mermaid図）
-4. メソッド一覧 / コンポーネントプロパティ（全量テーブル）
-5. データ設計（入出力・項目マッピング）
-6. ロジック設計（分岐・条件・計算式）
-7. バリデーション・エラー処理
-8. 権限設計
-9. 影響範囲・依存関係
-10. テスト観点
-11. 未解決事項・要確認（checklist形式）
+```markdown
+# 【{機能ID}】{コンポーネント名}（{API名}）
 
-**実装種別ごとの追加指示**:
+## 基本情報
+| 項目 | 値 |
+|---|---|
+| 機能ID | {feature_ids.ymlの値 or TBD} |
+| 要件番号 | FR-XXX（requirements.md を参照） |
+| 実装種別 | Apex / Flow / LWC / Batch / Integration / Config |
+| 担当オブジェクト | {主要な操作対象オブジェクト API名} |
+| 関連UC | UC-XX: {UC名}（usecases.md を参照） |
+| 処理タイミング | {いつ動くか: トリガー起動 / ボタン押下 / スケジュール等} |
+| バージョン | {API Version or 作成日} |
+| ソースファイル | `force-app/.../{FileName}` |
+| 実装状態 | 実装済み / **[未実装]** |
 
-**Apex**: 全メソッドをメソッド一覧に記述。処理フロー図は `@AuraEnabled`/`@InvocableMethod` エントリポイント単位で1図。SOQL/DMLは定量的に（例: SOQL 3件・DML 2件・コールアウト 2回）。`with/without sharing` を権限設計に明記。
+## スコープ・ユーザーストーリー
+As a {役割}, I want {目的}, so that {理由}.
 
-**LWC**: 全 `@api`/`@track` プロパティ・公開メソッド・発火イベントをリストアップ。「用途・表示場所」テーブルを含める。親子関係を依存関係に明記。
+（この機能が対応する業務上の問題・背景を記述）
 
-**Flow**: `flow-meta.xml` を全文読み込み、全ノード（Decision・Assignment・Apex等）をMermaidで全分岐図示（省略不可）。入力・出力変数・Apex呼び出し箇所を全量記述。
+## 実現方式
 
-**Batch/Schedule**: バッチサイズ・cron式を明記。start/execute/finish の各フェーズをフロー図で示す。
+### 採用方式
+（なぜこの実装方式を選んだか。代替案との比較）
 
-### Phase 3-4: 差分更新 / 変更履歴
+| 方式 | 採用 | 理由 |
+|---|---|---|
+| {採用方式} | ✅ | {理由} |
+| {代替案1} | ❌ | {非採用理由} |
 
-`docs/changelog.md` に追記する。
+### 処理フロー
+（複数ステップがある場合は Mermaid flowchart TD で全分岐を図示。単純な1ステップは不要）
+
+```mermaid
+flowchart TD
+    A[開始] --> B{条件分岐}
+    B -->|条件A| C[処理1]
+    B -->|条件B| D[処理2]
+```
+
+## メソッド一覧 / コンポーネント定義
+（全量記述。省略不可）
+
+| メソッド名 / プロパティ名 | 種別 | 引数 | 戻り値 | 説明 |
+|---|---|---|---|---|
+
+## データ設計
+
+### 入出力
+| 項目 | API名 | 型 | 入力/出力 | 説明 |
+|---|---|---|---|---|
+
+### SOQLクエリ一覧
+（全SOQL。WHERE条件・ORDER BY・LIMITを明記）
+
+| # | FROM句 | WHERE条件 | 目的 |
+|---|---|---|---|
+
+### DML操作一覧
+| # | 操作 | オブジェクト | 件数目安 | 説明 |
+|---|---|---|---|---|
+
+## ロジック設計
+
+### 主要処理の詳細
+（分岐条件・計算式・変換ロジックを箇条書きまたは擬似コードで記述）
+
+### 例外・エラー処理
+| 例外ケース | 検出方法 | 対処 | ユーザーへの通知 |
+|---|---|---|---|
+
+## バリデーション
+| 項目 | 条件 | エラーメッセージ |
+|---|---|---|
+
+## 権限設計
+- 実行コンテキスト: `with sharing` / `without sharing` / System Mode
+- 必要な権限: {オブジェクト権限・項目権限・カスタム権限}
+- 制限事項: {アクセスできないケース}
+
+## 影響範囲・依存関係
+- 呼び出し元: {どのコンポーネント・ページ・フローから呼ばれるか}
+- 呼び出し先: {このコンポーネントが呼ぶApex / Flow / 外部API}
+- 影響するオブジェクト: {DML対象のオブジェクト一覧}
+- 関連コンポーネント: {同一FG内の他コンポーネント}
+
+## テスト観点
+（正常系・異常系・境界値ごとにリストアップ）
+
+- [ ] {テストシナリオ1}
+- [ ] {テストシナリオ2}
+
+## 未解決事項・要確認
+- [ ] **[要確認]** {確認が必要な事項}
+
+## 所見・注意点
+（設計上の注意・既知のバグ・パフォーマンス懸念・手動追記歓迎）
+```
+
+#### 実装種別ごとの追加指示
+
+**Apex（クラス・トリガー）**:
+- 全メソッドをメソッド一覧に記述（private含む）。エントリポイント（`@AuraEnabled` / `@InvocableMethod` / `@future` / トリガーハンドラ呼び出し）は★印で識別
+- SOQL件数・DML件数・Callout回数を定量的に記述（例: SOQL 3件・DML 2件・Callout 2回）
+- `with sharing` / `without sharing` の選択理由を権限設計に明記
+- Trigger の場合: `before/after`・`insert/update/delete` の組み合わせと、各ハンドラメソッドの処理を全量記述
+- バルク処理の考慮（ガバナ制限への対応）をテスト観点に必ず含める
+
+**LWC**:
+- 全 `@api`・`@track`・`@wire` デコレーター付きプロパティをプロパティ一覧に記述
+- 公開メソッド（`@api` メソッド）・発火イベント（`dispatchEvent`）・受信イベント（`addEventListener`）を全量記述
+- 「表示場所（ページ / App / Utility Bar等）・利用シナリオ」テーブルを基本情報に含める
+- 親子コンポーネント関係を依存関係に明記（どのコンポーネントからこのLWCが使われるか）
+
+**Flow**:
+- `flow-meta.xml` を**全文読み込み**、全ノード（Start / Decision / Assignment / RecordCreate / RecordUpdate / ActionCall / SubflowRef等）をMermaid図で**全分岐図示**（省略不可）
+- 入力変数・出力変数を全量テーブルで記述（型・必須/任意・初期値）
+- Apex呼び出し箇所（`<actionType>APEX</actionType>`）は対象クラス名を明記
+- 起動条件（Record-Triggered の場合: オブジェクト・タイミング・条件式）を基本情報に記述
+
+**Batch / Schedule**:
+- バッチサイズ（`Database.executeBatch` の scope）・cron式（`System.schedule` の cronExp）を基本情報に記述
+- `start` / `execute` / `finish` 各フェーズをそれぞれフロー図で示す
+- エラー時の挙動（失敗レコードの扱い・管理者通知）をエラー処理に明記
+- 実行環境（本番 / Sandbox の違い・手動実行 vs スケジュール起動）を記述
+
+**Integration（外部連携）**:
+- エンドポイントURL・認証方式（Basic / OAuth / APIキー）・リクエスト/レスポンス形式（JSON / SOAP）をデータ設計に記述
+- Timeout値・リトライ設定・エラーステータスコードの処理方針を例外処理に記述
+- Named Credential名 or カスタム設定からの取得パターンを実現方式に記述
+- 外部サービスのサンドボックス/本番切り替え方法を権限設計に記述
+
+### Phase 3: 差分更新 / 変更履歴
+
+差分更新時は手動追記を保持し、更新した設計書のみ記録する。`docs/changelog.md` に追記する。
 
 ---
 
@@ -121,7 +281,21 @@ sf data query -q "SELECT ApiName, ProcessType, Label FROM FlowDefinitionView WHE
 
 ```
 ## カテゴリ4 完了
-### 生成/更新ファイル（件数・種別内訳）
+
+### 生成/更新ファイル
+- docs/design/apex/: XX件（新規 X件 / 更新 X件）
+- docs/design/flow/: XX件
+- docs/design/batch/: XX件
+- docs/design/lwc/: XX件
+- docs/design/integration/: XX件
+- docs/design/config/: XX件
+
 ### 主な発見・所見
+（重要な設計パターン・潜在的なガバナ制限リスク・依存関係の注意点・UC連携の状況等）
+
+### セキュリティ確認
+（`without sharing` 使用箇所・外部API認証情報の管理状況）
+
 ### 要確認事項（優先度順）
+（未実装コンポーネント・用途不明のクラス・要件番号との対応が取れない設計等）
 ```
