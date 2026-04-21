@@ -240,6 +240,9 @@ def render_er_diagram(
     for rel in relations:
         parent = rel["parent"]
         child = rel["child"]
+        # 数字のみのノード（表の行番号が誤混入した場合）はスキップ
+        if parent.isdigit() or child.isdigit():
+            continue
         pid = parent.replace("__c", "_c").replace("__", "_")
         cid = child.replace("__c", "_c").replace("__", "_")
         rel_type = rel.get("rel", "").lower()

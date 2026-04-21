@@ -229,21 +229,47 @@ def parse_catalog_index(path: Path) -> list[dict]:
 
 
 def parse_data_model(path: Path) -> list[dict]:
+    """親オブジェクト/子オブジェクト列を持つテーブルのみをパースする。"""
     if not path.exists(): return []
     t = path.read_text(encoding="utf-8")
     rels = []
+    in_rel_table = False
+    col_parent = col_child = col_rel = col_field = -1
+
     for line in t.splitlines():
-        if not line.strip().startswith("|"): continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        _SKIP = {"親オブジェクト", "---", "オブジェクト", "オブジェクト名", "API名",
-                 "ラベル", "役割", "種別", "タイプ"}
-        if len(cols) >= 3 and cols[0] and cols[0] not in _SKIP:
-            rel_val = cols[1] if len(cols) > 1 else ""
-            if rel_val in _SKIP:
-                continue
-            rels.append({"parent": cols[0], "rel": rel_val,
-                         "child": cols[2] if len(cols)>2 else "",
-                         "field": cols[3] if len(cols)>3 else ""})
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            in_rel_table = False
+            continue
+
+        cols = [c.strip() for c in stripped.strip("|").split("|")]
+
+        # ヘッダー行検出
+        if "親オブジェクト" in cols and "子オブジェクト" in cols:
+            col_parent = cols.index("親オブジェクト")
+            col_child  = cols.index("子オブジェクト")
+            col_rel    = next((i for i, c in enumerate(cols)
+                               if c in ("関係", "リレーション", "種別", "rel", "Rel")), -1)
+            col_field  = next((i for i, c in enumerate(cols)
+                               if "項目" in c or "field" in c.lower() or "参照" in c), -1)
+            in_rel_table = True
+            continue
+
+        if not in_rel_table:
+            continue
+
+        # セパレータ行をスキップ
+        if all(re.fullmatch(r'[-: ]+', c) for c in cols if c):
+            continue
+
+        parent = cols[col_parent] if col_parent < len(cols) else ""
+        child  = cols[col_child]  if col_child  < len(cols) else ""
+        rel    = cols[col_rel]    if 0 <= col_rel   < len(cols) else ""
+        field  = cols[col_field]  if 0 <= col_field < len(cols) else ""
+
+        if parent and child:
+            rels.append({"parent": parent, "rel": rel, "child": child, "field": field})
+
     return rels[:20]
 
 
