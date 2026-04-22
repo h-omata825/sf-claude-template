@@ -980,33 +980,207 @@ def _clean_io_text(text: str) -> str:
     return text.strip()
 
 
-def _short_title(responsibility: str, max_len: int = 25) -> str:
-    """責務テキストから短い日本語アクションタイトルを生成する（フローチャートノード用）。"""
+def _short_title(responsibility: str, max_len: int = 18) -> str:
+    """責務テキストから短い日本語アクションタイトルを生成する（フローチャートノード用）。
+
+    方針:
+      - 「〜を起点に、」「〜で起動される」「〜を受けて、」等のプリアンブルを除去
+      - 語の途中で切らない（粒度: 日本語連続ラン / 助詞境界）
+      - パターン1: `〜する画面フロー` → 「画面フローを〜する」
+      - パターン2: `〜を[キーワード]` → 「〜を[キーワード]する」（最後の出現を優先）
+      - パターン3: `[キーワード]` 単独 → 直前の日本語名詞句を補完
+      - 18 文字以内に収める
+    """
     clean = _clean_tech_business(responsibility)
     # 「Flowのアクションとして〜から」「〜クラスとして〜から」等のプリアンブルを除去
     clean = _re.sub(r'^[^。・\n]*?(?:アクション|クラス|ハンドラ|ハンドラー)として[^。・\n]*?から[、]?', '', clean).strip()
     clean = _PREAMBLE_RE.sub('', clean).strip()
+    # 追加プリアンブル: トリガー記述に限定（読点付きのみ／Phase 0で拾える"起動する画面フロー"は残す）
+    extra_preambles = [
+        r'^[^。、]{0,40}?を起点に[、,]\s*',
+        r'^[^。、]{0,40}?(?:で|から)起動される[、,]\s*',
+        r'^[^。、]{0,40}?により[、,]\s*',
+        r'^[^。、]{0,40}?を契機に[、,]\s*',
+    ]
+    for pat in extra_preambles:
+        clean = _re.sub(pat, '', clean)
     # 末尾の「〜の責務を持つ」「〜責務を担う」を除去
     clean = _re.sub(r'(?:の)?責務を(?:持つ|担う|持ち)?。?$', '', clean).strip()
 
+    _KW_PAIRS = [
+        ("判定",   "を判定する"),
+        ("検証",   "を検証する"),
+        ("確認",   "を確認する"),
+        ("チェック", "をチェックする"),
+        ("作成",   "を作成する"),
+        ("登録",   "を登録する"),
+        ("更新",   "を更新する"),
+        ("削除",   "を削除する"),
+        ("同期",   "を同期する"),
+        ("集約",   "を集約する"),
+        ("送信",   "を送信する"),
+        ("通知",   "を通知する"),
+        ("制御",   "を制御する"),
+        ("管理",   "を管理する"),
+        ("実行",   "を実行する"),
+        ("検知",   "を検知する"),
+        ("委譲",   "を委譲する"),
+        ("表示",   "を表示する"),
+    ]
+
+    # --- ヘルパー ---
+    _BOUNDARIES = set("、。・「」『』（）() \t\n→")
+
+    def _script_class(ch: str) -> str:
+        if _re.match(r'[ぁ-んァ-ヶ一-龯々ー]', ch):
+            return 'jp'
+        if _re.match(r'[a-zA-Z0-9_]', ch):
+            return 'en'
+        return 'other'
+
+    def _strip_leading_connectives(text: str) -> str:
+        """先頭の接続語・助詞・動詞テ形・数字カウンタ等を除去する。"""
+        prev = None
+        # ループで除去 pass を繰り返す（複合プレフィックスに対応）
+        while text != prev:
+            prev = text
+            text = _re.sub(r'^ー+', '', text)  # orphan 長音
+            text = _re.sub(r'^[0-9０-９]+(?:[つ個件本回件枚人]の?)?', '', text)
+            text = _re.sub(r'^(?:して|ために|ため|そして|また|により|ので|かつ|または|および)', '', text)
+            # 動詞テ形（連用形＋て）: 返して/受けて/分岐して/連動して etc.
+            text = _re.sub(r'^[ぁ-ん一-龯]{1,5}?て(?=[ぁ-んァ-ヶ一-龯])', '', text)
+            text = _re.sub(r'^(?:て|に|で|と|の|は|が|を|も|や|ず)+', '', text)
+            text = text.strip()
+        return text
+
+    def _trim_trailing_noise(text: str) -> str:
+        """末尾の非日本語ノイズ（"/", スペース等）を除去する。"""
+        return _re.sub(r'[^ぁ-んァ-ヶ一-龯々ー]+$', '', text)
+
+    def _refine_prefix(text: str, target_len: int = 10) -> str:
+        """プリフィクスを粒度よく整形する。助詞境界で分割し、最右の意味のある名詞句を返す。"""
+        text = _strip_leading_connectives(text)
+        text = _trim_trailing_noise(text)
+        # 助詞境界で分割し、最右のセグメントを優先
+        segs = _re.split(r'(?:を|は|が|に|で|と|から|まで|より)', text)
+        segs = [_trim_trailing_noise(_strip_leading_connectives(s)) for s in segs if s.strip()]
+        for seg in reversed(segs):
+            if 2 <= len(seg) <= target_len + 4 and _re.search(r'[一-龯ぁ-んァ-ヶ]', seg):
+                return seg
+        # 末尾の漢字クラスター
+        kanji_clusters = _re.findall(r'[一-龯]{2,}', text)
+        if kanji_clusters:
+            return kanji_clusters[-1]
+        # カタカナクラスター
+        kana_clusters = _re.findall(r'[ァ-ヶー]{2,}', text)
+        if kana_clusters:
+            return kana_clusters[-1]
+        return text[:target_len]
+
+    def _extract_jp_noun_backward(text_before: str) -> str:
+        """キーワード直前から遡り、スクリプト遷移／区切り文字で停止して名詞句を抽出する。"""
+        pos = len(text_before)
+        prev_class = None
+        stop_pos = 0
+        while pos > 0:
+            ch = text_before[pos - 1]
+            if ch in _BOUNDARIES:
+                stop_pos = pos
+                break
+            cls = _script_class(ch)
+            if prev_class == 'jp' and cls != 'jp':
+                stop_pos = pos
+                break
+            prev_class = cls
+            pos -= 1
+        text = text_before[stop_pos:].strip()
+        return _refine_prefix(text)
+
+    def _build(prefix: str, suffix: str, kw: str, clean: str = "") -> str:
+        # 日本語を含まないプリフィクスは棄却（"/" のようなノイズ混入を防ぐ）
+        if prefix and not _re.search(r'[ぁ-んァ-ヶ一-龯]', prefix):
+            prefix = ""
+        # prefix が空または貧弱なら、より広い範囲から拾う
+        if (not prefix or len(prefix) < 2) and clean:
+            m = _re.search(r'([ぁ-んァ-ヶ一-龯々ー]{2,10})を[^。\n]{0,40}?' + kw, clean)
+            if m:
+                candidate = _strip_leading_connectives(m.group(1))
+                if candidate and len(candidate) >= 2:
+                    prefix = candidate
+        if prefix and prefix.endswith('を') and suffix.startswith('を'):
+            prefix = prefix[:-1]
+        if prefix:
+            t = prefix + suffix
+        else:
+            t = kw + 'する'
+        return _re.sub(r'(を|の){2,}', r'\1', t)
+
+    # --- Phase 0: `(起動|実行|表示|遷移)する{名詞}` 複合パターン ---
+    m = _re.search(
+        r'(起動|実行|表示|遷移)する([ぁ-んァ-ヶ一-龯々ー]{2,10})(?=[。、・「」（）\s]|$)',
+        clean
+    )
+    if m:
+        verb = m.group(1)
+        noun = _strip_leading_connectives(m.group(2))
+        if noun:
+            return (noun + 'を' + verb + 'する')[:max_len]
+
+    # --- Phase 1: 厳格な `を[キーワード]` パターン（最後の出現を優先） ---
+    strict_results: list[str] = []
+    for kw, suffix in _KW_PAIRS:
+        marker = 'を' + kw
+        idx = clean.rfind(marker)
+        if idx == -1:
+            continue
+        prefix = _extract_jp_noun_backward(clean[:idx])
+        title = _build(prefix, suffix, kw, clean)
+        strict_results.append(title)
+
+    if strict_results:
+        valid = [t for t in strict_results if _re.match(r'^[ぁ-んァ-ヶ一-龯]', t)]
+        prefixed = [t for t in valid if len(t) >= 6]  # 名詞プリフィクス付きを優先
+        pool = prefixed or valid or strict_results
+        return min(pool, key=len)[:max_len]
+
+    # --- Phase 2: 緩い `[キーワード]` 単独パターン ---
+    lax_results: list[str] = []
+    for kw, suffix in _KW_PAIRS:
+        idx = clean.rfind(kw)
+        if idx == -1:
+            continue
+        # 列挙文脈（"/", "・", "、"）直後のキーワードはスキップ（意味的に動詞でない可能性が高い）
+        if idx > 0 and clean[idx - 1] in '/／・、,':
+            continue
+        prefix = _extract_jp_noun_backward(clean[:idx])
+        title = _build(prefix, suffix, kw, clean)
+        lax_results.append(title)
+
+    if lax_results:
+        valid = [t for t in lax_results if _re.match(r'^[ぁ-んァ-ヶ一-龯]', t)]
+        prefixed = [t for t in valid if len(t) >= 6]
+        pool = prefixed or valid or lax_results
+        return min(pool, key=len)[:max_len]
+
+    # --- Phase 3: フォールバック ---
     # 「〜を担当する」形式 → 先頭項目のみ
     m_tantou = _re.match(r'^(.+?)を担当する', clean)
     if m_tantou:
         items = [x.strip() for x in m_tantou.group(1).split('・') if x.strip()]
-        return (items[0] + 'を行う')[:max_len] if items else ''
+        if items:
+            return (items[0] + 'を行う')[:max_len]
 
-    # 「・」区切りリストは先頭1項目のみ使用
-    items = [x.strip() for x in clean.split('・') if x.strip()]
-    if items:
-        first = items[0]
-        m = _re.match(r'^(.+?)[。．]', first)
-        return (m.group(1) if m else first)[:max_len].strip()
+    # 先頭文の日本語名詞句を抽出
+    first_sent = _re.split(r'[。\n]', clean)[0].strip()
+    jp_tokens = [t for t in _re.findall(r'[ぁ-んァ-ヶ一-龯々ー]+', first_sent) if len(t) >= 2]
+    if jp_tokens:
+        base = jp_tokens[0]
+        if len(base) > max_len - 3:
+            base = base[:max_len - 3]
+        return (base + 'を行う')[:max_len]
 
-    m = _re.match(r'^(.+?)[。．\n]', clean)
-    title = (m.group(1) if m else clean)[:max_len].strip()
-    if title and not _re.search(r'[するなる行うれるわれる]$', title):
-        title = title + 'を行う'
-    return title[:max_len]
+    # 最後の保険: 18 文字で丸める
+    return clean[:max_len]
 
 
 def _extract_actor(token: str) -> str:

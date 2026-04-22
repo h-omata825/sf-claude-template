@@ -470,14 +470,30 @@ def _short_label(text: str, max_len: int = 18) -> str:
 
 
 def _wrap_jp(text: str, width: int = 12) -> str:
-    """日本語テキストを width 文字で折り返す（\\n区切り）。切り捨てしない。"""
+    """日本語テキストを width 文字で折り返す（\\n区切り）。
+    助詞境界（を/に/で/と/の/、/。/・）を優先して折り返し、「す/る」分断を避ける。
+    """
     text = (text or "").strip()
+    if len(text) <= width:
+        return text
     lines = []
-    while len(text) > width:
-        lines.append(text[:width])
-        text = text[width:]
-    if text:
-        lines.append(text)
+    remaining = text
+    _PARTICLES = "をにでとのはがも、。・"
+    while len(remaining) > width:
+        # width ± 2 の範囲で最適な助詞境界を後ろから探す
+        best_idx = -1
+        search_end = min(width + 2, len(remaining) - 2)
+        search_start = max(3, width // 2)
+        for i in range(search_end, search_start - 1, -1):
+            if i - 1 < len(remaining) and remaining[i - 1] in _PARTICLES:
+                best_idx = i
+                break
+        if best_idx == -1:
+            best_idx = width
+        lines.append(remaining[:best_idx])
+        remaining = remaining[best_idx:]
+    if remaining:
+        lines.append(remaining)
     return "\\n".join(lines)
 
 
