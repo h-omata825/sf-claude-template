@@ -53,9 +53,22 @@ docs/design/
 
 > **`_index.md` は生成しない**。機能一覧の正本は `機能一覧.xlsx`、機能IDの正本は `docs/.sf/feature_ids.yml`。
 
-### Phase 0: 前段カテゴリの出力を読む（必須）
+### Phase 0: scan_features.py を実行して feature_ids.yml を最新化
 
-カテゴリ4 は **カテゴリ1・2の完了後に実行**される。以下を事前に読み込んでコンテキストを把握する:
+カテゴリ4 は **カテゴリ1・2の完了後に実行**される。設計書にIDを付与するため、**最初に必ず** `scan_features.py` を実行して `feature_ids.yml` を最新化する。
+
+```bash
+python {project_dir}/scripts/python/sf-doc-mcp/scan_features.py \
+  --project-dir "{project_dir}"
+```
+
+> `feature_ids.yml` は `scan_features.py` が自動管理するファイル。手編集禁止。初回実行時もこのステップでIDが採番されるため、設計書は最初から `【F-xxx】` 形式で生成できる。
+
+---
+
+### Phase 0.5: 前段カテゴリの出力を読む（必須）
+
+以下を事前に読み込んでコンテキストを把握する:
 
 ```bash
 # cat1の生成物を読み込む
@@ -119,12 +132,72 @@ sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE St
 | 外部API・Named Credential連携 | `integration/` | NamedCredential / callout 含む Apex |
 | 入力規則・数式・ページレイアウト等 | `config/` | カタログ（cat2）の入力規則から抽出 |
 
+### Phase 1.5: ハッシュチェック（変更なしスキップ）
+
+> **目的**: ソースに変更がないコンポーネントをスキップしてLLM呼び出しを節約する。
+
+各コンポーネントの処理前に以下を実行し、前回実行時からソースが変わっていない場合はスキップする。
+
+```bash
+python -c "
+import hashlib, json, pathlib, yaml, sys
+
+proj = pathlib.Path(r'{project_dir}')
+cache_path = proj / 'docs' / '.sf' / 'cat4_hash_cache.json'
+cache = json.loads(cache_path.read_text(encoding='utf-8')) if cache_path.exists() else {}
+
+api_name = '{api_name}'
+src_paths = {source_file_paths}  # Phase 1 で特定したソースファイルパスのリスト
+
+h = hashlib.md5()
+for p in sorted(src_paths):
+    path = pathlib.Path(p)
+    if path.exists():
+        h.update(path.read_bytes())
+current_hash = h.hexdigest()
+
+if cache.get(api_name) == current_hash:
+    print('SKIP')
+else:
+    print(f'UPDATE:{current_hash}')
+"
+```
+
+- `SKIP` → Phase 2 をスキップして次のコンポーネントへ
+- `UPDATE:{hash}` → Phase 2 で設計書を生成/更新し、完了後にキャッシュを更新する
+
+**キャッシュ更新**（Phase 2 完了後）:
+```bash
+python -c "
+import json, pathlib
+proj = pathlib.Path(r'{project_dir}')
+cache_path = proj / 'docs' / '.sf' / 'cat4_hash_cache.json'
+cache = json.loads(cache_path.read_text(encoding='utf-8')) if cache_path.exists() else {}
+cache['{api_name}'] = '{new_hash}'
+cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding='utf-8')
+"
+```
+
+---
+
 ### Phase 2: 設計書の生成
 
 **ファイル命名規則**: `docs/design/{種別}/【{機能ID}】{コンポーネント名-kebab-case}.md`
 
-機能IDは `docs/.sf/feature_ids.yml` を参照（読み取り専用）。台帳に存在しない場合は `TBD`。独自採番禁止。
-> `docs/.sf/feature_ids.yml` は **手動メンテナンスの台帳**（自動生成されない）。初回実行時は存在しないため機能IDは全て TBD になる。ファイルの作成・採番はプロジェクトリーダーが行う。
+機能IDは `docs/.sf/feature_ids.yml` を参照（読み取り専用）。Phase 0 で scan_features.py を実行済みのため、IDは必ず存在する。独自採番・TBD使用禁止。
+
+**既存 【TBD】ファイルの処理**: 設計書を書く前に同名の `【TBD】{コンポーネント名}.md` が存在する場合は削除してから `【F-xxx】` ファイルを作成する。
+
+```bash
+# 【TBD】ファイルの削除（例: billing-controller.md の場合）
+python -c "
+import pathlib, glob
+design_dir = pathlib.Path(r'{project_dir}/docs/design')
+for tbd in design_dir.rglob('【TBD】{kebab_name}.md'):
+    tbd.unlink()
+    print(f'削除: {tbd}')
+"
+```
 
 #### 設計書テンプレート（全種別共通・この順序で記述）
 
