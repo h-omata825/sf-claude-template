@@ -12,7 +12,11 @@ Salesforce プロジェクトの設計書を生成します。
 - テキスト入力（パス・名前等）はチャットで直接聞く
 
 **テンプレート置換ルール（厳守）:**
-- Python インラインコード内の `{project_dir}` `{output_dir}` `{author}` `{version_increment}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash に渡す前に必ず確定値で置換すること。同じ規則は `.claude/agents/sf-design-step*.md` 等の連鎖エージェントでも適用される。
+- Python インラインコード内の `{project_dir}` `{output_dir}` `{author}` `{version_increment}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash に渡す前に、値の種別に応じて以下の規則で置換する:
+  - **パス値** (`{project_dir}` / `{output_dir}` 等): Windows パスの `\` はすべて `/` に置換し、末尾の `/` は除去する（例: `C:\work\` → `C:/work`）。raw string 末尾 `\` による SyntaxError を回避するため。`pathlib.Path` は Windows でも forward slash を正しく解釈する。
+  - **任意文字列値** (`{author}` 等): シングルクォートで囲まれた箇所 (`'{author}'`) への埋め込み時は、値内の `'` を `\'` にエスケープする（例: `O'Brien` → `O\'Brien`）。
+  - **列挙値** (`{version_increment}`): `minor` / `patch` / `major` 以外が指定された場合は `minor` にフォールバックし、ユーザーに「未知の値のためminorに置換」と警告する。
+- 同じ規則は `.claude/agents/sf-design-step*.md` 等の連鎖エージェントでも適用される。委譲時に渡す値も上記規則で正規化済みの状態にすること。
 
 ---
 
@@ -153,7 +157,7 @@ print('project_name:' + name)
 確定した値を保存する（次回のデフォルト値として使用）:
 ```bash
 python -c "
-import pathlib
+import pathlib, sys
 try:
     import yaml
     author_f = pathlib.Path('docs/.sf/.author_tmp')
@@ -166,7 +170,8 @@ try:
     for f in [author_f, outdir_f]:
         f.unlink(missing_ok=True)
 except Exception as e:
-    print('設定の保存に失敗:', e)
+    print('設定の保存に失敗:', e, file=sys.stderr)
+    sys.exit(1)
 "
 ```
 
