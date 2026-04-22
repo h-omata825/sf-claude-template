@@ -47,11 +47,13 @@ docs/design/
 ├── flow/        # フロー設計書
 ├── batch/       # バッチ・スケジュールジョブ設計書
 ├── lwc/         # Lightning Web Components 設計書
-├── integration/ # 外部連携・Named Credential設計書
-└── config/      # 宣言的設定（入力規則・数式・ページレイアウト等）設計書
+├── vf/          # Visualforce ページ・コントローラー設計書
+├── aura/        # Aura コンポーネント設計書
+└── integration/ # 外部連携・Named Credential設計書
 ```
 
 > **`_index.md` は生成しない**。機能一覧の正本は `機能一覧.xlsx`、機能IDの正本は `docs/.sf/feature_ids.yml`。
+> **`config/` は生成しない**。入力規則・権限セット・カスタムメタデータ等の宣言的設定はコードではないため cat4 の対象外。cat3（マスタデータ・自動化設定）の範囲。
 
 ### Phase 0: scan_features.py を実行して feature_ids.yml を最新化
 
@@ -108,6 +110,12 @@ sf data query -q "SELECT ApiName, ProcessType, Label, Description FROM FlowDefin
 # LWCコンポーネント
 sf data query -q "SELECT DeveloperName FROM LightningComponentBundle WHERE NamespacePrefix = null ORDER BY DeveloperName" --use-tooling-api --json
 
+# Visualforce ページ
+sf data query -q "SELECT Name, ControllerType, ControllerKey FROM ApexPage WHERE NamespacePrefix = null ORDER BY Name" --use-tooling-api --json 2>/dev/null
+
+# Aura コンポーネント
+sf data query -q "SELECT DeveloperName FROM AuraDefinitionBundle WHERE NamespacePrefix = null ORDER BY DeveloperName" --use-tooling-api --json 2>/dev/null
+
 # Named Credential（外部連携の存在確認）
 sf data query -q "SELECT DeveloperName, Endpoint FROM NamedCredential" --json 2>/dev/null
 
@@ -119,6 +127,8 @@ sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE St
 - Apex: `force-app/main/default/classes/{Name}.cls` + `{Name}.cls-meta.xml`
 - Flow: `force-app/main/default/flows/{ApiName}.flow-meta.xml`（全ノードを読む）
 - LWC: `force-app/main/default/lwc/{name}/{name}.js` + `{name}.html` + `{name}.js-meta.xml`
+- VF: `force-app/main/default/pages/{Name}.page` + 対応する `*Controller.cls`
+- Aura: `force-app/main/default/aura/{name}/{name}.cmp` + `{name}Controller.js`
 - Integration: `force-app/main/default/namedCredentials/` / `externalCredentials/`
 
 既存設計書が存在する場合（アップデートモード）: `docs/design/` 配下の当該ファイルも読み込む。
@@ -130,8 +140,9 @@ sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE St
 | フロー | `flow/` | FlowDefinitionView で検出 |
 | バッチ・スケジュールジョブ | `batch/` | `Database.Batchable` or `Schedulable` 実装 |
 | LWC | `lwc/` | LightningComponentBundle で検出 |
+| Visualforce ページ・コントローラー | `vf/` | ApexPage クエリで検出 / `*Controller` クラスで VF 向けと判定 |
+| Aura コンポーネント | `aura/` | AuraDefinitionBundle で検出 |
 | 外部API・Named Credential連携 | `integration/` | NamedCredential / callout 含む Apex |
-| 入力規則・数式・ページレイアウト等 | `config/` | カタログ（cat2）の入力規則から抽出 |
 
 ### Phase 1.5: ハッシュチェック（変更なしスキップ）
 
@@ -187,7 +198,9 @@ cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding=
 
 機能IDは `docs/.sf/feature_ids.yml` を参照（読み取り専用）。Phase 0 で scan_features.py を実行済みのため、IDは必ず存在する。独自採番・TBD使用禁止。
 
-**既存 【TBD】ファイルの処理**: 設計書を書く前に同名の `【TBD】{コンポーネント名}.md` が存在する場合は削除してから `【F-xxx】` ファイルを作成する。
+**1コンポーネント1ファイル必須（厳守）**: 複数コンポーネントを1ファイルにまとめること（カタログ・一覧・範囲ID表記）は**禁止**。Salesforce標準ボイラープレート・テストモック・自動生成クラスも含め、全コンポーネントに個別ファイルを作成する。
+
+**既存 【TBD】ファイルの処理**: 設計書を書く前に同名の `【TBD】{コンポーネント名}.md` が存在する場合は削除してから `【CMP-xxx】` ファイルを作成する。
 
 ```bash
 # 【TBD】ファイルの削除（例: billing-controller.md の場合）
@@ -208,9 +221,9 @@ for tbd in design_dir.rglob('【TBD】{kebab_name}.md'):
 ## 基本情報
 | 項目 | 値 |
 |---|---|
-| 機能ID | {feature_ids.ymlの値 or TBD} |
+| 機能ID | {feature_ids.ymlの値} |
 | 要件番号 | FR-XXX（requirements.md を参照） |
-| 実装種別 | Apex / Flow / LWC / Batch / Integration / Config |
+| 実装種別 | Apex / Trigger / Flow / LWC / Aura / Visualforce / Batch / Integration |
 | 担当オブジェクト | {主要な操作対象オブジェクト API名} |
 | 関連UC | UC-XX: {UC名}（usecases.md を参照） |
 | 処理タイミング | {いつ動くか: トリガー起動 / ボタン押下 / スケジュール等} |
