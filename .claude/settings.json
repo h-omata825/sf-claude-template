@@ -35,7 +35,11 @@
       "Bash(sf project deploy start --target-org *prod*)",
       "Bash(sf project deploy start --target-org *production*)",
       "Bash(rm -rf *)",
-      "Bash(rm -r .claude*)"
+      "Bash(rm -r .claude*)",
+      "Write(.claude/**)",
+      "Edit(.claude/**)",
+      "Write(scripts/**)",
+      "Edit(scripts/**)"
     ]
   },
 
