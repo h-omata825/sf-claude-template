@@ -1,5 +1,5 @@
 ---
-description: "Salesforce 設計書（基本設計・詳細設計・プログラム設計・機能一覧）を生成する。詳細設計/プログラム設計/機能一覧の3種別をマルチセレクトで選択して実行。"
+description: "Salesforce 設計書（詳細設計・プログラム設計・機能一覧）を生成する。詳細設計/プログラム設計/機能一覧の3種別をマルチセレクトで選択して実行。"
 ---
 
 Salesforce プロジェクトの設計書を生成します。
@@ -10,6 +10,9 @@ Salesforce プロジェクトの設計書を生成します。
 - **1質問1回答**: 複数の質問を1つの AskUserQuestion にまとめない。必ず1問ずつ順番に聞く
 - **選択肢はデフォルト/スキップ値のみ**: choices に「Other」「自由入力」等は含めない
 - テキスト入力（パス・名前等）はチャットで直接聞く
+
+**テンプレート置換ルール（厳守）:**
+- Python インラインコード内の `{project_dir}` `{output_dir}` `{author}` `{version_increment}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash に渡す前に必ず確定値で置換すること。同じ規則は `.claude/agents/sf-design-step*.md` 等の連鎖エージェントでも適用される。
 
 ---
 
@@ -198,6 +201,10 @@ target_group_ids: ""
 step0_3_done: false
 ```
 
+> **パラメータ補足**:
+> - `target_group_ids`: 対象グループIDリスト（カンマ区切り文字列）。空文字の場合 step2 内で AskUserQuestion により選択する。
+> - `step0_3_done`: `true` なら step1 からの連鎖呼び出し（グループ→機能ID変換済み）、`false` なら単独実行（step2 内で Phase 0 から実施）。
+
 ### 機能一覧のみ選択された場合 → sf-design-step3 エージェント
 
 ```
@@ -217,7 +224,7 @@ version_increment: {version_increment}
 ```bash
 python -c "
 import shutil, pathlib
-for subdir in ['02_詳細設計', '03_プログラム設計']:
+for subdir in ['01_基本設計', '02_詳細設計', '03_プログラム設計']:
     tmp = pathlib.Path(r'{output_dir}') / subdir / '.tmp'
     if tmp.exists():
         shutil.rmtree(tmp, ignore_errors=True)
@@ -244,7 +251,10 @@ print('クリーンアップ完了')
   生成先: {output_dir}/03_プログラム設計/
   生成数: {n} 件
 
-⚠️ 要確認: ...
+⚠️ 要確認:
+- {FG-XXX}: 生成失敗の概要（例: 関連オブジェクトが特定できなかった）
+- 未分類コンポーネント {n} 件
+（要確認事項がない場合はこのセクションごと省略）
 ```
 
 ---
