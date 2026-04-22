@@ -126,10 +126,10 @@ git diff --name-only HEAD force-app/
   □ cat3: マスタデータ/自動化設定
     → フロー外の自動化・メールテンプレート・マスタデータ変更時
   □ cat4: コンポーネント設計書
-    → Apex / Flow / LWC / Trigger 変更時
+    → Apex / Trigger / Flow / LWC / Aura / Visualforce / Batch / Integration 全コンポーネント変更時
     対象: {コンポーネント名}
   □ cat5: 機能グループ（FG）再定義
-    → 新規コンポーネント追加・大規模改修時
+    → コンポーネント追加・削除時、または変更がFGの責務・範囲に影響する場合（cat4変更と連動して判断）
 
 ■ /sf-design / /sf-doc（成果物の再生成）
   □ 機能一覧.xlsx        — 新規コンポーネント追加・削除時（cat4完了後）
