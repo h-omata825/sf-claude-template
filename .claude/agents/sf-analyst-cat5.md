@@ -227,6 +227,26 @@ FG確定後、以下の観点で割り当てを検証する:
 
 差分更新モードの場合は手動修正（FG名変更・コメント・手動割り当て）を保持したまま、新規コンポーネントのみ追記する。
 
+### Phase 3.5: 整合チェック
+
+`feature_groups.yml` 生成直後に `check_feature_groups.py` を実行して、`feature_ids.yml` との整合性を検証する（sf-design より前のこの段階で不整合を潰す）。
+
+```bash
+python scripts/python/sf-doc-mcp/check_feature_groups.py \
+  --groups "{project_dir}/docs/.sf/feature_groups.yml" \
+  --ids    "{project_dir}/docs/.sf/feature_ids.yml"
+```
+
+検出内容:
+- **ERROR（exit=1）**: 幻CMP — `feature_groups.yml` にあるが `feature_ids.yml` に存在しない CMP。FG側から削除するか、`feature_ids.yml` を再生成（cat4 Phase 0 の `scan_features.py`）すること
+- **WARNING**: `feature_ids.yml` で `deprecated=true` の CMP が FG に残っている。意図的な残置か確認し、不要なら FG から削除
+
+ERROR が出た場合は原因を特定して修正後、`feature_groups.yml` を再生成してから再チェックする。WARNING のみの場合は最終報告に記録して続行可。
+
+**正常扱い（検出しない）**:
+- 孤児CMP（`feature_ids.yml` にあるが FG に無い）— 単独で関連性のないコンポーネントは詳細設計で扱わないため
+- 重複CMP（複数FGに登録）— 1 CMP が複数グループで使われるのは正常運用
+
 ### Phase 4: 変更履歴の記録
 
 `docs/logs/changelog.md` にカテゴリ5実行履歴を追記する。
@@ -253,4 +273,7 @@ FG確定後、以下の観点で割り当てを検証する:
 
 ### 要確認事項
 （割り当て根拠が弱いFG・命名の適切性・統合/分割の判断等）
+
+### 整合チェック結果（Phase 3.5）
+（ERROR 件数 / WARNING 件数 / 対応内容。全て OK の場合は「OK」と記載）
 ```
