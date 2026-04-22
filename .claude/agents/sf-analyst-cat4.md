@@ -360,87 +360,17 @@ flowchart TD
 
 ---
 
-### Phase 4: 機能グループ定義（feature_groups.yml）の生成・更新
+### Phase 4: sf-analyst-cat5 へ委譲（機能グループ定義）
 
-設計書の生成（Phase 0〜3）が完了した後に実行する。Phase 2 で生成した設計書の「関連UC」情報を活用してFGを推論する精度が上がるため、設計書生成と同じエージェント実行内で続けて行う。
+設計書の生成（Phase 0〜3）が完了した後、Agent ツールで sf-analyst-cat5 に委譲する。
 
-#### 生成ファイル
+**委譲時に渡す情報**:
+- プロジェクトフォルダパス
+- 対象コンポーネントAPI名（受け取った値をそのまま渡す）
+- 対象機能グループID（受け取った値をそのまま渡す）
+- docs/design/ パス（cat4 が生成した設計書の「関連UC」フィールドを cat5 が参照するため）
 
-`docs/.sf/feature_groups.yml` — UC-anchor方式で全コンポーネントを業務機能グループ（FG）に分類したYAML。sf-design 詳細設計の1ファイル生成単位（1FG = 1詳細設計.xlsx）。
-
-#### スキーマ
-
-```yaml
-# docs/.sf/feature_groups.yml
-# sf-memoryカテゴリ4が生成。sf-design[詳細設計]の生成単位。
-# 手動追記・修正可（次回実行時に保持される）
-generated_at: "YYYY-MM-DD"
-groups:
-  - group_id: "FG-001"
-    name_ja: "商談受注後処理"
-    name_en: "OpportunityPostProcess"
-    description: "受注確定後に請求レコードと納品スケジュールを自動生成する処理群"
-    trigger: "Opportunity.StageName が '受注確定' に更新されたとき（トリガー起動）"
-    uc_id: "UC-03"
-    feature_ids:
-      - "CMP-001"
-      - "CMP-002"
-    components:
-      - "OpportunityTrigger"
-      - "OpportunityHandler"
-      - "BillingCreator"
-    related_objects:
-      - "Opportunity"
-      - "Billing__c"
-    related_fgs:
-      - "FG-002"
-  - group_id: "FG-CMN"
-    name_ja: "共通基盤"
-    name_en: "Common"
-    description: "特定のUCに紐付かない汎用ユーティリティ・バッチ基盤・認証・通知等の処理群"
-    trigger: "各UCから呼び出し or スケジュール起動"
-    uc_id: null
-    feature_ids: []
-    components: []
-    related_objects: []
-```
-
-#### Step 1: コンポーネント一覧の収集
-
-Phase 1 で収集済みのコンポーネント一覧を使用する（再収集不要）。対象が絞り込まれている場合はその対象のみに限定する。
-
-> **FG-IDで絞り込んだ場合**: 既存 feature_groups.yml を読み込み、指定FGに属するコンポーネントのみを対象とする。他FGは変更しない。
-
-#### Step 2: UC-anchor方式でFGを推論
-
-**原則: FGの区切りはUC（業務単位）に固定する。命名パターンで推測しない。**
-
-1. `docs/flow/usecases.md` を全文読み込み、各UCから `uc_id` / `name` / `related_objects` / `trigger` / `actors` を抽出する（FG候補リスト = UCリスト）
-   - `usecases.md` が存在しない場合は処理を中断してユーザーに依頼する
-2. 各コンポーネントの `operated_objects` を特定する（Phase 2 で生成した設計書の「担当オブジェクト」「関連UC」を最優先で参照）
-3. `operated_objects` × UC の `related_objects` を突き合わせてコンポーネントをUCに割り当てる
-
-**割り当てルール（優先順位順）**:
-
-| 優先度 | ルール |
-|---|---|
-| 1 | 設計書の「関連UC」フィールドが存在する場合はそれを使用 |
-| 2 | Triggerの `TableEnumOrId` と UC の `related_objects` が一致 |
-| 3 | 全 `operated_objects` が1UCの `related_objects` に含まれる |
-| 4 | 最もマッチ数が多いUCを primary、残りは `related_fgs` に |
-| 5 | 対応なし → `FG-CMN（共通基盤）`（孤立コンポーネント候補として記録） |
-
-**マージ・分割の判断**:
-- 割り当て1件以下のUCが連続かつ同一オブジェクト中心 → 1FGに統合（ただし actor が異なる場合はマージしない）
-- 1UCに15件超かつ独立した処理フェーズが明確 → フェーズ単位で分割
-
-**FG-CMN（共通基盤）** は必ず作成し、`group_id: "FG-CMN"` を固定IDとして使用する。全体の30%超が FG-CMN に集まった場合は再調査する。
-
-#### Step 3: YAMLの生成
-
-`docs/.sf/` フォルダが存在しない場合は作成してからYAMLを書き込む。`feature_ids.yml` が存在する場合は必ず読み込み、コンポーネントAPI名を feature_ids の ID に変換してから `feature_ids` フィールドに記載する。
-
-差分更新モードの場合は既存の手動修正（FG名変更・コメント・手動割り当て）を保持したまま、新規コンポーネントのみ追記する。
+> cat4 が生成した設計書の「関連UC」フィールドを cat5 が活用することで、FGの割り当て精度が上がる。
 
 ---
 
@@ -456,15 +386,7 @@ Phase 1 で収集済みのコンポーネント一覧を使用する（再収集
 - docs/design/lwc/: XX件
 - docs/design/integration/: XX件
 
-### 生成/更新ファイル（機能グループ定義）
-- docs/.sf/feature_groups.yml（FG XX件、コンポーネント XX件）
-
-### 機能グループ一覧
-| group_id | name_ja | uc_id | コンポーネント数 | 備考 |
-|---|---|---|---|---|
-
-### 孤立コンポーネント候補（FG-CMN に割り当て）
-（どのUCとも対応付けられなかったコンポーネント一覧・用途推定・要確認事項）
+（機能グループ定義は sf-analyst-cat5 が続けて実行します）
 
 ### 主な発見・所見
 （重要な設計パターン・潜在的なガバナ制限リスク・依存関係の注意点・UC連携の状況等）
@@ -481,9 +403,9 @@ Phase 1 で収集済みのコンポーネント一覧を使用する（再収集
 
 ■ /sf-design / /sf-doc（成果物の再生成）
   □ 機能一覧.xlsx        — 新規コンポーネント追加・削除があった場合
-  □ 基本設計.xlsx        — FG構成が変わった場合・仕様変更を伴う場合  対象FG: {FG名}
-  □ 詳細設計.xlsx        — 更新コンポーネントが属するFG  対象FG: {FG名}
+  □ 詳細設計.xlsx        — 更新コンポーネントが属するFG（cat5完了後）  対象FG: {FG名}
   □ プログラム設計書.xlsx  — 更新したコンポーネント  対象: {コンポーネント名}
+  □ 基本設計.xlsx        — FG構成が変わった場合（cat5完了後）  対象FG: {FG名}
 
 ※ cat2（オブジェクト変更）も同時に行った場合はオブジェクト定義書.xlsx の再生成も推奨
 ```
