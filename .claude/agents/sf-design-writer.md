@@ -460,6 +460,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py \
 
 ## Phase 4: 後処理・完了報告（必ず実行・スキップ禁止）
 
+[共通ルール参照](.claude/CLAUDE.md#一時ファイルの後片付け全エージェント共通)
+
 tmp_dir を削除し、output_dir およびプロジェクトルート（CWD）に残った一時ファイルも合わせてクリーンアップする:
 ```bash
 python -c "

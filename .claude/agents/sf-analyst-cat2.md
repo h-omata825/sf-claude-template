@@ -196,6 +196,21 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, Field FROM FieldDefi
 
 `docs/logs/changelog.md` に追記する（日時・実行カテゴリ・生成/更新ファイル一覧・主な変更点）。
 
+### Phase 最終: クリーンアップ
+
+[共通ルール参照](.claude/CLAUDE.md#一時ファイルの後片付け全エージェント共通)
+
+本エージェントが実行中に作成した作業フォルダ・一時ファイルを削除してから完了報告する:
+
+```bash
+# 例: describes/*.json を置いた作業フォルダ（${TEMP}/<project_name>-cat2/ 等）
+python -c "import shutil; shutil.rmtree(r'<作成した作業フォルダの実パス>', ignore_errors=True)"
+```
+
+- 作業フォルダを作成していなければスキップしてよい
+- エラー終了時は削除しない（デバッグ用に残す）
+- 削除後にシステム Temp 配下へ作業フォルダが残っていないことを確認
+
 ---
 
 ## 最終報告
