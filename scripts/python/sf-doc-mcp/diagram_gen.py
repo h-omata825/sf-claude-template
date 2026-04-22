@@ -391,7 +391,7 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
                 penwidth="2",
                 fontname=FONT_JP,
                 fontcolor=C_LANE_HDR,
-                fontsize="13",
+                fontsize="15",
             )
             for lane_name in group_to_lanes[grp_name]:
                 bg = _LANE_COLORS[lane_color_idx % len(_LANE_COLORS)]
@@ -405,12 +405,14 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
                         penwidth="1",
                         fontname=FONT_JP,
                         fontcolor=C_LANE_HDR,
-                        fontsize="10",
+                        fontsize="12",
                     )
                     for step in steps_in:
                         if str(step.get("lane", "")) == lane_name:
                             sid = str(step.get("id", ""))
                             label = str(step.get("label", "") or step.get("title", "") or step.get("name", "") or sid)
+                            # 長いラベルは折り返し
+                            label = _wrap_jp(label, 16)
                             sg.node(
                                 sid,
                                 label=label,
@@ -419,11 +421,12 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
                                 fillcolor=C_STEP_BG,
                                 fontcolor=C_STEP_FG,
                                 fontname=FONT_JP,
-                                fontsize="10",
-                                width="1.6",
-                                height="0.6",
+                                fontsize="12",
+                                width="2.2",
+                                height="0.9",
                                 penwidth="1.5",
                                 color=C_STEP_BORDER,
+                                margin="0.22,0.12",
                             )
 
     # 未分類ステップ（lane 指定なし or 未知のレーン）
@@ -479,14 +482,20 @@ def _wrap_jp(text: str, width: int = 12) -> str:
 
 
 def _wrap_name(name: str, max_per_line: int = 14) -> str:
-    """CamelCase/スネークケースの長い名前を max_per_line 文字で折り返す（\\n区切り）。"""
+    """CamelCase/スネークケース/アンダースコアの長い名前を max_per_line 文字で折り返す（\\n区切り）。"""
     if len(name) <= max_per_line:
         return name
     import re
-    # CamelCase を単語に分割
-    words = re.sub(r'([A-Z][a-z]+)', r' \1', name).split()
+    # アンダースコアで先に区切る（Create_CustomerUser → [Create, CustomerUser]）
+    underscore_parts = name.split("_")
+    tokens: list[str] = []
+    for i, up in enumerate(underscore_parts):
+        # CamelCase を単語に分割（アンダースコアの直後の部分は次行の頭になる）
+        split_words = re.sub(r'([A-Z][a-z]+)', r' \1', up).split()
+        tokens.extend(split_words if split_words else [up])
+        # 末尾以外はアンダースコアを次のトークン頭に付与しない（単純区切り扱い）
     lines, cur = [], ""
-    for w in words:
+    for w in tokens:
         if cur and len(cur) + len(w) + 1 > max_per_line:
             lines.append(cur)
             cur = w
@@ -535,7 +544,7 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         },
     )
 
-    # 上段: ステップノード（同ランク＝横並び）
+    # 上段: ステップノード（同ランク＝横並び、文字大きめで縦長に）
     with g.subgraph() as top:
         top.attr(rank="same")
         for step in steps:
@@ -544,7 +553,7 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             badge     = _badge(n)
             raw_title = step.get("title", "") or step.get("description", "")
             raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
-            wrapped   = _wrap_jp(raw_title, 10)
+            wrapped   = _wrap_jp(raw_title, 8)
             branch    = step.get("branch", "")
             label     = badge + "\\n" + wrapped
 
@@ -552,12 +561,14 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
                 top.node(sid, label=label,
                          shape="diamond", style="filled",
                          fillcolor="#FFF2CC", fontcolor="#7F6000",
-                         fontname=_FC_FONT, fontsize="8", margin="0.25,0.18")
+                         fontname=_FC_FONT, fontsize="12",
+                         width="1.8", height="1.4", margin="0.3,0.2")
             else:
                 top.node(sid, label=label,
                          shape="box", style="filled,rounded",
                          fillcolor=C_STEP_BG, fontcolor="white",
-                         fontname=_FC_FONT, fontsize="8", margin="0.25,0.18")
+                         fontname=_FC_FONT, fontsize="12",
+                         width="1.8", height="1.4", margin="0.3,0.2")
 
     # 下段: コンポーネント名ラベル（同ランク＝横並び・枠なし）
     with g.subgraph() as bot:
@@ -567,9 +578,9 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             component = step.get("component", "")
             cid       = f"_c{sid}"
             bot.node(cid,
-                     label=_wrap_name(component, 16) if component else "",
+                     label=_wrap_name(component, 12) if component else "",
                      shape="none", margin="0",
-                     fontname=_FC_FONT, fontsize="7", fontcolor="#555555")
+                     fontname=_FC_FONT, fontsize="10", fontcolor="#555555")
             # 上段ノードと下段ラベルを不可視エッジで紐付け（縦位置を揃える）
             g.edge(sid, cid, style="invis", weight="100")
 
@@ -581,13 +592,13 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             for nxt in (step.get("next") or []):
                 cond = _short_label(nxt.get("condition", ""), 8)
                 g.edge(src, str(nxt["to"]), label=cond,
-                       color=C_EDGE, fontname=_FC_FONT, fontsize="7", fontcolor=C_EDGE,
-                       arrowsize="0.8")
+                       color=C_EDGE, fontname=_FC_FONT, fontsize="10", fontcolor=C_EDGE,
+                       arrowsize="0.9", penwidth="1.3")
     else:
         for i, step in enumerate(steps[:-1]):
             src = str(step.get("step", ""))
             dst = str(steps[i + 1].get("step", ""))
-            g.edge(src, dst, color=C_EDGE, arrowsize="0.8")
+            g.edge(src, dst, color=C_EDGE, arrowsize="0.9", penwidth="1.3")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
@@ -677,45 +688,48 @@ def render_component_diagram(
             "bgcolor": "white",
             "rankdir": "LR",
             "splines": "ortho",
-            "nodesep": "0.5",
-            "ranksep": "1.0",
+            "nodesep": "0.6",
+            "ranksep": "1.2",
             "fontname": FONT_JP,
             "pad": "0.4",
             "dpi": "150",
         },
     )
 
-    # 起動元ノード
+    # 起動元ノード（文字サイズを大きく）
     if trigger_node:
         fill, fg = _COMP_COLORS.get(trigger_type, ("#00B0F0", "#000000"))
         g.node(trigger_node,
                label=trigger_node,
                shape="box", style="filled,rounded",
                fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="10", width="1.0")
+               fontname=FONT_JP, fontsize="14", width="1.4", height="0.7")
 
     # コンポーネントノード（名前 + 種別のみ。ロールは表に記載するため除外）
+    # 文字サイズを 13 に拡大、折り返し幅を 8 にして縦長の見やすい形状にする
     for comp in components:
         name  = comp.get("api_name", "")
         ctype = comp.get("type", "Apex")
         fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-        lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
+        lbl = f"{_wrap_name(name, 8)}\\n[{ctype}]"
         g.node(name,
                label=lbl,
                shape="box", style="filled,rounded",
                fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="9", width="1.8")
+               fontname=FONT_JP, fontsize="13",
+               width="1.8", height="1.4", margin="0.2,0.2")
 
     # callees の明示依存エッジ
     for comp in components:
         src = comp.get("api_name", "")
         for callee in comp.get("callees", []):
             if callee not in known:
-                g.node(callee, label=callee,
+                g.node(callee, label=_wrap_name(callee, 8),
                        shape="box", style="filled,rounded",
                        fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
-                       fontname=FONT_JP, fontsize="9")
-            g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
+                       fontname=FONT_JP, fontsize="13",
+                       width="1.8", height="1.4", margin="0.2,0.2")
+            g.edge(src, callee, color=C_EDGE, arrowsize="0.9", penwidth="1.4")
 
     # 起動元 → 直接呼び出されていないトップレベルコンポーネントをエッジ追加
     # （step順でソートして ①②③ ラベルを付ける）
@@ -727,7 +741,7 @@ def render_component_diagram(
         top_level_sorted = sorted(top_level, key=lambda n: step_order.get(n, 999))
         for i, name in enumerate(top_level_sorted, 1):
             g.edge(trigger_node, name,
-                   color=C_EDGE, arrowsize="0.7",
+                   color=C_EDGE, arrowsize="0.9", penwidth="1.4",
                    style="dashed")
 
     png_bytes = g.pipe(format="png")

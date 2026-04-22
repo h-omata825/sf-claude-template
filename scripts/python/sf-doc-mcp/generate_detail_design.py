@@ -335,8 +335,9 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
         obj_start_row = r
 
         # 読み書き区分・備考はオブジェクト単位で統一（フィールドごとに変わらないため縦結合）
+        # obj['access_ja'] が設定されていればそれを優先（R+INSERT 等の複合操作を正しく表示）
         access    = fields[0].get("access", "") if fields else ""
-        access_ja = _ACCESS_JA.get(access, access)
+        access_ja = obj.get("access_ja") or _ACCESS_JA.get(access, access)
         note      = fields[0].get("note", "") if fields else ""
         if not note:
             note = _compute_obj_note(obj_api, access, data)
@@ -488,7 +489,7 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, img_w=700, max_h=500)
+        _embed_image(ws, png_path, img_anchor, img_w=880)
 
 
 
@@ -498,6 +499,7 @@ import re as _re
 # ── SFプロジェクト → メタデータパス マッピング ───────────────────────────
 # flows/classes は greenfield、フィールドラベル翻訳は両方から取得（GF_UATが補完）
 _SF_PROJECT_PATHS: dict[str, str] = {
+    # キーは小文字で統一。data.get('project_name') は .lower() して照合する
     "greenfield": "C:/workspace/16_グリーンフィールド/greenfield",
 }
 _SF_EXTRA_LABEL_PATHS: list[str] = [
@@ -1412,14 +1414,19 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
     related_objects = []
     for obj_api, comp_ops in obj_comp_ops.items():
         # オブジェクトレベルの合算アクセス種別（マトリクスと一致させる）
+        # R/W/INSERT を全て独立に保持し、表示はそれらを「・」連結する
         all_ops = list(comp_ops.values())
         has_read   = any(o in ("R", "RW") for o in all_ops)
         has_write  = any(o in ("W", "RW") for o in all_ops)
         has_insert = any(o == "INSERT" for o in all_ops)
-        if has_insert and not has_read and not has_write:
+        parts: list[str] = []
+        if has_read:   parts.append("参照")
+        if has_write:  parts.append("更新")
+        if has_insert: parts.append("新規作成")
+        obj_combined_ja = "・".join(parts) if parts else ""
+        # 後方互換用の単一キー（最も強い操作を代表値として残す）
+        if has_insert:
             obj_combined_op = "INSERT"
-        elif has_insert and has_read:
-            obj_combined_op = "RW"   # 新規作成 + 参照 → 参照・更新に近い
         elif has_write and has_read:
             obj_combined_op = "RW"
         elif has_write:
@@ -1465,6 +1472,7 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
             "label": _obj_label_from_api(obj_api),
             "fields": fields,
             "relations": [],
+            "access_ja": obj_combined_ja,
         })
 
     # object_access 構築（テキスト検出の仮コンポーネントは除外）
@@ -1510,10 +1518,10 @@ def _normalize_schema(data: dict) -> dict:
     if not data.get("feature_id") and data.get("group_id"):
         data["feature_id"] = data["group_id"]
 
-    # SFプロジェクトメタデータの自動ロード（project_name から判定）
-    proj = data.get("project_name", "")
+    # SFプロジェクトメタデータの自動ロード（project_name から判定、大小無視）
+    proj = (data.get("project_name", "") or "").strip()
     if proj and not _SF_FIELD_LABELS:
-        sf_path = _SF_PROJECT_PATHS.get(proj)
+        sf_path = _SF_PROJECT_PATHS.get(proj.lower())
         if sf_path:
             _load_sf_metadata(sf_path)
 
