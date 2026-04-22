@@ -147,6 +147,22 @@ echo ""
 # --- VSCode で開く ---
 if command -v code >/dev/null 2>&1; then
     code "$PROJECT_PATH"
+    # Windows の場合、起動直後に最大化する（画面サイズに合わせる）
+    if [[ "${OSTYPE:-}" == "msys"* ]] || [[ "${OSTYPE:-}" == "cygwin"* ]] || [[ -n "${WINDIR:-}" ]]; then
+        PROJECT_BASENAME=$(basename "$PROJECT_PATH")
+        powershell.exe -NoProfile -Command "
+            Start-Sleep -Seconds 3
+            Add-Type -TypeDefinition '
+                using System;
+                using System.Runtime.InteropServices;
+                public class WindowHelper {
+                    [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+                }
+            ' -ErrorAction SilentlyContinue
+            \$procs = Get-Process 'Code' -ErrorAction SilentlyContinue | Where-Object { \$_.MainWindowTitle -like '*${PROJECT_BASENAME}*' } | Sort-Object StartTime -Descending
+            if (\$procs) { [WindowHelper]::ShowWindowAsync(\$procs[0].MainWindowHandle, 3) | Out-Null }
+        " 2>/dev/null &
+    fi
 else
     info "VSCode CLI が見つかりません。手動で開いてください: $PROJECT_PATH"
 fi
