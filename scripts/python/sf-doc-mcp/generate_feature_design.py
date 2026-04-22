@@ -258,7 +258,8 @@ def fill_overview(ws, data, changed_fields: set = None):
 
     # ── 追加セクション（テンプレートの固定行以降に動的追記） ────
     # 値が空のセクションはスキップしつつ、番号は連番で振り直す（trigger=4 の次から開始）
-    extra_row = 18  # trigger (row 16) + header(15)+data(16) = 17 → 18 から余白
+    # 見出し/本文のスタイルはテンプレートの 1〜4 セクション（B:AE 結合・濃青ヘッダー・白字・本文枠線）に合わせる
+    extra_row = 18  # trigger (row 16) + spacer(17) → 18 から開始
     next_no = 5
     for label_template, key in [
         ("業務コンテキスト（このコンポーネントが担う業務上の役割）", "business_context"),
@@ -273,15 +274,21 @@ def fill_overview(ws, data, changed_fields: set = None):
         else:
             body = val
         label = f"{next_no}. {label_template}"
-        ws.row_dimensions[extra_row].height = 18
+        # 見出し行（テンプレ 1〜4 と同一スタイル: 濃青 bg + 白文字太字 11pt + B:AE 結合）
+        ws.row_dimensions[extra_row].height = 21
         MW(ws, extra_row, 2, 31, label,
-           bold=True, bg=C_LABEL_BG, border=B_all())
+           bold=True, fg=C_FONT_W, bg=C_BAND_BLUE, size=11, border=B_all())
         extra_row += 1
-        ws.row_dimensions[extra_row].height = max(22, len(body) // 60 * 14 + 22)
-        cell = ws.cell(row=extra_row, column=2, value=body)
-        cell.alignment = _aln(wrap=True)
+        # 本文行（B:AE 結合・枠線・折り返し）。高さは内容量で可変
+        body_lines = max(1, body.count("\n") + 1 + len(body) // 60)
+        ws.row_dimensions[extra_row].height = max(30, body_lines * 18)
+        cell = MW(ws, extra_row, 2, 31, body,
+                  border=B_all(), wrap=True, v="top")
         if key in changed_fields:
             dr.apply_red(cell, size=10)
+        extra_row += 1
+        # 次セクションとの間に1行スペーサー
+        ws.row_dimensions[extra_row].height = 8
         extra_row += 1
         next_no += 1
 
