@@ -26,7 +26,7 @@ AskUserQuestion ツールで以下を **multiSelect: true** で表示する。
 - 設計・機能グループ定義 — docs/design/ 設計書 + docs/.sf/feature_groups.yml を生成
 
 > **全て実行する場合**: 全4件を選択する。
-> **機能グループ定義のみ再生成**（docs/design/ 手動修正後に feature_groups.yml だけ更新したい場合）: Other に「cat5のみ」と入力する。
+> **機能グループ定義だけ再生成したい場合**（docs/design/ 手動修正後に feature_groups.yml だけ更新したい場合）: Other に「cat5」と入力する。
 
 > **全カテゴリ選択時**: 追加質問（対象オブジェクト指定・機能指定）はスキップして全オブジェクト・全機能をデフォルトとしてそのまま進む。
 
@@ -123,7 +123,7 @@ Phase 5: 2周目（横断補完）
 | オブジェクト・項目構成 | `sf-analyst-cat2` |
 | マスタデータ・ワークフロー設定 | `sf-analyst-cat3` |
 | 設計・機能グループ定義 | `sf-analyst-cat4` → 完了後に `sf-analyst-cat5`（順次実行） |
-| 機能グループ定義のみ再生成 | `sf-analyst-cat5`（cat4 実行なし） |
+| 機能グループ定義（cat5単独） | `sf-analyst-cat5`（cat4 実行なし） |
 
 ---
 
