@@ -93,11 +93,8 @@ tools:
 
 ## 参照リファレンスファイルの用途
 
-このエージェントが参照するリファレンスファイルは2種類ある（混同しないこと）:
-
 | ファイル | 配置場所 | 内容 | 参照タイミング |
 |---|---|---|---|
-| `sf-design-writer-reference.md` | `{project_dir}/.claude/agents/` | スケルトンモードの詳細手順・フィールド定義 | スケルトンモード時のみ |
 | `design-writer-reference.md` | `{project_dir}/scripts/python/sf-doc-mcp/` | ステップ記述プロトコル（Q1〜Q5）・種別別注意点・JSON フォーマット例 | Phase 1 開始時（1回のみ Read） |
 
 ---
@@ -111,8 +108,6 @@ tools:
 **禁止フィールド（スクリプトが確定済み）**: `node_type` / `calls` / `object_ref` / `branch` / `sub_steps[].title（SOQL/DML）` / `sub_steps[].detail` / `api_name`
 
 **記述するフィールド**: `name`（日本語）/ `overview.*` / 各 `steps[].title` と `steps[].detail`（日本語のみ）/ `params` / `_parser_meta`（**削除する**）
-
-詳細な手順・フィールド定義は [sf-design-writer-reference.md](sf-design-writer-reference.md) を参照。
 
 ---
 
