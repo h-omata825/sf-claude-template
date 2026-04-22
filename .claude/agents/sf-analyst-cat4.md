@@ -59,10 +59,11 @@ docs/design/
 
 ```bash
 python {project_dir}/scripts/python/sf-doc-mcp/scan_features.py \
-  --project-dir "{project_dir}"
+  --project-dir "{project_dir}" \
+  --output "{project_dir}/docs/.sf/feature_list.json"
 ```
 
-> `feature_ids.yml` は `scan_features.py` が自動管理するファイル。手編集禁止。初回実行時もこのステップでIDが採番されるため、設計書は最初から `【F-xxx】` 形式で生成できる。
+> `feature_ids.yml` と `feature_list.json` はどちらも `scan_features.py` が自動管理する。手編集禁止。`feature_list.json` は `/sf-design` が参照する永続キャッシュとしてここで生成する（sf-designでの二重実行を防ぐ）。
 
 ---
 
