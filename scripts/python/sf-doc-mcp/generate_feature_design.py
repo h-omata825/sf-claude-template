@@ -257,24 +257,33 @@ def fill_overview(ws, data, changed_fields: set = None):
             dr.apply_red(cell, size=10)
 
     # ── 追加セクション（テンプレートの固定行以降に動的追記） ────
+    # 値が空のセクションはスキップしつつ、番号は連番で振り直す（trigger=4 の次から開始）
     extra_row = 18  # trigger (row 16) + header(15)+data(16) = 17 → 18 から余白
-    for section_no, label, key in [
-        ("5", "5. 業務コンテキスト（このコンポーネントが担う業務上の役割）", "business_context"),
-        ("6", "6. 所属グループ", "group_name"),
+    next_no = 5
+    for label_template, key in [
+        ("業務コンテキスト（このコンポーネントが担う業務上の役割）", "business_context"),
+        ("所属グループ", "group_name"),
     ]:
         val = data.get(key, "")
         if not val:
             continue
+        # 所属グループは group_name を文章形式に整形して他セクションと表記を統一
+        if key == "group_name":
+            body = f"このコンポーネントは「{val}」グループに所属する。"
+        else:
+            body = val
+        label = f"{next_no}. {label_template}"
         ws.row_dimensions[extra_row].height = 18
         MW(ws, extra_row, 2, 31, label,
            bold=True, bg=C_LABEL_BG, border=B_all())
         extra_row += 1
-        ws.row_dimensions[extra_row].height = max(22, len(val) // 60 * 14 + 22)
-        cell = ws.cell(row=extra_row, column=2, value=val)
+        ws.row_dimensions[extra_row].height = max(22, len(body) // 60 * 14 + 22)
+        cell = ws.cell(row=extra_row, column=2, value=body)
         cell.alignment = _aln(wrap=True)
         if key in changed_fields:
             dr.apply_red(cell, size=10)
         extra_row += 1
+        next_no += 1
 
 
 def _display_len(s: str) -> int:
@@ -408,6 +417,13 @@ def fill_process(ws, data, flowchart_path, changed_step_nos: set = None):
             ws.add_image(img)
         except Exception as e:
             W(ws, 4, PROC_FLOW_CS, f"[フロー図挿入失敗: {e}]", italic=True, fg="888888")
+    else:
+        # flowchart_path が None = generate_flowchart() が False を返した
+        # （matplotlib 未インストール等）。silent failure を避けて Excel とログに明示する。
+        from flowchart_utils import HAS_MPL
+        reason = "matplotlib 未インストール" if not HAS_MPL else "フロー図PNG生成失敗"
+        W(ws, 4, PROC_FLOW_CS, f"[フロー図なし: {reason}]", italic=True, fg="BF0000")
+        print(f"  [WARNING] フロー図を挿入できませんでした: {reason}", file=sys.stderr)
 
 
 def fill_params(ws, data, changed_input_keys: set = None,

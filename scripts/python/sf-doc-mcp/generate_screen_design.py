@@ -472,6 +472,15 @@ def fill_logic(ws, data, tmp_dir, changed_uc_titles: set = None):
             except Exception as e:
                 W(ws, table_header_row, LG_FLOW_CS,
                   f"[フロー図挿入失敗: {e}]", italic=True, fg="888888")
+        elif flow_steps:
+            # generate_flowchart() が False を返した / PNG が生成されなかった場合も明示する
+            # （silent failure 防止。機能設計書側と整合）
+            from flowchart_utils import HAS_MPL
+            reason = "matplotlib 未インストール" if not HAS_MPL else "フロー図PNG生成失敗"
+            W(ws, table_header_row, LG_FLOW_CS,
+              f"[フロー図なし: {reason}]", italic=True, fg="BF0000")
+            print(f"  [WARNING] UC{uc_idx + 1}: フロー図を挿入できませんでした: {reason}",
+                  file=sys.stderr)
 
         # 画像が次UCへ貫通しないよう、テーブル累積高さが画像高さ未満なら
         # 罫線なしの空行でスペースを確保する
