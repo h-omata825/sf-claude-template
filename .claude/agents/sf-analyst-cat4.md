@@ -198,7 +198,7 @@ cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding=
 
 機能IDは `docs/.sf/feature_ids.yml` を参照（読み取り専用）。Phase 0 で scan_features.py を実行済みのため、IDは必ず存在する。独自採番・TBD使用禁止。
 
-**1コンポーネント1ファイル必須（厳守）**: 複数コンポーネントを1ファイルにまとめること（カタログ・一覧・範囲ID表記）は**禁止**。Salesforce標準ボイラープレート・テストモック・自動生成クラスも含め、全コンポーネントに個別ファイルを作成する。
+**ファイル命名の注意（範囲ファイル含む）**: 単一コンポーネントは `【CMP-xxx】name.md`、複数をまとめる場合は `【CMP-xxx〜CMP-xxx等】name.md` とする。**`F-xxx` 表記は使用禁止**。既存の `【F-xxx】` や `【F-xxx〜F-xxx等】` ファイルが存在する場合は `【CMP-xxx】` 形式にリネームしてから内容を更新する。
 
 **既存 【TBD】ファイルの処理**: 設計書を書く前に同名の `【TBD】{コンポーネント名}.md` が存在する場合は削除してから `【CMP-xxx】` ファイルを作成する。
 
