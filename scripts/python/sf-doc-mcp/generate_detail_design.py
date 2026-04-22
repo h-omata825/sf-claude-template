@@ -1109,12 +1109,35 @@ def _build_business_flow(data: dict) -> list[dict]:
     # ─── Step 1: 起点アクター＋起動アクション ─────────────────────────────
     first_tok = (flow_ov.split("→")[0] if flow_ov else "").strip()
 
+    # 技術ワードのみのトークン（例「画面フロー（Create_CustomerUser）」「Apexクラス」等）は
+    # 業務アクションとして読めないため、適切なデフォルトに差し替える。
+    first_tok_core = _re.sub(r'[（(].*?[）)]', '', first_tok).strip()
+    _TECH_ONLY = ("画面フロー", "フロー", "Apex", "Apexクラス", "Batch",
+                  "Flow", "Trigger", "LWC", "Aura", "Visualforce",
+                  "VF", "Integration", "Controller", "Service", "Handler")
+    is_tech_only = first_tok_core in _TECH_ONLY
+    is_screen_flow_start = "画面フロー" in first_tok
+
     if screens:
         # 画面あり → お客様が画面から入力・送信
         scr = screens[0].get("screen_name") or screens[0].get("component", "画面")
         scr_clean = _clean_tech_business(scr)
         action1 = f"{scr_clean}から必要情報を入力し、送信する"
         steps.append({"step": step_no, "actor": "お客様", "action": action1, "next": []})
+        step_no += 1
+    elif is_screen_flow_start:
+        # data_flow_overview が「画面フロー（...）→ ...」で始まる場合は画面起点。
+        # screens が空でも Flow タイプの画面フローが存在する想定。
+        # 管理系業務（ユーザー発行・管理者操作）は GF社担当者、それ以外はお客様。
+        admin_hint = _re.search(r'管理者|発行|管理.*ユーザー|GF社担当|事務', purpose + notes)
+        actor = "GF社担当者" if admin_hint else "お客様"
+        steps.append({"step": step_no, "actor": actor,
+                      "action": "画面から必要情報を入力し、処理を起動する", "next": []})
+        step_no += 1
+    elif is_tech_only:
+        # 技術ワードのみ（画面フロー以外）→ 自動起点とみなす
+        steps.append({"step": step_no, "actor": "自動フロー",
+                      "action": "処理を起動する", "next": []})
         step_no += 1
     elif _re.search(r'管理者|GF社|担当者|事務', first_tok):
         # GF社担当者が直接操作して起動
@@ -1788,6 +1811,8 @@ def main():
     parser.add_argument("--output-dir", required=True, help="出力先ディレクトリ")
     parser.add_argument("--version-increment", default="minor",
                         choices=["minor", "major"])
+    parser.add_argument("--source-hash", default="",
+                        help="グループ内ソースのSHA256。_meta に保存して次回差分判定に使う")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -1801,18 +1826,38 @@ def main():
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{safe_name}_詳細設計.xlsx"
+    # 他の設計書（プログラム設計・オブジェクト定義書）と統一: 【{feature_id}】{safe_name}_詳細設計.xlsx
+    if feature_id:
+        out_path = out_dir / f"【{feature_id}】{safe_name}_詳細設計.xlsx"
+    else:
+        out_path = out_dir / f"{safe_name}_詳細設計.xlsx"
 
     # ── バージョン判定 ────────────────────────────────────────────
+    # feature_id ベースで既存ファイルを検出（機能名変更に追随できる）
     source_file = ""
-    existing = sorted(out_dir.glob(f"*{safe_name}*詳細設計*.xlsx"),
-                      key=lambda f: f.stat().st_mtime, reverse=True)
-    if existing:
-        source_file = str(existing[0])
-        print(f"  [AUTO] 既存ファイルを検出: {existing[0].name}")
+    if feature_id:
+        existing = sorted(out_dir.glob(f"【{feature_id}】*.xlsx"),
+                          key=lambda f: f.stat().st_mtime, reverse=True)
+        if existing:
+            source_file = str(existing[0])
+            print(f"  [AUTO] 既存ファイルを検出: {existing[0].name}")
+    if not source_file:
+        # 後方互換: 旧命名（FG-prefixなし）も探す
+        existing = sorted(out_dir.glob(f"*{safe_name}*詳細設計*.xlsx"),
+                          key=lambda f: f.stat().st_mtime, reverse=True)
+        if existing:
+            source_file = str(existing[0])
+            print(f"  [AUTO] 既存ファイル（旧命名）を検出: {existing[0].name}")
 
     prev_meta   = read_meta(source_file) if source_file else None
     prev_data   = prev_meta.get("data") if prev_meta else None
+
+    # 第1ゲート: ソースハッシュ一致ならLLM呼び出しもExcel再生成もスキップ（プログラム設計と同じ方式）
+    if (prev_meta and args.source_hash
+            and args.version_increment == "minor"
+            and prev_meta.get("source_hash") == args.source_hash):
+        print("差分なし: ソースハッシュが既存ファイルと一致しているため更新をスキップしました")
+        sys.exit(0)
 
     if prev_meta:
         current_version = increment_version(
@@ -1830,6 +1875,7 @@ def main():
     if not data.get("date"):
         data["date"] = today
 
+    # 第2ゲート: JSONフィールド差分ゼロならExcel再生成スキップ
     diffs = _compute_diffs(prev_data, data)
     if prev_meta and args.version_increment == "minor" and not dr.has_any_diff(diffs):
         print("差分なし: 既存ファイルと一致しているため更新をスキップしました")
@@ -1894,6 +1940,8 @@ def main():
             "data":    data,
             "history": history,
         }
+        if args.source_hash:
+            meta_payload["source_hash"] = args.source_hash
         write_meta(wb, meta_payload)
 
         wb.save(str(out_path))
@@ -1901,12 +1949,13 @@ def main():
     sys.stdout.buffer.write(
         f"[OK] 詳細設計書を生成しました: v{current_version} -> {out_path}\n".encode("utf-8"))
 
-    # 同名パターンの旧ファイルを削除
-    for old_f in out_dir.glob(f"*{safe_name}*詳細設計*.xlsx"):
-        if old_f.resolve() != out_path.resolve():
-            old_f.unlink()
-            sys.stdout.buffer.write(
-                f"  [CLEANUP] 旧ファイルを削除: {old_f.name}\n".encode("utf-8"))
+    # 同一 feature_id の旧ファイルのみクリーンアップ（別名・旧命名ファイルは触らない）
+    if feature_id:
+        for old_f in out_dir.glob(f"【{feature_id}】*.xlsx"):
+            if old_f.resolve() != out_path.resolve():
+                old_f.unlink()
+                sys.stdout.buffer.write(
+                    f"  [CLEANUP] 旧ファイルを削除: {old_f.name}\n".encode("utf-8"))
 
 
 if __name__ == "__main__":

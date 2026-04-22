@@ -671,8 +671,6 @@ def render_component_diagram(
     if any(t in {"LWC", "Aura"} for t in top_level_types):
         trigger_node = None
 
-    n_nodes = len(components) + (1 if trigger_node else 0)
-    _dh = max(3.0, n_nodes * 0.9)
     g = _gv.Digraph(
         "components",
         graph_attr={
@@ -684,7 +682,6 @@ def render_component_diagram(
             "fontname": FONT_JP,
             "pad": "0.4",
             "dpi": "150",
-            "size": f"5,{_dh}!",
         },
     )
 
