@@ -1,5 +1,5 @@
 ---
-description: "カテゴリ1〜4の専用エージェント（sf-analyst-cat1〜cat4）と sf-org-analyst に委譲して Salesforce 組織情報を docs/ に保存するコマンド。組織概要・オブジェクト構成・マスタデータ・設計/機能グループ定義の4カテゴリを会話形式で選択して実行する。4選択肢・4カテゴリ実行式。"
+description: "カテゴリ1〜4の専用エージェント（sf-analyst-cat1〜cat4）と sf-org-analyst に委譲して Salesforce 組織情報を docs/ に保存するコマンド。組織概要・オブジェクト構成・マスタデータ・設計/機能グループ定義の4カテゴリを会話形式で選択して実行する。4選択肢・4カテゴリ実行式。cat4は内部でsf-analyst-cat5に委譲してfeature_groups.ymlを生成する（ユーザーからは4カテゴリに見える5エージェント構成）。"
 ---
 
 > **注意**: このコマンドはClaude Codeの組み込みmemory機能・CLAUDE.mdへの書き込みは一切行わない。
@@ -14,6 +14,19 @@ description: "カテゴリ1〜4の専用エージェント（sf-analyst-cat1〜c
 ---
 
 ## Step 0: 対象の選択
+
+### プロジェクトパスの確認
+
+Bash で `pwd` を実行してカレントディレクトリを取得し、AskUserQuestion で確認する:
+
+**質問**: 「プロジェクトフォルダを確認します。このまま進みますか？」
+**選択肢**:
+- このまま進む（カレントディレクトリ: `{pwd の結果}`）
+- 別のパスを指定する（次のメッセージで絶対パスを入力）
+
+「別のパスを指定する」を選んだ場合は次のメッセージで入力を受け取り、そのパスをプロジェクトフォルダパスとして使用する。
+
+---
 
 AskUserQuestion ツールで以下を **multiSelect: true** で表示する。
 
@@ -39,6 +52,7 @@ AskUserQuestion ツールで以下を **multiSelect: true** で表示する。
 | `docs/architecture/system.json` | システム構成図用（システム中心＋外部連携） |
 | `docs/flow/usecases.md` | 業務ユースケース一覧（新規申込・解約申込・見積依頼等） |
 | `docs/flow/swimlanes.json` | 業務フロー図（全体／UC別／例外／データフロー） |
+| `docs/logs/changelog.md` | 実行履歴・変更点（Phase 5 で追記） |
 
 ### 「オブジェクト・項目構成」が選択された場合
 
@@ -119,12 +133,14 @@ Phase 4: 2周目（横断補完）
 
 ### カテゴリ指定時
 
-| 選択肢 | 委譲先エージェント |
-|---|---|
-| 組織概要・環境情報 | `sf-analyst-cat1` |
-| オブジェクト・項目構成 | `sf-analyst-cat2` |
-| マスタデータ・ワークフロー設定 | `sf-analyst-cat3` |
-| 設計・機能グループ定義 | `sf-analyst-cat4`（設計書 + feature_groups.yml を一括生成） |
+| 選択肢 | 委譲先エージェント | 前提カテゴリ |
+|---|---|---|
+| 組織概要・環境情報 | `sf-analyst-cat1` | なし |
+| オブジェクト・項目構成 | `sf-analyst-cat2` | cat1（org-profile.md 必須） |
+| マスタデータ・ワークフロー設定 | `sf-analyst-cat3` | cat1（org-profile.md 必須） |
+| 設計・機能グループ定義 | `sf-analyst-cat4`（設計書 + feature_groups.yml を一括生成） | cat1 + cat2（catalog/ 必須） |
+
+> **前提チェック**: cat2・cat3・cat4 を選択した場合、実行前に `docs/overview/org-profile.md` の存在を確認する。存在しない場合は「先にカテゴリ1（組織概要・環境情報）を実行することを推奨します」と報告し、ユーザーの確認を取ってから続行する。
 
 > ※ **2件以上選択時**は実行後に sf-org-analyst（2周目横断補完）を実行します。1件のみ選択時はスキップします。
 

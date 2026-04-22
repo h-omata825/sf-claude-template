@@ -1,6 +1,6 @@
 ---
 name: sf-analyst-cat4
-description: sf-memoryのカテゴリ4（設計・機能グループ定義）を担当。docs/design/ 配下にApex/Flow/LWC/Batch/Integration等のコンポーネント設計書を生成・更新し、docs/.sf/feature_groups.yml（機能グループ定義）も一括生成・更新する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1/2の出力を参照して業務文脈・オブジェクト構成を把握してから設計書とFGを生成する。
+description: sf-memoryのカテゴリ4（設計・機能グループ定義）を担当。docs/design/ 配下にApex/Flow/LWC/Batch/Integration等のコンポーネント設計書を生成・更新し、完了後にsf-analyst-cat5に委譲してdocs/.sf/feature_groups.ymlを生成する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1/2の出力を参照して業務文脈・オブジェクト構成を把握してから設計書を生成する。
 tools:
   - Read
   - Edit
@@ -68,7 +68,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/scan_features.py \
   --output "{project_dir}/docs/.sf/feature_list.json"
 ```
 
-> `feature_ids.yml` と `feature_list.json` はどちらも `scan_features.py` が自動管理する。手編集禁止。`feature_list.json` は `/sf-design` が参照する永続キャッシュとしてここで生成する（sf-designでの二重実行を防ぐ）。
+> `scan_features.py` は `--output` で指定したJSONに加え、`docs/.sf/feature_ids.yml`（機能ID台帳）を**固定パスで自動生成・更新**する。どちらも手編集禁止。`feature_list.json` は `/sf-design` が参照する永続キャッシュとしてここで生成する（sf-designでの二重実行を防ぐ）。
 
 ---
 
@@ -218,141 +218,9 @@ for tbd in design_dir.rglob('【TBD】{kebab_name}.md'):
 "
 ```
 
-#### 設計書テンプレート（全種別共通・この順序で記述）
+#### 設計書テンプレート・実装種別ごとの追加指示
 
-```markdown
-# 【{機能ID}】{コンポーネント名}（{API名}）
-
-## 基本情報
-| 項目 | 値 |
-|---|---|
-| 機能ID | {feature_ids.ymlの値} |
-| 要件番号 | FR-XXX（requirements.md を参照） |
-| 実装種別 | Apex / Trigger / Flow / LWC / Aura / Visualforce / Batch / Integration |
-| 担当オブジェクト | {主要な操作対象オブジェクト API名} |
-| 関連UC | UC-XX: {UC名}（usecases.md を参照） |
-| 処理タイミング | {いつ動くか: トリガー起動 / ボタン押下 / スケジュール等} |
-| バージョン | {API Version or 作成日} |
-| ソースファイル | `force-app/.../{FileName}` |
-| 実装状態 | 実装済み / **[未実装]** |
-
-## スコープ・ユーザーストーリー
-As a {役割}, I want {目的}, so that {理由}.
-
-（この機能が対応する業務上の問題・背景を記述）
-
-## 実現方式
-
-### 採用方式
-（なぜこの実装方式を選んだか。代替案との比較）
-
-| 方式 | 採用 | 理由 |
-|---|---|---|
-| {採用方式} | ✅ | {理由} |
-| {代替案1} | ❌ | {非採用理由} |
-
-### 処理フロー
-（複数ステップがある場合は Mermaid flowchart TD で全分岐を図示。単純な1ステップは不要）
-
-```mermaid
-flowchart TD
-    A[開始] --> B{条件分岐}
-    B -->|条件A| C[処理1]
-    B -->|条件B| D[処理2]
-```
-
-## メソッド一覧 / コンポーネント定義
-（全量記述。省略不可）
-
-| メソッド名 / プロパティ名 | 種別 | 引数 | 戻り値 | 説明 |
-|---|---|---|---|---|
-
-## データ設計
-
-### 入出力
-| 項目 | API名 | 型 | 入力/出力 | 説明 |
-|---|---|---|---|---|
-
-### SOQLクエリ一覧
-（全SOQL。WHERE条件・ORDER BY・LIMITを明記）
-
-| # | FROM句 | WHERE条件 | 目的 |
-|---|---|---|---|
-
-### DML操作一覧
-| # | 操作 | オブジェクト | 件数目安 | 説明 |
-|---|---|---|---|---|
-
-## ロジック設計
-
-### 主要処理の詳細
-（分岐条件・計算式・変換ロジックを箇条書きまたは擬似コードで記述）
-
-### 例外・エラー処理
-| 例外ケース | 検出方法 | 対処 | ユーザーへの通知 |
-|---|---|---|---|
-
-## バリデーション
-| 項目 | 条件 | エラーメッセージ |
-|---|---|---|
-
-## 権限設計
-- 実行コンテキスト: `with sharing` / `without sharing` / System Mode
-- 必要な権限: {オブジェクト権限・項目権限・カスタム権限}
-- 制限事項: {アクセスできないケース}
-
-## 影響範囲・依存関係
-- 呼び出し元: {どのコンポーネント・ページ・フローから呼ばれるか}
-- 呼び出し先: {このコンポーネントが呼ぶApex / Flow / 外部API}
-- 影響するオブジェクト: {DML対象のオブジェクト一覧}
-- 関連コンポーネント: {同一FG内の他コンポーネント}
-
-## テスト観点
-（正常系・異常系・境界値ごとにリストアップ）
-
-- [ ] {テストシナリオ1}
-- [ ] {テストシナリオ2}
-
-## 未解決事項・要確認
-- [ ] **[要確認]** {確認が必要な事項}
-
-## 所見・注意点
-（設計上の注意・既知のバグ・パフォーマンス懸念・手動追記歓迎）
-```
-
-#### 実装種別ごとの追加指示
-
-**Apex（クラス・トリガー）**:
-- 全メソッドをメソッド一覧に記述（private含む）。エントリポイント（`@AuraEnabled` / `@InvocableMethod` / `@future` / トリガーハンドラ呼び出し）は★印で識別
-- SOQL件数・DML件数・Callout回数を定量的に記述（例: SOQL 3件・DML 2件・Callout 2回）
-- `with sharing` / `without sharing` の選択理由を権限設計に明記
-- Trigger の場合: `before/after`・`insert/update/delete` の組み合わせと、各ハンドラメソッドの処理を全量記述
-- バルク処理の考慮（ガバナ制限への対応）をテスト観点に必ず含める
-
-**LWC**:
-- 全 `@api`・`@track`・`@wire` デコレーター付きプロパティをプロパティ一覧に記述
-- 公開メソッド（`@api` メソッド）・発火イベント（`dispatchEvent`）・受信イベント（`addEventListener`）を全量記述
-- 「表示場所（ページ / App / Utility Bar等）・利用シナリオ」テーブルを基本情報に含める
-- 親子コンポーネント関係を依存関係に明記（どのコンポーネントからこのLWCが使われるか）
-
-**Flow**:
-- `flow-meta.xml` を**全文読み込み**、全ノード（Start / Decision / Assignment / RecordCreate / RecordUpdate / ActionCall / SubflowRef等）をMermaid図で**全分岐図示**（省略不可）
-  - ただし 1000行超の大規模 Flow は概要（ノード一覧・主要分岐）を先に出力し、詳細は節ごとに分割して読み込む（コンテキスト節約）
-- 入力変数・出力変数を全量テーブルで記述（型・必須/任意・初期値）
-- Apex呼び出し箇所（`<actionType>APEX</actionType>`）は対象クラス名を明記
-- 起動条件（Record-Triggered の場合: オブジェクト・タイミング・条件式）を基本情報に記述
-
-**Batch / Schedule**:
-- バッチサイズ（`Database.executeBatch` の scope）・cron式（`System.schedule` の cronExp）を基本情報に記述
-- `start` / `execute` / `finish` 各フェーズをそれぞれフロー図で示す
-- エラー時の挙動（失敗レコードの扱い・管理者通知）をエラー処理に明記
-- 実行環境（本番 / Sandbox の違い・手動実行 vs スケジュール起動）を記述
-
-**Integration（外部連携）**:
-- エンドポイントURL・認証方式（Basic / OAuth / APIキー）・リクエスト/レスポンス形式（JSON / SOAP）をデータ設計に記述
-- Timeout値・リトライ設定・エラーステータスコードの処理方針を例外処理に記述
-- Named Credential名 or カスタム設定からの取得パターンを実現方式に記述
-- 外部サービスのサンドボックス/本番切り替え方法を権限設計に記述
+Read ツールで `{project_dir}/docs/templates/component-design-template.md` を読み込み、そのテンプレートと追加指示に従って設計書を生成する。
 
 ### Phase 3: 差分更新 / 変更履歴
 
