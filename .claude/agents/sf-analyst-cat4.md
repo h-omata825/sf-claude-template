@@ -147,6 +147,8 @@ sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE St
 | Aura コンポーネント | `aura/` | AuraDefinitionBundle で検出 |
 | 外部API・Named Credential連携 | `integration/` | NamedCredential / callout 含む Apex |
 
+> **ハンドラクラスの扱い（重要）**: `xxxHandler.cls` のようなハンドラクラスは、関連するバッチ・トリガーと名前が似ていても**必ず個別に `apex/` へ設計書を作成する**。バッチ/トリガーの設計書に吸収・統合しない。`feature_ids.yml` に CMP-xxx が存在するクラスは全て個別ファイルが必要。
+
 ### Phase 1.5: ハッシュチェック（変更なしスキップ）
 
 > **目的**: ソースに変更がないコンポーネントをスキップしてLLM呼び出しを節約する。
