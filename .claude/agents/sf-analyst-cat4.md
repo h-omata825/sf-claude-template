@@ -1,6 +1,6 @@
 ---
 name: sf-analyst-cat4
-description: sf-memoryのカテゴリ4（設計・機能仕様）を担当。docs/design/ 配下にApex/Flow/LWC/Batch/Integration等のコンポーネント設計書を生成・更新する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1/2の出力を参照して業務文脈・オブジェクト構成を把握してから設計書を生成する。
+description: sf-memoryのカテゴリ4（設計・機能グループ定義）を担当。docs/design/ 配下にApex/Flow/LWC/Batch/Integration等のコンポーネント設計書を生成・更新する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1/2の出力を参照して業務文脈・オブジェクト構成を把握してから設計書を生成する。
 tools:
   - Read
   - Edit
