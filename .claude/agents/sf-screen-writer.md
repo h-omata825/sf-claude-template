@@ -1,6 +1,6 @@
 ---
 name: sf-screen-writer
-description: "LWC・画面フロー・Aura・Visualforce専用のプログラム設計書（画面）（Excel）生成エージェント。sf-design コマンドの Step 3 から委譲されて実行する。usecases[] 構造の画面設計書 JSON を生成し generate_screen_design.py で Excel に変換する。Apex・Flow（非画面）・Batch は対象外（sf-design-writer が担当）。"
+description: "LWC・画面フロー・Aura・Visualforce専用のプログラム設計書（画面）（Excel）生成エージェント。sf-design-step2 エージェントから委譲されて実行する。usecases[] 構造の画面設計書 JSON を生成し generate_screen_design.py で Excel に変換する。Apex・Flow（非画面）・Batch は対象外（sf-design-writer が担当）。"
 tools:
   - Read
   - Write
@@ -17,7 +17,7 @@ tools:
 
 # sf-screen-writer エージェント
 
-`/sf-design` コマンドの Step 3 のうち **LWC・画面フロー・Aura・Visualforce** を担当する専門エージェント。
+**sf-design-step2** エージェントから委譲される **LWC・画面フロー・Aura・Visualforce** 担当専門エージェント。
 
 担当する種別のみに絞ることで:
 - `usecases[]` 構造に集中できる（`steps[]` との混同なし）

@@ -27,10 +27,14 @@
 | `/sf-memory` カテゴリ4委譲（Apex・Flow・LWC・Batch等のコンポーネント設計書生成） | `sf-analyst-cat4` |
 | `/sf-memory` カテゴリ5委譲（業務機能グループ定義 feature_groups.yml の生成） | `sf-analyst-cat5` |
 | `/sf-memory` 全カテゴリ完了後の2周目横断補完（用語統一・矛盾解消・相互参照補完） | `sf-org-analyst` |
-| `/sf-design` コマンドから委譲（プログラム設計書・基本/詳細設計・Excel生成） | `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
+| `/sf-design` コマンドの詳細設計ステップ（グループ選択 + sf-detail-design-writer 委譲） | `sf-design-step1` |
+| `/sf-design` コマンドのプログラム設計ステップ（sf-screen-writer + sf-design-writer 委譲） | `sf-design-step2` |
+| `/sf-design` コマンドの機能一覧ステップ（sf-design-writer 機能一覧モード委譲） | `sf-design-step3` |
+| `sf-design-step2` から委譲（プログラム設計書・機能一覧 Excel生成） | `sf-design-writer` / `sf-screen-writer` |
+| `/sf-design` コマンド全体から委譲（基本/詳細設計 Excel生成） | `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
-> `sf-org-analyst` / `sf-design-writer` 等はコマンド専用エージェント。ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる。
+> `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` 等はコマンド専用エージェント。ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる。
 
 ---
 

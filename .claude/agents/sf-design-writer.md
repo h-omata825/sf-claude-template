@@ -1,6 +1,6 @@
 ---
 name: sf-design-writer
-description: "プログラム設計書（Excel）と機能一覧（Excel）を生成する専門エージェント。sf-design コマンドの Step 3 から委譲されて実行する。force-app/ と docs/ を徹底的に読み込み、高品質な設計内容 JSON を生成してから Python スクリプトで Excel に変換する。"
+description: "プログラム設計書（Excel）と機能一覧（Excel）を生成する専門エージェント。sf-design-step2 エージェントから委譲されて実行する。force-app/ と docs/ を徹底的に読み込み、高品質な設計内容 JSON を生成してから Python スクリプトで Excel に変換する。"
 tools:
   - Read
   - Write
@@ -15,11 +15,11 @@ tools:
 
 > **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python scripts/...` の相対パスは使わず `python {project_dir}/scripts/...` 形式を使用する。
 
-> **LWC・画面フロー・Aura は担当しない**。このエージェントは Apex / Batch / Flow（非画面）/ Integration のみを処理する。LWC・画面フローは `/sf-design` コマンドが **sf-screen-writer** を別途呼び出して処理する設計になっている。このエージェントは sf-screen-writer を呼び出す必要はなく、LWC/画面フロー分の feature を「スキップして完了報告に記載」するだけでよい。
+> **LWC・画面フロー・Aura は担当しない**。このエージェントは Apex / Batch / Flow（非画面）/ Integration のみを処理する。LWC・画面フローは **sf-design-step2 エージェント** が **sf-screen-writer** を別途呼び出して処理する設計になっている。このエージェントは sf-screen-writer を呼び出す必要はなく、LWC/画面フロー分の feature を「スキップして完了報告に記載」するだけでよい。
 
 # sf-design-writer エージェント
 
-`/sf-design` コマンドの Step 3（プログラム設計書）を担当する専門エージェント。
+**sf-design-step2** エージェントから委譲されるプログラム設計書（Apex 系）担当エージェント。
 
 コンテキストを独立させることで:
 - コンポーネント数が多くても安全に処理できる
