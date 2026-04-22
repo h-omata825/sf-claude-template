@@ -1659,6 +1659,87 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
     return related_objects, object_access
 
 
+def _enrich_related_object_fields(data: dict) -> None:
+    """既存の related_objects + object_access を保持したまま、fields のみ補完する。
+
+    キャッシュされた related_objects がオブジェクト構成は正しいが fields が空のとき、
+    object_access と SF メタデータ（_SF_COMP_FIELDS / _SF_FIELD_LABELS）から
+    コンポーネント単位で関連フィールドを抽出して埋める。
+    """
+    oa = data.get("object_access") or []
+    ro = data.get("related_objects") or []
+    if not oa or not ro:
+        return
+
+    # obj_api → 合算アクセス種別（R/W/INSERT/RW）を再計算
+    obj_ops: dict[str, dict[str, bool]] = {}
+    obj_comps: dict[str, set[str]] = {}
+    for entry in oa:
+        obj_api = entry.get("object", "")
+        comp = entry.get("component", "")
+        op = (entry.get("operation", "") or "").upper()
+        if not obj_api or not op:
+            continue
+        flags = obj_ops.setdefault(obj_api, {"R": False, "W": False, "INSERT": False})
+        if op in ("R", "RW"):
+            flags["R"] = True
+        if op in ("W", "RW"):
+            flags["W"] = True
+        if op == "INSERT":
+            flags["INSERT"] = True
+        if comp:
+            obj_comps.setdefault(obj_api, set()).add(comp)
+
+    def _combined(flags: dict) -> tuple[str, str]:
+        parts: list[str] = []
+        if flags.get("R"):      parts.append("参照")
+        if flags.get("W"):      parts.append("更新")
+        if flags.get("INSERT"): parts.append("新規作成")
+        ja = "・".join(parts) if parts else ""
+        if flags.get("INSERT"):
+            key = "INSERT"
+        elif flags.get("W") and flags.get("R"):
+            key = "RW"
+        elif flags.get("W"):
+            key = "W"
+        elif flags.get("R"):
+            key = "R"
+        else:
+            key = ""
+        return key, ja
+
+    for obj in ro:
+        if obj.get("fields"):
+            continue
+        obj_api = obj.get("api_name", "")
+        if not obj_api:
+            continue
+        flags = obj_ops.get(obj_api, {})
+        op_key, op_ja = _combined(flags)
+
+        # SF メタデータからフィールドを収集
+        fields: list[dict] = []
+        seen: set[str] = set()
+        for comp_name in obj_comps.get(obj_api, set()):
+            comp_field_map = _SF_COMP_FIELDS.get(comp_name, {})
+            for fapi in comp_field_map.get(obj_api, set()):
+                if fapi in seen:
+                    continue
+                seen.add(fapi)
+                label = _sf_field_label(obj_api, fapi)
+                fields.append({"api_name": fapi, "label": label, "access": op_key, "note": ""})
+
+        if not fields:
+            # メタデータからも取れなければ代表ラベルで1行入れる
+            label = "（レコード新規登録）" if flags.get("INSERT") and not flags.get("R") \
+                    else "（対象項目は別途設計書を参照）"
+            fields = [{"api_name": "—", "label": label, "access": op_key, "note": ""}]
+
+        obj["fields"] = fields
+        if op_ja and not obj.get("access_ja"):
+            obj["access_ja"] = op_ja
+
+
 def _infer_users(data: dict) -> str:
     """processing_purpose / data_flow_overview / components からユーザー/利用部門を推定する。"""
     comp_resp = " ".join(
@@ -1744,16 +1825,39 @@ def _normalize_schema(data: dict) -> dict:
         data["process_steps"] = _build_process_steps(data)
 
     # business_flow: 業務レベルフロー生成
-    if not data.get("business_flow"):
+    _BF_TECH_ONLY = ("画面フロー", "フロー", "Apex", "Apexクラス", "Batch",
+                     "Flow", "Trigger", "LWC", "Aura", "Visualforce",
+                     "VF", "Integration", "Controller", "Service", "Handler")
+    _bf = data.get("business_flow") or []
+    if not _bf:
         data["business_flow"] = _build_business_flow(data)
+    else:
+        # キャッシュされた業務フローに技術ワードのみの action（"画面フロー" 等）が含まれる場合は
+        # 該当ステップの action だけを業務的な表現に差し替える（他のステップは保持する）。
+        for s in _bf:
+            act = str(s.get("action", "")).strip()
+            if act in _BF_TECH_ONLY:
+                actor = str(s.get("actor", "")).strip()
+                if "画面フロー" in act or act == "画面フロー":
+                    s["action"] = "画面から必要情報を入力し、処理を起動する"
+                elif actor in ("自動フロー", "システム"):
+                    s["action"] = "処理を起動する"
+                else:
+                    s["action"] = "画面から必要情報を入力し、処理を起動する"
 
     # related_objects + object_access: components の inputs/outputs から構築
-    if not data.get("related_objects") or not data.get("object_access"):
+    _ro = data.get("related_objects") or []
+    _oa = data.get("object_access") or []
+    _ro_all_empty = bool(_ro) and all(not (o.get("fields") or []) for o in _ro)
+    if not _ro or not _oa:
         rel_objs, obj_access = _build_related_objects_and_access(data)
-        if not data.get("related_objects"):
+        if not _ro:
             data["related_objects"] = rel_objs
-        if not data.get("object_access"):
+        if not _oa:
             data["object_access"] = obj_access
+    elif _ro_all_empty:
+        # 既存 related_objects と object_access は保持し、fields のみ SF メタデータから補完する。
+        _enrich_related_object_fields(data)
 
     return data
 

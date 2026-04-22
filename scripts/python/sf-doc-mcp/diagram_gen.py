@@ -704,48 +704,45 @@ def render_component_diagram(
             "bgcolor": "white",
             "rankdir": "LR",
             "splines": "ortho",
-            "nodesep": "0.6",
-            "ranksep": "1.2",
+            "nodesep": "0.5",
+            "ranksep": "1.0",
             "fontname": FONT_JP,
             "pad": "0.4",
             "dpi": "150",
         },
     )
 
-    # 起動元ノード（文字サイズを大きく）
+    # 起動元ノード
     if trigger_node:
         fill, fg = _COMP_COLORS.get(trigger_type, ("#00B0F0", "#000000"))
         g.node(trigger_node,
                label=trigger_node,
                shape="box", style="filled,rounded",
                fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="14", width="1.4", height="0.7")
+               fontname=FONT_JP, fontsize="10", width="1.0")
 
     # コンポーネントノード（名前 + 種別のみ。ロールは表に記載するため除外）
-    # 文字サイズを 13 に拡大、折り返し幅を 8 にして縦長の見やすい形状にする
     for comp in components:
         name  = comp.get("api_name", "")
         ctype = comp.get("type", "Apex")
         fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-        lbl = f"{_wrap_name(name, 8)}\\n[{ctype}]"
+        lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
         g.node(name,
                label=lbl,
                shape="box", style="filled,rounded",
                fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="13",
-               width="1.8", height="1.4", margin="0.2,0.2")
+               fontname=FONT_JP, fontsize="9", width="1.8")
 
     # callees の明示依存エッジ
     for comp in components:
         src = comp.get("api_name", "")
         for callee in comp.get("callees", []):
             if callee not in known:
-                g.node(callee, label=_wrap_name(callee, 8),
+                g.node(callee, label=callee,
                        shape="box", style="filled,rounded",
                        fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
-                       fontname=FONT_JP, fontsize="13",
-                       width="1.8", height="1.4", margin="0.2,0.2")
-            g.edge(src, callee, color=C_EDGE, arrowsize="0.9", penwidth="1.4")
+                       fontname=FONT_JP, fontsize="9")
+            g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
 
     # 起動元 → 直接呼び出されていないトップレベルコンポーネントをエッジ追加
     # （step順でソートして ①②③ ラベルを付ける）
@@ -757,7 +754,7 @@ def render_component_diagram(
         top_level_sorted = sorted(top_level, key=lambda n: step_order.get(n, 999))
         for i, name in enumerate(top_level_sorted, 1):
             g.edge(trigger_node, name,
-                   color=C_EDGE, arrowsize="0.9", penwidth="1.4",
+                   color=C_EDGE, arrowsize="0.7",
                    style="dashed")
 
     png_bytes = g.pipe(format="png")
