@@ -1,5 +1,5 @@
 ---
-description: "プロジェクトGitリポジトリとの同期コマンド。テンプレート部分（.claude/ scripts/）の更新、またはプロジェクト部分（docs/ CLAUDE.md force-app/）のpull/pushを実行する。"
+description: "プロジェクトGitリポジトリとの同期コマンド。テンプレート部分（.claude/ scripts/）の更新、またはプロジェクト部分（docs/ CLAUDE.md）のpull/pushを実行する。"
 ---
 
 ## Step 0: 操作の選択
@@ -77,12 +77,11 @@ AskUserQuestion で選択（複数選択可）:
 **質問**: 「保存するファイルを選択してください」
 
 **選択肢**（multiSelect: true）:
-- 全て（docs/ + CLAUDE.md + force-app/）
+- 全て（docs/ + CLAUDE.md）
 - docs/ のみ
 - CLAUDE.md のみ
-- force-app/ のみ
 
-「全て」が選択された場合は残りの選択肢を無視して `docs/ CLAUDE.md force-app/` を対象とする。
+「全て」が選択された場合は残りの選択肢を無視して `docs/ CLAUDE.md` を対象とする。
 
 ### 2. 変更確認
 
