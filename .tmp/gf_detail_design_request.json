@@ -158,7 +158,7 @@
       "api_name": "preCheckModal",
       "type": "LWC",
       "role": "プリチェック結果モーダル（判定結果＋次ステップ案内）",
-      "callees": []
+      "callees": ["PreCheckController"]
     },
     {
       "api_name": "consultation",
@@ -170,7 +170,7 @@
       "api_name": "consultationModal",
       "type": "LWC",
       "role": "コンサルテーション依頼確認・送信モーダル",
-      "callees": []
+      "callees": ["ConsultationController"]
     },
     {
       "api_name": "request",
@@ -182,7 +182,7 @@
       "api_name": "requestModal",
       "type": "LWC",
       "role": "見積作成依頼確認・送信モーダル",
-      "callees": []
+      "callees": ["RequestController", "ConsultationController"]
     },
     {
       "api_name": "PreCheckController",

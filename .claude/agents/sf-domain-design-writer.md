@@ -34,7 +34,7 @@ tools:
 | `tmp_dir` | 一時ファイル置き場（`{output_dir}/.tmp`） |
 | `author` | 作成者名 |
 | `project_name` | プロジェクト名 |
-| `target_group_ids` | 対象グループIDリスト（例: `["GRP-001", "GRP-003"]`）。空の場合は全グループ |
+| `target_group_ids` | 対象グループIDリスト（例: `["FG-001", "FG-003"]`）。空の場合は全グループ |
 | `version_increment` | `"minor"` または `"major"` |
 
 ---
@@ -107,7 +107,7 @@ domains:
   - domain_id: "DOM-001"
     name_ja: "見積管理"
     name_en: "QuotationManagement"
-    group_ids: ["GRP-001", "GRP-002"]   # 対応する機能グループ
+    group_ids: ["FG-001", "FG-002"]   # 対応する機能グループ
     source_dirs: []  # 追加でハッシュ対象にするディレクトリ（省略可）
 ```
 
@@ -139,7 +139,7 @@ domains:
   - domain_id: "DOM-001"
     name_ja: "見積管理"
     name_en: "QuotationManagement"
-    group_ids: ["GRP-001", "GRP-002"]
+    group_ids: ["FG-001", "FG-002"]
 ```
 
 > **分類の指針**: グループ名・グループ内のオブジェクト名・docs を参照し、「同じ業務目的のグループ」をまとめる。Util/Shared 系は `DOM-000` として別にまとめる。
@@ -171,7 +171,7 @@ type_dir = {
     'LWC': ('lwc', ''), 'Aura': ('aura', ''), 'Trigger': ('triggers', '.trigger'),
 }
 force_app = proj / 'force-app' / 'main' / 'default'
-# {target_group_ids} は必ず Python list[str] 形式で展開すること（例: ["GRP-001", "GRP-002"]）
+# {target_group_ids} は必ず Python list[str] 形式で展開すること（例: ["FG-001", "FG-002"]）
 target_group_ids = {target_group_ids}  # type: list[str]
 target_groups = [g for g in groups if g['group_id'] in target_group_ids]
 paths = []

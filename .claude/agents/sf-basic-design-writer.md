@@ -34,7 +34,7 @@ tools:
 | `tmp_dir` | 一時ファイル置き場（`{output_dir}/.tmp`） |
 | `author` | 作成者名 |
 | `project_name` | プロジェクト名 |
-| `target_group_ids` | 対象グループIDリスト（例: `["GRP-001", "GRP-003"]`）。空の場合は全グループ |
+| `target_group_ids` | 対象グループIDリスト（例: `["FG-001", "FG-003"]`）。空の場合は全グループ |
 | `version_increment` | `"minor"` または `"major"` |
 
 ---
@@ -268,7 +268,7 @@ docs/overview/org-profile.md
 
 ```json
 {
-  "group_id": "GRP-001",
+  "group_id": "FG-001",
   "name_ja": "見積依頼",
   "name_en": "QuotationRequest",
   "project_name": "{project_name}",
@@ -350,12 +350,12 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_basic_design.py \
 
 | グループID | グループ名 | ファイル名 |
 |---|---|---|
-| GRP-001 | 見積依頼 | 【GRP-001】見積依頼.xlsx |
+| FG-001 | 見積依頼 | 【FG-001】見積依頼.xlsx |
 
 生成先: {output_dir}/basic/
 
 ⚠️ 要確認:
-- GRP-003: 関連オブジェクトが特定できなかったため要確認
+- FG-003: 関連オブジェクトが特定できなかったため要確認
 ```
 
 エラーが発生した場合は「要修正: {ファイル名} — {問題の概要}」を追記して報告する。

@@ -41,7 +41,7 @@ tools:
 | `sf_alias` | Salesforce 組織エイリアス |
 | `feature_list` | scan_features.py の出力（LWC・画面フロー・Aura・Visualforce のみ抽出済み） |
 | `target_ids` | 対象機能IDリスト |
-| `feat_id` | 各 feature の ID（`feature_list` 各要素の `id` フィールド値。例: `F-001`）。Phase 0.7 のハッシュチェックや既存 Excel 検索で使用する |
+| `feat_id` | 各 feature の ID（`feature_list` 各要素の `id` フィールド値。例: `CMP-001`）。Phase 0.7 のハッシュチェックや既存 Excel 検索で使用する |
 | `version_increment` | `"minor"` または `"major"`（初回生成時は `"minor"`） |
 
 ---
