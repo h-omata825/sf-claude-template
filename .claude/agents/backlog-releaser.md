@@ -7,6 +7,7 @@ tools:
   - Edit
   - Glob
   - Bash
+  - AskUserQuestion
 ---
 
 あなたはSalesforce保守課題のリリース・完了処理専門エージェントです。

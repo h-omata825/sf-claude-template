@@ -1,6 +1,6 @@
 ---
 name: backlog-tester
-description: Backlog課題の実装後テスト専門エージェント。investigatorが設計したテストシナリオに基づいてPlaywright・Apex Testによる機能テストを実施し、実装レビューを行う。
+description: Backlog課題の実装後テスト専門エージェント。investigatorが設計したテストシナリオに基づいてApex Testによる機能テスト・コードレビューを実施する。
 tools:
   - Read
   - Glob
