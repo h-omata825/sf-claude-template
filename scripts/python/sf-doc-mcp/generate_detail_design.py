@@ -2118,6 +2118,8 @@ def main():
                         help="グループ内ソースのSHA256。_meta に保存して次回差分判定に使う")
     parser.add_argument("--author", default="",
                         help="作成者名。JSON の author が空の場合にフォールバックで使用")
+    parser.add_argument("--force", action="store_true",
+                        help="差分ゼロ・ソースハッシュ一致でも再生成する（ロジック改修検証用）")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -2164,7 +2166,8 @@ def main():
     # 第1ゲート: ソースハッシュ一致ならLLM呼び出しもExcel再生成もスキップ（プログラム設計と同じ方式）
     if (prev_meta and args.source_hash
             and args.version_increment == "minor"
-            and prev_meta.get("source_hash") == args.source_hash):
+            and prev_meta.get("source_hash") == args.source_hash
+            and not args.force):
         print("差分なし: ソースハッシュが既存ファイルと一致しているため更新をスキップしました")
         sys.exit(0)
 
@@ -2186,7 +2189,8 @@ def main():
 
     # 第2ゲート: JSONフィールド差分ゼロならExcel再生成スキップ
     diffs = _compute_diffs(prev_data, data)
-    if prev_meta and args.version_increment == "minor" and not dr.has_any_diff(diffs):
+    if (prev_meta and args.version_increment == "minor"
+            and not dr.has_any_diff(diffs) and not args.force):
         print("差分なし: 既存ファイルと一致しているため更新をスキップしました")
         sys.exit(0)
 
