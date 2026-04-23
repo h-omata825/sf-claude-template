@@ -339,6 +339,9 @@ def main():
     parser.add_argument("--version-increment", default="minor",
                         choices=["minor", "major"],
                         help="minor: x.1増 / major: 1.0増")
+    parser.add_argument("--force", action="store_true",
+                        help="構造差分ゼロでも xlsx を強制再生成する（overview/name 変更反映用。"
+                             "バージョンは据え置きで history は更新しない）")
     args = parser.parse_args()
 
     template = Path(args.template)
@@ -386,15 +389,20 @@ def main():
         diffs = compare_features(old_features, features)
 
     if prev_meta and not is_major and not has_any_diff(diffs):
-        print("差分なし: 既存ファイルと一致しているため更新をスキップしました")
-        sys.exit(0)
-
-    last_no = max((h["項番"] for h in history
-                   if isinstance(h.get("項番"), int)), default=0)
-    new_entries = build_revision_entries(
-        current_version, diffs, args.author, today,
-        start_no=last_no + 1, is_major=is_major, is_initial=is_initial,
-    )
+        if not args.force:
+            print("差分なし: 既存ファイルと一致しているため更新をスキップしました")
+            sys.exit(0)
+        # --force 指定時: xlsx のみ再生成（version は据え置き・history 追記しない）
+        print("--force 指定: 構造差分ゼロだが xlsx を再生成します（version 据え置き）")
+        current_version = prev_meta.get("version", "1.0")
+        new_entries = []
+    else:
+        last_no = max((h["項番"] for h in history
+                       if isinstance(h.get("項番"), int)), default=0)
+        new_entries = build_revision_entries(
+            current_version, diffs, args.author, today,
+            start_no=last_no + 1, is_major=is_major, is_initial=is_initial,
+        )
     history = history + new_entries
 
     # ── 差分IDセット（赤字・背景用）──────────────────────────
