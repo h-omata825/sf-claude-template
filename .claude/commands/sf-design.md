@@ -9,7 +9,7 @@ Salesforce プロジェクトの設計書を生成します。
 **AskUserQuestion のルール（厳守）:**
 - **1質問1回答**: 複数の質問を1つの AskUserQuestion にまとめない。必ず1問ずつ順番に聞く
 - **選択肢はデフォルト/スキップ値のみ**（**テキスト入力代替の single select でのみ適用**。multiSelect で資料/項目種別を列挙する場合は対象外）: AskUserQuestion には自動で「Other（自由入力）」が付く。choices に Other・「自由入力」・「手動入力」等の選択肢を**絶対に含めない**。「スキップ」「デフォルト値を使う」等のみ記載する
-- テキスト入力（パス・名前等）はチャットで直接聞く
+- 選択肢がある場合（前回値・固定候補）は AskUserQuestion で提示する。テキスト自由入力が必要な場合（初回パス等）はチャットで直接聞く
 
 **テンプレート置換ルール（厳守）:**
 - Python インラインコード内、**および AskUserQuestion の label / description 内**の `{project_dir}` `{output_dir}` `{author}` `{last_author}` `{last_output_dir}` `{version_increment}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash / AskUserQuestion に渡す前に、値の種別に応じて以下の規則で置換する:
