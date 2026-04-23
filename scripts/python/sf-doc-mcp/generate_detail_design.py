@@ -528,6 +528,8 @@ _SF_FIELD_LABELS: dict[str, dict[str, str]] = {}
 _SF_OBJ_LABELS: dict[str, str] = {}
 # コンポーネント別フィールドマップ {comp_api_name: {obj_api: {field_api}}}
 _SF_COMP_FIELDS: dict[str, dict[str, set]] = {}
+# 直近にロードしたSFプロジェクトのベースパス（VF→Apex 補強で参照）
+_CURRENT_SF_BASE_PATH: str = ""
 
 
 def _parse_flow_fields(flow_path: Path) -> dict[str, set]:
@@ -639,7 +641,8 @@ def _parse_vf_fields(vf_path: Path) -> dict[str, set]:
 
 def _load_sf_metadata(sf_project_path: str) -> None:
     """SFプロジェクトの objectTranslations/flows/classes からメタデータを構築してグローバルに格納する。"""
-    global _SF_FIELD_LABELS, _SF_OBJ_LABELS, _SF_COMP_FIELDS
+    global _SF_FIELD_LABELS, _SF_OBJ_LABELS, _SF_COMP_FIELDS, _CURRENT_SF_BASE_PATH
+    _CURRENT_SF_BASE_PATH = sf_project_path
     base = Path(sf_project_path) / "force-app/main/default"
 
     # objectTranslations: フィールド・オブジェクトの日本語ラベル
@@ -1369,6 +1372,75 @@ def _infer_trigger_screen(data: dict) -> str:
     return "Salesforce管理画面"
 
 
+def _augment_components_with_vf_controllers(data: dict) -> None:
+    """VF コンポーネントの controller 属性から Apex クラスを特定し、
+    components に未登録のものを自動追加して callees 関係を構築する（防御層）。
+    エージェントが Apex を components に含め忘れたケースをカバーする。
+    """
+    if not _CURRENT_SF_BASE_PATH:
+        return
+    pages_dir = Path(_CURRENT_SF_BASE_PATH) / "force-app/main/default/pages"
+    if not pages_dir.exists():
+        return
+    classes_dir = Path(_CURRENT_SF_BASE_PATH) / "force-app/main/default/classes"
+
+    # 標準ボイラープレートは追加対象外（カスタムコントローラを持たない標準 VF）
+    _STD_SKIP = {
+        "SiteLogin", "ForgotPassword", "ForgotPasswordConfirm", "ChangePassword",
+        "FileNotFound", "Exception", "Unauthorized", "InMaintenance",
+        "BandwidthExceeded", "AnswersHome", "SiteRegister", "SiteRegisterConfirm",
+        "CommunitiesLogin", "CommunitiesSelfReg", "CommunitiesSelfRegConfirm",
+        "CommunitiesForgotPassword", "CommunitiesForgotPasswordConfirm",
+        "CommunitiesChangePassword",
+    }
+
+    existing_apis = {c.get("api_name", "") for c in data.get("components", [])}
+    new_comps: list[dict] = []
+
+    for comp in data.get("components", []):
+        api = comp.get("api_name", "")
+        comp_type = comp.get("type", "")
+        if comp_type not in ("Visualforce", "VF", "VisualForce", "Visualforce Page"):
+            continue
+        vf_file = pages_dir / f"{api}.page"
+        if not vf_file.exists():
+            continue
+        try:
+            vf_content = vf_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        ctrl_m = _re.search(r'(?<!standard)[Cc]ontroller="([A-Za-z][A-Za-z0-9_]*)"', vf_content)
+        if not ctrl_m:
+            continue
+        ctrl_name = ctrl_m.group(1)
+        if ctrl_name in _STD_SKIP:
+            continue
+        # VF → Apex の callees 関係を設定（既存 Apex でも callees は必ず更新）
+        callees = comp.setdefault("callees", [])
+        if ctrl_name not in callees:
+            callees.append(ctrl_name)
+        if ctrl_name in existing_apis:
+            continue
+        # Apex クラスからオブジェクト名を取得して role を生成
+        role = ""
+        cls_file = classes_dir / f"{ctrl_name}.cls"
+        if cls_file.exists():
+            comp_fields = _SF_COMP_FIELDS.get(ctrl_name, {})
+            obj_names = [o for o in comp_fields if o not in ("__any__", "Id")]
+            if obj_names:
+                role = f"{' / '.join(obj_names[:2])} を操作するコントローラ"
+        new_comps.append({
+            "api_name": ctrl_name,
+            "type": "Apex",
+            "role": role or "ポータル画面コントローラ",
+            "callees": [],
+            "responsibility": "",
+        })
+        existing_apis.add(ctrl_name)
+
+    data.setdefault("components", []).extend(new_comps)
+
+
 def _infer_callees(data: dict) -> None:
     """data_flow_overview の「→」連鎖からコンポーネント間呼び出し関係を推論して callees に設定する。"""
     flow_text = data.get("data_flow_overview", "")
@@ -1659,6 +1731,12 @@ def _strip_tech_identifiers(text: str) -> str:
     text = _re.sub(r'^(?:で|は|を|に|と|が)(?=[一-龯ァ-ヶー][ぁ-んァ-ヶ一-龯ー])', '', text)
     # G-3f: 中間位置の裸「（／）」「（／／）」等（コンポーネント名連結除去後）
     text = _re.sub(r'[（(][\s　]*(?:／[\s　]*)+[）)]', '', text)
+    # H-3a: 矢印間の裸記号（G-1 より広い文字セット: 中黒・& も対象）
+    text = _re.sub(r'→[\s　]*[・+\-\/／＋=&][\s　]*→', '→', text)
+    # H-3b: 接続詞（または/および/かつ）直後の孤立助詞
+    text = _re.sub(r'(または|および|かつ)\s*(?:を|が|は|に|で|と|へ|の)(?=[ぁ-んァ-ヶ一-龯])', r'\1', text)
+    # H-3c: 行頭「は、ため〜」「が、ため〜」（技術識別子除去で主語が消えたケース）
+    text = _re.sub(r'^[、。\s]*(?:(?:は|が)[、，]?\s*)?ため(?=[ぁ-んァ-ヶ一-龯])', '', text)
     text = _re.sub(r'^[\s、，。]+', '', text)
     text = _re.sub(r'[\s、，]+$', '', text)
     return text.strip()
@@ -1720,10 +1798,11 @@ def _summarize_action(s: str) -> str:
 
 
 def _normalize_business_flow(flows: list[dict]) -> None:
-    """business_flow[] の actor / action をクリーニングする（in-place）。
+    """business_flow[] の actor / action / label をクリーニングする（in-place）。
 
     - actor: コンポーネント名（CamelCase + __c 等）は「システム」に置換
-    - action: API 名・メソッド呼び出し・拡張子を除去し日本語化。25文字以内に要約
+    - action: **丁寧な日本語の処理内容**。API 名・メソッド呼び出し・拡張子は除去するが 長さは保持
+    - label: **図形ラベル用の一言まとめ（≤25字）**。action からの自動要約
     """
     _BF_TECH_ONLY = ("画面フロー", "フロー", "Apex", "Apexクラス", "Batch",
                      "Flow", "Trigger", "LWC", "Aura", "Visualforce",
@@ -1749,7 +1828,12 @@ def _normalize_business_flow(flows: list[dict]) -> None:
                 actor2 = s.get("actor", "")
                 cleaned = ("処理を起動する" if actor2 in ("自動フロー", "システム")
                            else "画面から必要情報を入力し、処理を起動する")
-            s["action"] = _summarize_action(cleaned)
+            s["action"] = cleaned  # 丁寧な処理内容として保持（truncate しない）
+
+        # label: 業務フロー図のノードラベル用に要約（すでに LLM が短く書いている場合はそのまま）
+        lbl_src = s.get("label") or s.get("action", "")
+        lbl_cleaned = _deep_clean_ja(str(lbl_src))
+        s["label"] = _summarize_action(lbl_cleaned) if lbl_cleaned else ""
 
 
 def _obj_label_from_api(api: str) -> str:
@@ -2203,6 +2287,9 @@ def _normalize_schema(data: dict) -> dict:
     elif data.get("trigger"):
         data["trigger"] = _deep_clean_ja(data["trigger"])  # G-extra: キャッシュ値も再クリーン
 
+    # H-2b: VF controller 属性から Apex コンポーネントを自動補強（防御層）
+    _augment_components_with_vf_controllers(data)
+
     # components: responsibility → role（日本語化）& callees 初期化
     # G-extra: キャッシュ済 role も英語残留を一掃する（Class名・メソッド名・__c.field 等）
     for comp in data.get("components", []):
@@ -2441,11 +2528,14 @@ def _generate_diagrams(data: dict, tmp_dir: str) -> dict[str, str | None]:
 
 
 def _business_flow_to_swimlane(flows: list[dict]) -> dict:
-    """business_flow リストを render_swimlane 用のフロー dict に変換する。"""
+    """business_flow リストを render_swimlane 用のフロー dict に変換する。
+
+    図形ノードは label を優先（丁寧な action を図に突っ込むと横長・読み難いため）。
+    """
     lane_names = list(dict.fromkeys(f.get("actor", "不明") for f in flows))
     steps = [
         {"id": str(f.get("step", i + 1)), "lane": f.get("actor", "不明"),
-         "label": f.get("action", "")}
+         "label": f.get("label") or f.get("action", "")}
         for i, f in enumerate(flows)
     ]
     transitions = []
