@@ -179,6 +179,36 @@ sf data query -q "SELECT EntityDefinition.QualifiedApiName, Field FROM FieldDefi
 - **オブジェクト分類**: 機能別（マスタ系・トランザクション系・設定系等）にグループ化
 - **孤立オブジェクト**: どのオブジェクトにも参照されていないカスタムオブジェクトを明記（整理候補）
 
+**Mermaid ERD 記法の規約（下流の `generate_basic_doc.py` が正規表現で関係線を抽出するため厳守）**:
+
+- 関係線は次の構文で書く: `ParentApiName ||--o{ ChildApiName : "fieldLabel"`
+  - 実線 `--`・点線 `..` どちらも受理されるが、**原則は実線 `--` に統一**する
+  - 右端カーディナリティは `o{` / `|{` / `||` / `o|` のいずれか
+- 親子関係のラベル部分（`:` の右）は **FK項目の API名 または日本語ラベルを必ずダブルクォートで囲む**（空文字列は不可）
+- **標準オブジェクトも含める**: Account / Contact / Opportunity / Case / Lead 等、カスタムから参照されているものは必ずノードに含める（孤立表示を防ぐ）
+
+悪い例（関係線がマッチしない）:
+```
+Account -- ContractApplication__c
+Account o-- Contract
+```
+
+良い例:
+```
+Account ||--o{ ContractApplication__c : "AccountId__c"
+Opportunity ||--o{ ContractApplication__c : "OpportunityId__c"
+```
+
+### Phase 4.5: `_index.md` の列規約（下流パーサー連携）
+
+`_index.md` のオブジェクト一覧テーブルは**ヘッダ行に以下のキーワード**を含めること（列順は問わないが、ヘッダ名は下記表記を使用する）:
+
+- `API名`（必須） — 下流の `generate_basic_doc.py` がこの列を識別キーとして読む
+- `ラベル`（必須） — 日本語表示名。ER図のノード表示に使用される
+- `種別`（推奨） — `カスタム` / `標準`
+
+列順は `| API名 | ラベル | 種別 | ... |` でも `| ラベル | API名 | 種別 | ... |` でも良い。パーサーがヘッダから列位置を動的検出する。
+
 ### Phase 5: インデックス生成
 
 `docs/catalog/_index.md` を生成/更新する。

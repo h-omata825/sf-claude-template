@@ -300,29 +300,26 @@ def render_er_diagram(
 # レーン背景色（薄い色でクラスター塗りつぶし）
 _LANE_COLORS = ["#EEF4FB", "#F5FBF0", "#FFFBF0", "#FBF5FF", "#F8FAFD"]
 
-# レーン → グループ マッピングルール（順番に評価、最初にマッチしたものを使用）
-_LANE_GROUP_RULES: list[tuple[list[str], str]] = [
-    (["お客様", "customer", "顧客", "委託企業"],                       "お客様"),
-    (["salesforce", "sfdc", "experience cloud", "experiencecloud"],  "Salesforce / EC"),
-    (["外部連携", "外部システム", "oproarts", "ラポート", "account engagement"], "外部連携"),
-]
-_DEFAULT_LANE_GROUP = "GF社"
-
-_GROUP_FILL_COLORS = {
-    "お客様":         "#D9E9F8",
-    "GF社":           "#E8F5E9",
-    "Salesforce / EC": "#FFF9E6",
-    "外部連携":       "#F3E5F5",
+# レーン type → (グループ表示名, 塗り色) のマップ。
+# 固有名詞（会社名・プロジェクト名）はここに書かない。
+# 分類の根拠は swimlanes.json の lanes[].type（sf-analyst-cat1 のスキーマ）に統一する。
+_TYPE_GROUP_MAP: dict[str, tuple[str, str]] = {
+    "external_actor":  ("社外・お客様",   "#D9E9F8"),
+    "internal_actor":  ("社内担当",       "#E8F5E9"),
+    "system":          ("Salesforce",    "#FFF9E6"),
+    "external_system": ("外部システム",   "#F3E5F5"),
 }
-_GROUP_ORDER = ["お客様", "GF社", "Salesforce / EC", "外部連携"]
+_TYPE_GROUP_ORDER = ["external_actor", "internal_actor", "system", "external_system"]
 
 
-def _lane_to_group(lane_name: str) -> str:
-    lower = lane_name.lower()
-    for keywords, group in _LANE_GROUP_RULES:
-        if any(k in lower for k in keywords):
-            return group
-    return _DEFAULT_LANE_GROUP
+def _lane_to_group(lane_type: str) -> tuple[str, str] | None:
+    """レーンの type からグループ（表示名・塗り色）を決める。
+    type 未設定・未知の値の場合は None を返し、呼び出し側はグループ化せず
+    レーン単体で描画する（固有名詞のデフォルト値は使わない）。
+    """
+    if not lane_type:
+        return None
+    return _TYPE_GROUP_MAP.get(lane_type.strip().lower())
 
 
 def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
@@ -362,72 +359,91 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
         },
     )
 
-    # レーンをグループ（お客様 / GF社 / Salesforce / 外部連携）に集約して描画
-    from collections import defaultdict, OrderedDict
+    # レーンを lanes[].type に基づきグループ化して描画する。
+    # type が未設定・未知のレーンはグループ化せず単体で平置き（固有名詞を絶対に挿入しない）。
+    from collections import OrderedDict
 
     lane_names = [l.get("name", f"Lane{i+1}") for i, l in enumerate(lanes_in)]
+    lane_name_to_type: dict[str, str] = {
+        l.get("name", f"Lane{i+1}"): (l.get("type") or "")
+        for i, l in enumerate(lanes_in)
+    }
 
-    # グループ → [lane_name, ...] のマッピング（順序保持）
-    group_to_lanes: dict[str, list[str]] = OrderedDict()
+    # グループキー: type_key（_TYPE_GROUP_MAP のキー） or None（未分類）
+    # 値: list[lane_name]（入力順を維持）
+    group_to_lanes: "OrderedDict[str | None, list[str]]" = OrderedDict()
     for lane_name in lane_names:
-        grp = _lane_to_group(lane_name)
-        group_to_lanes.setdefault(grp, []).append(lane_name)
+        lt = lane_name_to_type.get(lane_name, "")
+        grp = _lane_to_group(lt)
+        key: str | None = lt.strip().lower() if grp else None
+        group_to_lanes.setdefault(key, []).append(lane_name)
 
-    # グループ順を _GROUP_ORDER に従って並び替え
-    sorted_groups = [g_name for g_name in _GROUP_ORDER if g_name in group_to_lanes]
-    sorted_groups += [g_name for g_name in group_to_lanes if g_name not in sorted_groups]
+    # 分類済みは _TYPE_GROUP_ORDER の順、未分類（None）は末尾に配置
+    sorted_keys: list[str | None] = [k for k in _TYPE_GROUP_ORDER if k in group_to_lanes]
+    sorted_keys += [k for k in group_to_lanes if k is not None and k not in sorted_keys]
+    if None in group_to_lanes:
+        sorted_keys.append(None)
 
-    known_lanes = set(lane_names)
-    lane_color_idx = 0  # レーン色の連番
-
-    for gi, grp_name in enumerate(sorted_groups):
-        grp_fill = _GROUP_FILL_COLORS.get(grp_name, "#F8FAFD")
-        with g.subgraph(name=f"cluster_group_{gi}") as gg:
-            gg.attr(
-                label=grp_name,
+    def _render_lane(parent, gi: int, lane_idx: int, lane_name: str):
+        bg = _LANE_COLORS[lane_idx % len(_LANE_COLORS)]
+        with parent.subgraph(name=f"cluster_lane_{gi}_{lane_idx}") as sg:
+            sg.attr(
+                label=lane_name,
                 style="filled",
-                fillcolor=grp_fill,
+                fillcolor=bg,
                 color=C_LANE_HDR,
-                penwidth="2",
+                penwidth="1",
                 fontname=FONT_JP,
                 fontcolor=C_LANE_HDR,
-                fontsize="15",
+                fontsize="12",
             )
-            for lane_name in group_to_lanes[grp_name]:
-                bg = _LANE_COLORS[lane_color_idx % len(_LANE_COLORS)]
-                lane_color_idx += 1
-                with gg.subgraph(name=f"cluster_lane_{gi}_{lane_name[:8]}") as sg:
-                    sg.attr(
-                        label=lane_name,
-                        style="filled",
-                        fillcolor=bg,
-                        color=C_LANE_HDR,
-                        penwidth="1",
+            for step in steps_in:
+                if str(step.get("lane", "")) == lane_name:
+                    sid = str(step.get("id", ""))
+                    label = str(step.get("label", "") or step.get("title", "") or step.get("name", "") or sid)
+                    label = _wrap_jp(label, 16)
+                    sg.node(
+                        sid,
+                        label=label,
+                        shape="box",
+                        style="filled,rounded",
+                        fillcolor=C_STEP_BG,
+                        fontcolor=C_STEP_FG,
                         fontname=FONT_JP,
-                        fontcolor=C_LANE_HDR,
                         fontsize="12",
+                        width="2.2",
+                        height="0.9",
+                        penwidth="1.5",
+                        color=C_STEP_BORDER,
+                        margin="0.22,0.12",
                     )
-                    for step in steps_in:
-                        if str(step.get("lane", "")) == lane_name:
-                            sid = str(step.get("id", ""))
-                            label = str(step.get("label", "") or step.get("title", "") or step.get("name", "") or sid)
-                            # 長いラベルは折り返し
-                            label = _wrap_jp(label, 16)
-                            sg.node(
-                                sid,
-                                label=label,
-                                shape="box",
-                                style="filled,rounded",
-                                fillcolor=C_STEP_BG,
-                                fontcolor=C_STEP_FG,
-                                fontname=FONT_JP,
-                                fontsize="12",
-                                width="2.2",
-                                height="0.9",
-                                penwidth="1.5",
-                                color=C_STEP_BORDER,
-                                margin="0.22,0.12",
-                            )
+
+    known_lanes = set(lane_names)
+    lane_color_idx = 0
+
+    for gi, key in enumerate(sorted_keys):
+        lanes_in_group = group_to_lanes[key]
+        if key is None:
+            # 未分類: グループクラスタを作らずレーンを直接トップレベル subgraph として描画
+            for lane_name in lanes_in_group:
+                _render_lane(g, gi, lane_color_idx, lane_name)
+                lane_color_idx += 1
+        else:
+            grp_display_name, grp_fill = _TYPE_GROUP_MAP[key]
+            with g.subgraph(name=f"cluster_group_{gi}") as gg:
+                gg.attr(
+                    label=grp_display_name,
+                    style="filled",
+                    fillcolor=grp_fill,
+                    color=C_LANE_HDR,
+                    penwidth="2",
+                    fontname=FONT_JP,
+                    fontcolor=C_LANE_HDR,
+                    fontsize="15",
+                )
+                for lane_name in lanes_in_group:
+                    _render_lane(gg, gi, lane_color_idx, lane_name)
+                    lane_color_idx += 1
 
     # 未分類ステップ（lane 指定なし or 未知のレーン）
     for step in steps_in:

@@ -154,62 +154,121 @@ def _margin(ws, row, h=6):
 
 # ── docs パーサー ─────────────────────────────────────────────────
 
-def _table_val(text: str, key: str) -> str:
-    m = re.search(rf'\|\s*{re.escape(key)}\s*\|\s*(.+?)\s*\|', text)
-    return m.group(1).strip() if m else ""
+def _table_val(text: str, keys) -> str:
+    """表行 `| key | value |` から value を取り出す。
+    keys は str または候補リスト。最初に見つかった値を返す。
+    """
+    if isinstance(keys, str):
+        keys = [keys]
+    for key in keys:
+        m = re.search(rf'\|\s*{re.escape(key)}\s*\|\s*(.+?)\s*\|', text)
+        if m:
+            return m.group(1).strip()
+    return ""
 
-def _section_text(text: str, heading: str) -> str:
-    # ## / ### / #### 見出しにキーワードが含まれていれば一致（番号付き見出し対応）
-    # 注: f-string では {n,m} が tuple に展開されるため string 連結で構築する
-    pat = r'#{2,4}[^\n]*' + re.escape(heading) + r'[^\n]*\n(.*?)(?=\n#{2,4}[^\n]|\Z)'
-    m = re.search(pat, text, re.DOTALL)
-    return m.group(1).strip() if m else ""
+
+def _section_text(text: str, headings) -> str:
+    """H2〜H4 見出しにキーワードを含むセクション本文を返す。
+    headings は str または候補リスト。大文字小文字を無視し、最初にヒットしたものを返す。
+    終端は**同じ階層以上の次見出し**（ヒットした見出しが H2 なら次の H1/H2 まで、
+    H3 なら次の H1/H2/H3 まで）。つまり下位見出し（H3/H4）は本文に含める。
+    """
+    if isinstance(headings, str):
+        headings = [headings]
+    for h in headings:
+        for level in (2, 3, 4):
+            # 開始: 行頭から `#` が level 個、後ろは見出し以外の文字（空白・文字）
+            # 終端: 改行＋`#` が 1〜level 個、その直後は `#` ではない見出しテキスト
+            # f-string では {n,m} が tuple 展開されるため string 連結で組む
+            start_pat = r'(?m)^#{' + str(level) + r'}\s[^\n]*' + re.escape(h) + r'[^\n]*\n'
+            end_pat   = r'(?=\n#{1,' + str(level) + r'}[^#\n]|\Z)'
+            pat = start_pat + r'(.*?)' + end_pat
+            m = re.search(pat, text, re.DOTALL | re.IGNORECASE)
+            if m:
+                return m.group(1).strip()
+    return ""
+
+
+def _parse_stakeholder_table(sec: str) -> list[dict]:
+    """ステークホルダー表を柔軟にパースする。
+    - ヘッダ行検出: `役割`/`氏名`/`担当`/`会社`/`組織`/`メンバー`/`ベンダー` のいずれかを含む行
+    - 区切り行（`---` のみ）はスキップ
+    - データ行は 2〜5 列対応、最初の3列を role/name/area、4列目以降を note に寄せる
+    """
+    rows: list[dict] = []
+    header_found = False
+    header_kw = ("役割", "氏名", "担当", "会社", "組織", "メンバー", "ベンダー", "名前", "所属")
+    for line in sec.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cols = [c.strip() for c in stripped.strip("|").split("|")]
+        if len(cols) < 2:
+            continue
+        # 区切り行（`|---|---|`）はスキップ
+        if all(re.fullmatch(r'[-:\s]+', c) for c in cols if c):
+            continue
+        if not header_found:
+            if any(kw in c for c in cols for kw in header_kw):
+                header_found = True
+            continue
+        role = cols[0]
+        # 空行や連続区切り行は無視
+        if not role or re.fullmatch(r'[-:\s]+', role):
+            continue
+        rows.append({
+            "role": role,
+            "name": cols[1] if len(cols) > 1 else "",
+            "area": cols[2] if len(cols) > 2 else "",
+            "note": " / ".join(c for c in cols[3:] if c) if len(cols) > 3 else "",
+        })
+    return rows
 
 
 def parse_org(path: Path) -> dict:
     if not path.exists(): return {}
     t = path.read_text(encoding="utf-8")
-    def tv(k): return _table_val(t, k)
 
     # 用語集
     glossary = []
-    sec = _section_text(t, "用語集") or _section_text(t, "Glossary")
+    sec = _section_text(t, ["用語集", "Glossary"])
     for line in sec.splitlines():
         if not line.strip().startswith("|"): continue
         cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 2 and cols[0] and cols[0] not in ("業務用語", "---", "用語"):
+        if len(cols) >= 2 and cols[0] and cols[0] not in ("業務用語", "用語", "---") \
+                and not re.fullmatch(r'[-:\s]+', cols[0]):
             glossary.append({"biz": cols[0], "sf": cols[1] if len(cols) > 1 else "",
                              "desc": cols[2] if len(cols) > 2 else ""})
 
-    # 体制（担当ベンダー表も対象）
-    stakeholders = []
-    for sec_name in ("担当ベンダー", "ステークホルダー", "体制", "関係者"):
+    # 体制（セクション名の候補を横断探索）
+    stakeholders: list[dict] = []
+    for sec_name in ("ステークホルダーマップ", "担当ベンダー", "ステークホルダー",
+                     "プロジェクト体制", "体制", "関係者", "プロジェクトメンバー", "チーム体制"):
         sec = _section_text(t, sec_name)
-        for line in sec.splitlines():
-            if not line.strip().startswith("|"): continue
-            cols = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cols) >= 2 and cols[0] and cols[0] not in ("役割", "---", "会社/担当者"):
-                stakeholders.append({"role": cols[0], "name": cols[1] if len(cols)>1 else "",
-                                     "area": cols[2] if len(cols)>2 else "",
-                                     "note": cols[3] if len(cols)>3 else ""})
-        if stakeholders: break
+        if not sec:
+            continue
+        parsed = _parse_stakeholder_table(sec)
+        if parsed:
+            stakeholders = parsed
+            break
 
     # 背景・目的（AS-IS課題 + TO-BE目的 を結合）
-    bg_asis = _section_text(t, "導入背景") or _section_text(t, "AS-IS課題")
-    bg_tobe = _section_text(t, "導入目的") or _section_text(t, "TO-BE")
+    bg_asis = _section_text(t, ["導入背景", "AS-IS課題", "AS-IS", "背景"])
+    bg_tobe = _section_text(t, ["導入目的", "TO-BE", "目指す姿", "目的"])
     background = "\n\n".join(s for s in [bg_asis, bg_tobe] if s)
 
-    system_name = tv("システム名") or tv("会社名")
-    project_name = tv("プロジェクト名") or (f"{system_name} Salesforce導入プロジェクト" if system_name else "")
+    system_name  = _table_val(t, ["システム名", "組織名", "会社名"])
+    project_name = _table_val(t, ["プロジェクト名", "案件名"]) \
+                   or (f"{system_name} Salesforce導入プロジェクト" if system_name else "")
 
     return {
         "project_name": project_name,
         "system_name":  system_name,
-        "sf_edition":   tv("Salesforce Edition") or tv("Edition"),
-        "start_date":   tv("開始日") or tv("プロジェクト開始日") or tv("Salesforce利用開始"),
-        "end_date":     tv("終了予定日") or tv("リリース予定日"),
-        "go_live_date": tv("本番公開日"),
-        "target_biz":   tv("対象業務"),
+        "sf_edition":   _table_val(t, ["Salesforce Edition", "Edition", "エディション"]),
+        "start_date":   _table_val(t, ["開始日", "プロジェクト開始日", "Salesforce利用開始", "初期導入時期"]),
+        "end_date":     _table_val(t, ["終了予定日", "リリース予定日"]),
+        "go_live_date": _table_val(t, ["本番公開日", "稼働日", "カットオーバー"]),
+        "target_biz":   _table_val(t, ["対象業務", "業務領域"]),
         "stakeholders": stakeholders[:6],
         "glossary":     glossary[:30],
         "background":   background,
@@ -220,31 +279,44 @@ def parse_requirements(path: Path) -> dict:
     if not path.exists(): return {}
     t = path.read_text(encoding="utf-8")
 
-    # 背景（複数のセクション名を試みる）
-    bg = (_section_text(t, "背景・目的") or _section_text(t, "目的") or
-          _section_text(t, "導入背景") or "")
+    # 背景（候補を横断探索）
+    # 注: 「プロジェクト概要」は要件定義書でテーブル形式になりがちで本文が取れないため候補から除外
+    bg = _section_text(t, ["背景・目的", "導入背景", "背景", "目的",
+                            "AS-IS（現状）", "AS-IS", "導入前"])
 
-    # スコープ（対象）: 1stステップ表から項目名を抽出
-    scope_in_sec = _section_text(t, "1stステップ") or _section_text(t, "対象")
-    scope_in_items = []
-    for line in scope_in_sec.splitlines():
-        if not line.strip().startswith("|"): continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) >= 2 and cols[0] and not re.fullmatch(r'[-:\s]+', cols[0]) and \
-                cols[0] not in ("スコープ項目", "スコープ", "---"):
-            scope_in_items.append(cols[0])
+    # スコープ（対象）: 見出し候補から探して表行 or 箇条書きから項目を抽出
+    # 部分一致で「スコープ外」にもヒットしないよう、対象系を先に試す
+    scope_in_sec = _section_text(t, ["対応スコープ", "対象スコープ", "1stステップ",
+                                      "対象範囲", "スコープ定義", "対象業務", "対象"])
+    # 見出し名に「対象外」系が紛れた場合のガード（最初の H2/H3 内だけを採用）
+    if scope_in_sec:
+        scope_in_sec = re.split(r'\n#{2,4}[^\n]*(?:対象外|スコープ外)', scope_in_sec)[0]
+    scope_in_items = _extract_list_items(scope_in_sec)
     scope_in = "\n".join(f"・{i}" for i in scope_in_items) if scope_in_items else scope_in_sec[:300]
 
-    # スコープ（対象外）: 2ndステップ箇条書きを抽出
-    scope_out_sec = _section_text(t, "2ndステップ") or _section_text(t, "対象外")
-    scope_out_items = []
-    for line in scope_out_sec.splitlines():
-        stripped = line.strip()
-        if re.match(r'^[-*・]\s+', stripped):
-            scope_out_items.append(re.sub(r'^[-*・]\s+', '', stripped))
+    # スコープ（対象外）: 候補から探す
+    scope_out_sec = _section_text(t, ["対象外スコープ", "スコープ外", "2ndステップ",
+                                       "非対象", "対象外"])
+    scope_out_items = _extract_list_items(scope_out_sec)
     scope_out = "\n".join(f"・{i}" for i in scope_out_items) if scope_out_items else scope_out_sec[:300]
 
     return {"background": bg[:600], "scope_in": scope_in[:400], "scope_out": scope_out[:300]}
+
+
+def _extract_list_items(sec: str) -> list[str]:
+    """表行（最初の列）または箇条書き（-*・）から項目を抽出する。"""
+    items: list[str] = []
+    _SKIP = {"スコープ項目", "スコープ", "項目", "---", ""}
+    for line in sec.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            cols = [c.strip() for c in stripped.strip("|").split("|")]
+            if len(cols) >= 2 and cols[0] and cols[0] not in _SKIP \
+                    and not re.fullmatch(r'[-:\s]+', cols[0]):
+                items.append(cols[0])
+        elif re.match(r'^[-*・]\s+', stripped):
+            items.append(re.sub(r'^[-*・]\s+', '', stripped))
+    return items
 
 
 def parse_system_json(path: Path) -> dict:
@@ -259,26 +331,98 @@ def parse_swimlanes(path: Path) -> dict:
     except Exception: return {}
 
 
+def _clean_cell(s: str) -> str:
+    """テーブルセルの値を正規化する。
+    - `[text](url)` マークダウンリンクは `text` に剥がす
+    - 前後のバッククォート・空白を除去
+    """
+    s = s.strip()
+    m = re.match(r'^\[(.+?)\]\([^)]*\)$', s)
+    if m:
+        s = m.group(1)
+    return s.strip().strip("`").strip()
+
+
 def parse_catalog_index(path: Path) -> list[dict]:
     """
     _index.md をパースする。
-    列順: 表示名(col0) | API名(col1, バッククォート付き) | 項目数(col2) | ...
+    表の列順はプロジェクトによって異なる（`| API名 | ラベル | ...` または
+    `| ラベル | API名 | ...`）ため、ヘッダ行のキーワードから
+    api / label / type 列位置を**動的に検出**する。
     """
     if not path.exists(): return []
     t = path.read_text(encoding="utf-8")
-    objs = []
-    _SKIP = {"オブジェクト", "API名", "---", ""}
+    objs: list[dict] = []
+
+    # 検出できるまでの既定列順（見つからなかった場合のフォールバック）
+    api_col, label_col, type_col = 0, 1, 2
+    header_found = False
+    in_table = False
+    _API_HDR   = {"api名", "api", "apiname", "オブジェクトapi"}
+    _LABEL_HDR = {"ラベル", "表示名", "オブジェクト", "名称", "label"}
+    _TYPE_HDR  = {"種別", "タイプ", "type", "オブジェクト種別"}
+
     for line in t.splitlines():
-        if not line.strip().startswith("|"): continue
-        cols = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
-        if len(cols) < 2: continue
-        label = cols[0]  # 表示名（日本語）
-        api   = cols[1]  # API名
-        if not api or label in _SKIP or re.fullmatch(r'[-\s:]+', label):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            in_table = False
             continue
-        objs.append({"api": api, "label": label,
-                     "type": cols[2] if len(cols)>2 else ""})
-    return objs[:50]
+        cols = [_clean_cell(c) for c in stripped.strip("|").split("|")]
+        if len(cols) < 2:
+            continue
+        # 区切り行 `|---|---|` はスキップ
+        if all(re.fullmatch(r'[-:\s]+', c) for c in cols if c):
+            continue
+
+        # ヘッダ行判定: 1行内で api/label キーワードの両方を含む
+        cols_lower = [c.lower() for c in cols]
+        has_api   = any(c in _API_HDR   for c in cols_lower)
+        has_label = any(c in _LABEL_HDR for c in cols_lower)
+        if has_api and has_label:
+            for i, c in enumerate(cols_lower):
+                if c in _API_HDR:   api_col   = i
+                elif c in _LABEL_HDR: label_col = i
+                elif c in _TYPE_HDR:  type_col  = i
+            header_found = True
+            in_table = True
+            continue
+        if not in_table:
+            # ヘッダ前の行や表外は一旦スキップ
+            continue
+
+        api   = cols[api_col]   if api_col   < len(cols) else ""
+        label = cols[label_col] if label_col < len(cols) else ""
+        type_ = cols[type_col]  if type_col  < len(cols) else ""
+        # API名は英数+アンダースコア。日本語が入っていたら列順の誤認 → スキップ
+        if not api or not re.fullmatch(r'[A-Za-z][\w]*', api):
+            continue
+        objs.append({"api": api, "label": label, "type": type_})
+
+    # ヘッダ行が一度も見つからない旧仕様カタログへのフォールバック
+    if not header_found:
+        _SKIP = {"オブジェクト", "API名", "---", ""}
+        for line in t.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("|"): continue
+            cols = [_clean_cell(c) for c in stripped.strip("|").split("|")]
+            if len(cols) < 2: continue
+            label = cols[0]
+            api   = cols[1]
+            if not api or label in _SKIP or re.fullmatch(r'[-\s:]+', label):
+                continue
+            if not re.fullmatch(r'[A-Za-z][\w]*', api):
+                continue
+            objs.append({"api": api, "label": label,
+                         "type": cols[2] if len(cols) > 2 else ""})
+
+    # 重複除去（api をキーに、最初のエントリ優先）
+    seen = set()
+    unique: list[dict] = []
+    for o in objs:
+        if o["api"] in seen: continue
+        seen.add(o["api"])
+        unique.append(o)
+    return unique[:100]
 
 
 def parse_data_model(path: Path) -> list[dict]:
@@ -290,9 +434,10 @@ def parse_data_model(path: Path) -> list[dict]:
     t = path.read_text(encoding="utf-8")
     rels = []
 
-    # ── Mermaid ERD 形式: "  ObjectA ||--o{ ObjectB : "label"" ──
+    # ── Mermaid ERD 形式: "ObjectA ||--o{ ObjectB : "label"" ──
+    # 実線（--）・点線（..）のどちらも受理。右端は `o{` `|{` `}o` `o|` `||` 等の多様な表記に対応。
     mermaid_pat = re.compile(
-        r'^\s*([\w]+)\s+\|[|o]--[o|>]?\{?\s+([\w]+)\s*:\s*"([^"]*)"',
+        r'^\s*([\w]+)\s+[|}o][|o][-.]{1,2}[|o][|o{]\s+([\w]+)\s*:\s*"([^"]*)"',
         re.MULTILINE,
     )
     for m in mermaid_pat.finditer(t):
@@ -333,19 +478,27 @@ def parse_data_model(path: Path) -> list[dict]:
 
 
 def _pick_flows(swimlanes: dict) -> tuple[dict | None, dict | None]:
-    """swimlanes.json から As-Is / To-Be フローを抽出"""
+    """swimlanes.json から As-Is / To-Be フローを抽出する。
+
+    優先順位:
+      1. flow_type が `asis` / `tobe` で明示宣言されたフロー
+      2. title に As-Is / To-Be 相当のキーワードを含むフロー
+      3. As-Is が見つからず overall が存在する場合のみ overall を As-Is に流用
+         （To-Be は流用せず、空欄のまま。下流で「フローデータなし」と明示される）
+    """
     flows = swimlanes.get("flows", [])
     asis = tobe = overall = None
     for f in flows:
         ftype = (f.get("flow_type") or "").lower()
         title = (f.get("title") or "").lower()
-        if ftype == "asis" or "as-is" in title or "現状" in title or "asis" in title:
+        is_asis = (ftype == "asis" or "as-is" in title or "asis" in title or "現状" in title or "導入前" in title)
+        is_tobe = (ftype == "tobe" or "to-be" in title or "tobe" in title or "目指す姿" in title or "導入後" in title)
+        if is_asis and asis is None:
             asis = f
-        elif "to-be" in title or "導入後" in title or "tobe" in title:
+        elif is_tobe and tobe is None:
             tobe = f
         elif ftype == "overall" and overall is None:
             overall = f
-    # As-Is が未設定なら overall を当てる
     if asis is None and overall is not None:
         asis = overall
     return asis, tobe
