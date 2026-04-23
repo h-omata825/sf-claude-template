@@ -26,8 +26,9 @@ tools:
 - **対象コンポーネントAPI名**: 全て or 特定コンポーネントのAPI名リスト（複数可）
 - **対象機能グループID**: 全て or 特定のFG-XXX（複数可）。FG-IDで絞り込んだ場合はそのFGに属する全コンポーネントを対象にする
 - **読み込ませたい資料のパス**（あれば）
+- **コンポーネントインデックス JSON**（大量処理時の効率化用・任意）: `[{id, type, api_name, source_file, absorb_into}, ...]` 形式の JSON ファイルパス。指定された場合は Phase 1 の `sf data query` を省略してこのリストから対象を取得する。部分実行・残件処理・テストリラン等に有効
 
-> **絞り込みの優先順位**: FG-IDが指定された場合はそのFGに属するコンポーネントを対象とし、コンポーネントAPI名が指定された場合はそのコンポーネントのみを対象とする。両方「全て」の場合は全量実行。
+> **絞り込みの優先順位**: FG-IDが指定された場合はそのFGに属するコンポーネントを対象とし、コンポーネントAPI名が指定された場合はそのコンポーネントのみを対象とする。インデックス JSON が指定された場合はそれを対象リストとして採用する。両方「全て」＋インデックス無しの場合は全量実行。
 
 ## 品質原則（最重要・全フェーズ共通）
 
@@ -142,6 +143,15 @@ sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE St
 
 既存設計書が存在する場合（アップデートモード）: `docs/design/` 配下の当該ファイルも読み込む。
 
+> **大規模 Flow の段階的読み戦略（1000行超）**:
+> Flow メタ XML は 1000 行を超えるものが頻出し、全文を一気に読み込むとコンテキストを大量消費する。以下の手順で段階的に読む:
+>
+> 1. **Pass 1（骨格把握）**: `<interviewLabel>` / `<processType>` / `<start>` / `<screens>` / `<decisions>` / `<actionCalls>` / `<recordLookups>` / `<recordUpdates>` / `<recordCreates>` / `<subflows>` / `<loops>` / `<scheduleStart>` タグの **name 属性のみ** を `grep -E '<(screens|decisions|actionCalls|recordLookups|recordUpdates|recordCreates|subflows|loops|scheduleStart)' ` 相当で抽出し、ノード一覧と接続関係の骨格を把握
+> 2. **Pass 2（詳細読み）**: 骨格で特定した主要ノード（Decision の条件式・RecordUpdate の対象項目等）を **該当ノード単位の範囲（typically 50〜150行）で部分読み込み**。全量 Read ではなく offset/limit を使う
+> 3. **Pass 3（Scheduled Flow）**: `<scheduleStart>` or `<schedule>` タグがある場合は **そのブロックを明示的に読み込み** frequency / startDate / startTime / offsetNumber / offsetUnit / recordTriggerType を抽出。設計書の「処理タイミング」欄に cron 相当で記述
+>
+> 単純な小規模 Flow（500行以下）はこの戦略は不要。従来通り全文一気読みでよい。
+
 | 種別 | 出力フォルダ | 判定基準 |
 |---|---|---|
 | Apexクラス（非バッチ・非スケジュール） | `apex/` | `Database.Batchable` / `Schedulable` 未実装 |
@@ -231,6 +241,8 @@ for tbd in design_dir.rglob('【TBD】{kebab_name}.md'):
 #### 設計書テンプレート・実装種別ごとの追加指示
 
 Read ツールで `{project_dir}/docs/templates/component-design-template.md` を読み込み、そのテンプレートと追加指示に従って設計書を生成する。
+
+> **Salesforce 標準プレースホルダの短縮版**: Communities / Site / SelfReg / AnswersHome / IdeasHome 等、Salesforce 組織生成時に自動配備される業務ロジックを持たないクラス・ページは、テンプレート末尾の「Salesforce 標準プレースホルダの短縮ルール」に従い **短縮版 MD** で生成する。判定条件（SFデフォルト命名 / 空ページ / ボイラープレート javadoc 残存）もテンプレートに記載。
 
 ### Phase 3: 差分更新 / 変更履歴
 

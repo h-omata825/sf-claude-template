@@ -129,6 +129,7 @@ flowchart TD
 - 入力変数・出力変数を全量テーブルで記述（型・必須/任意・初期値）
 - Apex呼び出し箇所（`<actionType>APEX</actionType>`）は対象クラス名を明記
 - 起動条件（Record-Triggered の場合: オブジェクト・タイミング・条件式）を基本情報に記述
+- **Scheduled Flow の場合**: `<scheduleStart>` / `<schedule>` ブロックから frequency / startDate / startTime / offsetNumber / offsetUnit を抽出し、基本情報の「処理タイミング」欄に **cron 相当の文字列**（例: `毎日 02:00 / 過去7日分の {Object} を対象`）を明記。Record-Triggered と Scheduled の混同に注意
 
 **Batch / Schedule**:
 - バッチサイズ（`Database.executeBatch` の scope）・cron式（`System.schedule` の cronExp）を基本情報に記述
@@ -141,3 +142,57 @@ flowchart TD
 - Timeout値・リトライ設定・エラーステータスコードの処理方針を例外処理に記述
 - Named Credential名 or カスタム設定からの取得パターンを実現方式に記述
 - 外部サービスのサンドボックス/本番切り替え方法を権限設計に記述
+
+---
+
+## Salesforce 標準プレースホルダの短縮ルール
+
+`force-app/main/default/{classes,pages}/` 配下には、Salesforce 組織生成時に
+自動配備されるプレースホルダ（Communities / Site / SelfReg / AnswersHome /
+IdeasHome / SiteTemplate 等）が含まれる。これらは **業務ロジックを持たない
+骨組みコード**であり、設計書を他機能と同じ粒度で書くと冗長になる。
+
+以下に該当するコンポーネントは **短縮版テンプレート**を使う:
+
+**該当条件**（いずれか該当すれば短縮版）:
+- クラス名が Salesforce の標準プレースホルダ命名: `Communities*Controller` /
+  `MicrobatchSelfRegController` / `SiteRegisterController` / `SiteLogin*` /
+  `ChangePasswordController` / `ForgotPasswordController` 等
+- ページ本体が実質空 or 1〜2行のプレースホルダ（例: `AnswersHome` / `IdeasHome` /
+  `SiteTemplate` / `*Exception` / `FileNotFound` 等）
+- javadoc に `"An apex page controller that..."` / `"An apex class that..."` 等の
+  SF デフォルトボイラープレート英文が残存
+
+**短縮版テンプレート**:
+
+```markdown
+# 【{機能ID}】{コンポーネント名}（{API名}）
+
+## 基本情報
+| 項目 | 値 |
+|---|---|
+| 機能ID | {feature_ids.ymlの値} |
+| 実装種別 | Apex / Visualforce / Aura |
+| 実装状態 | 実装済み（**Salesforce 標準プレースホルダ**） |
+| ソースファイル | `force-app/.../{FileName}` |
+
+## 概要
+
+このコンポーネントは Salesforce 組織生成時に自動配備される
+**標準プレースホルダ**であり、業務ロジックを持たない。
+{機能を担う実コンポーネント名} が本機能の実態を担うため、
+詳細設計は {実コンポーネントの MD ファイル名} を参照。
+
+## 削除・無効化の可否
+
+- [ ] **[要確認]** 実運用で本クラス/ページを参照しているか（Experience Cloud /
+  Site のコンフィグ・他 Apex からの参照）
+- 削除可能と判断された場合: destructive deploy で `force-app/` から除去できる
+
+## 所見
+
+- {SFデフォルト javadoc の英文 or 空ページである旨を1〜2行で記載}
+```
+
+本体の一般テンプレート（全セクション記述）は使わない。他機能の設計書から
+参照される場合は「短縮版 MD 本体だけ」でよい。
