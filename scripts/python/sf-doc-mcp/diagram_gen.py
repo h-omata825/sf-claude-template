@@ -645,11 +645,16 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
 # ════════════════════════════════════════════════════════════════
 
 _COMP_COLORS: dict[str, tuple[str, str]] = {
-    "Apex":    (C_SF_CORE,  C_SF_LABEL),
-    "LWC":     (C_HDR_BLUE, C_SF_LABEL),
-    "Flow":    ("#00B0F0",  "#000000"),
-    "Trigger": ("#1F3864",  "#FFFFFF"),
-    "Batch":   ("#5A5A5A",  "#FFFFFF"),
+    "Apex":        (C_SF_CORE,  C_SF_LABEL),
+    "LWC":         (C_HDR_BLUE, C_SF_LABEL),
+    "Aura":        (C_HDR_BLUE, C_SF_LABEL),
+    "Visualforce": ("#70AD47",  "#FFFFFF"),
+    "Flow":        ("#00B0F0",  "#000000"),
+    "画面フロー":  ("#00B0F0",  "#000000"),
+    "Trigger":     ("#1F3864",  "#FFFFFF"),
+    "Batch":       ("#5A5A5A",  "#FFFFFF"),
+    "User":        ("#FFC000",  "#000000"),
+    "Entry":       ("#A5A5A5",  "#FFFFFF"),
 }
 
 def render_component_diagram(
@@ -682,18 +687,44 @@ def render_component_diagram(
         if comp and comp not in step_order:
             step_order[comp] = int(s.get("step", 0))
 
-    # 起動元ノードを推定（最初のステップのトリガー or business_flow の actor）
+    # components の type 分布を取得（起動元ノード推定に使用）
+    _UI_TYPES = {"Visualforce", "LWC", "Aura"}
+    type_counts: dict[str, int] = {}
+    for c in components:
+        t = c.get("type", "")
+        if t:
+            type_counts[t] = type_counts.get(t, 0) + 1
+    n_comp = max(len(components), 1)
+
+    # 起動元ノードを推定（steps のキーワード → components の type 分布 の順）
     trigger_node: str | None = None
-    trigger_type = "Flow"
+    trigger_type: str | None = None
     if steps:
         first = steps[0]
         desc = (first.get("description", "") + first.get("title", "")).lower()
         if "trigger" in desc or "triggger" in desc:
             trigger_type = "Trigger"
-        elif "batch" in desc:
+        elif "batch" in desc or "schedule" in desc:
             trigger_type = "Batch"
         elif "lwc" in desc or "lightning" in desc:
             trigger_type = "LWC"
+        elif "flow" in desc:
+            trigger_type = "Flow"
+
+    if trigger_type is None:
+        # components の type 分布から推定（過半数ルール）
+        ui_count = sum(type_counts.get(t, 0) for t in _UI_TYPES)
+        if ui_count >= n_comp * 0.5:
+            trigger_type = "User"  # ユーザー操作起点
+        elif type_counts.get("Trigger", 0):
+            trigger_type = "Trigger"
+        elif type_counts.get("Batch", 0):
+            trigger_type = "Batch"
+        elif (type_counts.get("Flow", 0) + type_counts.get("画面フロー", 0)) >= n_comp * 0.5:
+            trigger_type = "Flow"
+        # else: 不明 → trigger_node 省略
+
+    if trigger_type:
         trigger_node = f"[{trigger_type}]"
 
     # callees で参照されているコンポーネント（被呼び出し側）
@@ -703,28 +734,42 @@ def render_component_diagram(
             called_by.add(c)
 
     # トップレベルコンポーネント（誰からも呼ばれていない）の型を確認
-    # comp_type_mapはまだ未構築のためcomponentsから直接取得
     _type_lookup = {c.get("api_name", ""): c.get("type", "") for c in components}
     top_level_types = {
         _type_lookup.get(c.get("api_name", ""), "")
         for c in components if c.get("api_name", "") not in called_by
     }
 
-    # LWCがトップレベルにある場合 → LWC自体が起点なので[Flow]ノード不要
-    if any(t in {"LWC", "Aura"} for t in top_level_types):
+    # UI系（LWC / Aura / Visualforce）がトップレベルにあり、かつ trigger_type が User の場合は
+    # 冗長な [User] ノードを省略せず残す（操作の起点が見える方が分かりやすい）。
+    # LWC がトップレベルで steps から推定した trigger でない場合のみ従来通り省略。
+    if trigger_type in {"LWC", "Aura"} and any(
+        t in {"LWC", "Aura"} for t in top_level_types
+    ):
         trigger_node = None
+
+    # ノード数に応じてレイアウトを切替（縦一列潰れの回避）
+    num_nodes = len(components) + (1 if trigger_node else 0)
+    if num_nodes <= 6:
+        _rankdir, _splines = "LR", "ortho"
+    elif num_nodes <= 18:
+        _rankdir, _splines = "TB", "ortho"
+    else:
+        # 大量（20+ノード）: 直線スプラインで自由レイアウト + 詰めた間隔
+        _rankdir, _splines = "TB", "polyline"
 
     g = _gv.Digraph(
         "components",
         graph_attr={
             "bgcolor": "white",
-            "rankdir": "LR",
-            "splines": "ortho",
-            "nodesep": "0.5",
-            "ranksep": "1.0",
+            "rankdir": _rankdir,
+            "splines": _splines,
+            "nodesep": "0.35" if num_nodes > 18 else "0.5",
+            "ranksep": "0.6" if num_nodes > 18 else "1.0",
             "fontname": FONT_JP,
             "pad": "0.4",
             "dpi": "150",
+            "concentrate": "true",
         },
     )
 

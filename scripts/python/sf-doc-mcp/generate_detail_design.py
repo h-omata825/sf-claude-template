@@ -185,14 +185,33 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
 # ── PNG埋め込み ────────────────────────────────────────────────────
 def _embed_image(ws, png_path: str, anchor: str,
                  img_w: int = 840, img_h: int | None = None,
-                 max_h: int | None = None):
-    """PNGをExcelシートに埋め込む。img_h=Noneなら縦横比維持。max_h で高さ上限を設定。"""
+                 max_h: int | None = None,
+                 max_w: int | None = None):
+    """PNGをExcelシートに埋め込む。
+
+    動作モード（優先順）:
+      1. img_h が指定されていれば固定サイズ（img_w × img_h・アスペクト比無視）
+      2. max_w と max_h が両方指定 → fit-in-box:
+         アスペクト比を維持したまま max_w × max_h の枠に収まる最大サイズに
+         フィット（横長・縦長どちらでもバランス良く表示）
+      3. それ以外は従来互換: 幅を img_w に合わせて高さをアスペクト比で決める。
+         max_h 指定時は高さ上限を適用（幅も比例して縮小）
+    """
     try:
         if not Path(png_path).exists():
             return
         img = XLImage(png_path)
         img.anchor = anchor
-        if img_h is None:
+        if img_h is not None:
+            img.width = img_w
+            img.height = img_h
+        elif max_w is not None and max_h is not None:
+            orig_w = float(img.width or 1)
+            orig_h = float(img.height or 1)
+            scale = min(max_w / orig_w, max_h / orig_h)
+            img.width = int(orig_w * scale)
+            img.height = int(orig_h * scale)
+        else:
             ratio = img.height / img.width if img.width else 1.0
             w, h = img_w, int(img_w * ratio)
             if max_h and h > max_h:
@@ -200,9 +219,6 @@ def _embed_image(ws, png_path: str, anchor: str,
                 w = int(h / ratio)
             img.width = w
             img.height = h
-        else:
-            img.width = img_w
-            img.height = img_h
         ws.add_image(img)
     except Exception as e:
         print(f"  [WARN] 画像埋め込み失敗({anchor}): {e}")
@@ -262,10 +278,10 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
     diagram_start = spacer_row + 1
     diagram_area(ws, diagram_start, "業務フロー図（自動生成）", section_no=2)
 
-    # 図埋め込み
+    # 図埋め込み（fit-in-box: 横長・縦長どちらでも枠内に収まる最大サイズ）
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, img_w=880)
+        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
 
 
 def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
@@ -398,7 +414,7 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, img_w=880)
+        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
 
 
 def _estimate_row_height(text: str, chars_per_line: int = 34,
@@ -453,7 +469,7 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, img_w=880)
+        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
 
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
@@ -490,7 +506,7 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, img_w=700, max_h=500)
+        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
 
 
 
