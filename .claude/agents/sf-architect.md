@@ -1,6 +1,7 @@
 ---
 name: sf-architect
 description: Salesforceの要件定義・設計・ドキュメント作成。組織解析・要件整理・オブジェクト定義書・項目定義書・機能設計書・データモデル設計・影響調査・ユーザーストーリー作成。
+model: opus
 tools:
   - Read
   - Edit

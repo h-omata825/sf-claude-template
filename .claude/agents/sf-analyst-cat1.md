@@ -1,6 +1,7 @@
 ---
 name: sf-analyst-cat1
 description: sf-memoryのカテゴリ1（組織概要・環境情報）を担当。org-profile.md/requirements.md/system.json/usecases.md/swimlanes.jsonを生成・更新する。/sf-memoryコマンドから委譲されて実行する。後続のカテゴリ2〜5が参照する基盤情報を生成する最重要カテゴリ。
+model: opus
 tools:
   - Read
   - Edit

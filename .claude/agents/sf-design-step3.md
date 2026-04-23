@@ -1,6 +1,7 @@
 ---
 name: sf-design-step3
 description: "sf-design コマンドから委譲される機能一覧ステップ専用エージェント。feature_list.json を検証し、generate_feature_list.py を直接呼び出して機能一覧.xlsx を生成する。「機能一覧のみ」または「詳細設計+機能一覧」選択時のみ呼ばれる。プログラム設計と同時選択時は sf-design-step2 が機能一覧を生成するため、このエージェントは呼ばれない。"
+model: opus
 tools:
   - Read
   - Glob

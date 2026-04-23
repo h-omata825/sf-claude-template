@@ -1,6 +1,7 @@
 ---
 name: backlog-planner
 description: Backlog課題の対応方針・実装方針の策定専門エージェント。investigatorの調査レポートをもとに、あらゆる業務前提を考慮した全ての対応案と実装判断ポイントを網羅的に提示してユーザの確認を得る。コードを書かず、「何をどう実装すべきか」をユーザと決定することに特化する。
+model: opus
 tools:
   - Read
   - Glob

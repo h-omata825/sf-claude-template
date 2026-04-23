@@ -1,6 +1,7 @@
 ---
 name: sf-analyst-cat3
 description: sf-memoryのカテゴリ3（マスタデータ・ワークフロー設定）を担当。docs/data/ 配下にマスタデータ・メールテンプレート・レポート・自動化設定情報を生成・更新する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1/2の出力を参照して業務文脈を把握してから収集する。
+model: opus
 tools:
   - Read
   - Edit

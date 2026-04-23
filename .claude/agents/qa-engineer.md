@@ -1,6 +1,7 @@
 ---
 name: qa-engineer
 description: Salesforceプロジェクトのテスト計画・テストケース作成・バグ調査・品質レビュー・セキュリティレビュー。Apexテストクラスレビュー・機能テスト・UAT支援・根本原因分析・FLS/CRUD/権限セキュリティ監査。テスト工程・バグ調査・品質確認タスクに使用する。
+model: opus
 tools:
   - Read
   - Edit

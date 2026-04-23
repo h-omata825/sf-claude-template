@@ -1,6 +1,7 @@
 ---
 name: reviewer
 description: コードレビュー・セキュリティ監査・成果物クロスチェック。Apex/LWC/Flow/SOQLのレビュー・FLS/CRUD/共有設定の権限監査・手順書や議事録などのドキュメントレビュー・PRレビュー支援。担当エージェントのセルフレビュー後に独立した視点で品質・整合性・安全性を検証する。
+model: opus
 tools:
   - Read
   - Glob

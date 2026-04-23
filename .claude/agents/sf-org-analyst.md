@@ -1,6 +1,7 @@
 ---
 name: sf-org-analyst
 description: Salesforce組織・プロジェクトのdocs/横断補完（2周目）を担当。完了済みカテゴリのdocs/を読み込み、用語統一・矛盾解消・相互参照補完・品質ゲートチェックを行う。/sf-memoryで2件以上のカテゴリが選択・完了した後に呼ばれる。
+model: opus
 tools:
   - Read
   - Edit
