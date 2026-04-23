@@ -705,10 +705,15 @@ def main():
                         choices=["minor", "major"])
     parser.add_argument("--source-hash", default="",
                         help="ソースのSHA256。_meta に保存して次回差分判定に使う")
+    parser.add_argument("--author", default="",
+                        help="作成者名。JSON の author が空の場合にフォールバックで使用")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
     today  = _date.today().strftime("%Y-%m-%d")
+    # --author が指定された場合は JSON 側に反映（改版履歴の変更者と表紙の両方に効く）
+    if args.author:
+        data["author"] = args.author
     author = data.get("author", "")
 
     # ── 出力先を先に確定（既存ファイル自動検出に使用） ──────────────

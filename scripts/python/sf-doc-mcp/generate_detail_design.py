@@ -490,7 +490,7 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, img_w=880)
+        _embed_image(ws, png_path, img_anchor, img_w=700, max_h=500)
 
 
 
@@ -2100,11 +2100,16 @@ def main():
                         choices=["minor", "major"])
     parser.add_argument("--source-hash", default="",
                         help="グループ内ソースのSHA256。_meta に保存して次回差分判定に使う")
+    parser.add_argument("--author", default="",
+                        help="作成者名。JSON の author が空の場合にフォールバックで使用")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
     data = _normalize_schema(data)   # GFスキーマ → 標準スキーマ変換
     today  = _date.today().strftime("%Y-%m-%d")
+    # --author が指定された場合は JSON 側に反映（改版履歴の変更者と表紙の両方に効く）
+    if args.author:
+        data["author"] = args.author
     author = data.get("author", "")
 
     feature_id = data.get("feature_id", "")
