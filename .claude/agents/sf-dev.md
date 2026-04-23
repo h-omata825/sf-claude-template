@@ -1,5 +1,6 @@
 ---
 name: sf-dev
+model: opus
 description: Salesforceの開発・改修全般。Apex・LWC・Flow・メタデータ設定（オブジェクト・項目・レイアウト・権限セット・メールテンプレート・レポート）、SFDX/SF CLI操作、デプロイ支援。新機能実装・機能改修・設定変更タスクに使用する。
 tools:
   - Read

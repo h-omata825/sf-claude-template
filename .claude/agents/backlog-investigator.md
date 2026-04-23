@@ -1,5 +1,6 @@
 ---
 name: backlog-investigator
+model: opus
 description: Backlog課題の深層調査専門エージェント。課題・コメントの精読、docs/からの業務文脈抽出、関連コード全読み、類似実装の特定、フィールドAPI名の実コード確認、業務要件の不確実点の洗い出しを行い、構造化された調査レポートを出力する。
 tools:
   - Read

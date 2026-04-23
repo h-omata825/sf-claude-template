@@ -1,5 +1,6 @@
 ---
 name: sf-detail-design-writer
+model: opus
 description: "詳細設計書（Excel）を業務グループ単位で生成する専門エージェント。feature_groups.yml が示すグループ構成とソースコードを読み込み、エンジニア向けの詳細設計 JSON を生成してから Python スクリプトで Excel に変換する。"
 tools:
   - Read
