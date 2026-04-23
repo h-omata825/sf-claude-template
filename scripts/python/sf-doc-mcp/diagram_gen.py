@@ -341,11 +341,14 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
     trans_in = flow.get("transitions", [])
     title    = flow.get("title", "業務フロー")
 
+    # ステップ数が多い場合は縦方向（TB）に切り替えて横スクロールを防ぐ
+    _sw_rankdir = "LR" if len(steps_in) <= 5 else "TB"
+
     g = _gv.Digraph(
         "swimlane",
         graph_attr={
             "bgcolor": "white",
-            "rankdir": "LR",
+            "rankdir": _sw_rankdir,
             "splines": "polyline",
             "nodesep": "0.4",
             "ranksep": "0.6",
@@ -576,45 +579,61 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         },
     )
 
-    # 上段: ステップノード（同ランク＝横並び、文字大きめで縦長に）
-    with g.subgraph() as top:
-        top.attr(rank="same")
-        for step in steps:
-            sid       = str(step.get("step", ""))
-            n         = int(step.get("step", 0))
-            badge     = _badge(n)
-            raw_title = step.get("title", "") or step.get("description", "")
-            raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
-            wrapped   = _wrap_jp(raw_title, 8)
-            branch    = step.get("branch", "")
-            label     = badge + "\\n" + wrapped
+    ROW_SIZE = 5  # 1行あたりのステップ数
+    need_wrap = len(steps) > ROW_SIZE
 
-            if branch:
-                top.node(sid, label=label,
-                         shape="diamond", style="filled",
-                         fillcolor="#FFF2CC", fontcolor="#7F6000",
-                         fontname=_FC_FONT, fontsize="12",
-                         width="1.8", height="1.4", margin="0.3,0.2")
-            else:
-                top.node(sid, label=label,
-                         shape="box", style="filled,rounded",
-                         fillcolor=C_STEP_BG, fontcolor="white",
-                         fontname=_FC_FONT, fontsize="12",
-                         width="1.8", height="1.4", margin="0.3,0.2")
+    def _draw_step_node(parent, step):
+        sid       = str(step.get("step", ""))
+        n         = int(step.get("step", 0))
+        badge     = _badge(n)
+        raw_title = step.get("title", "") or step.get("description", "")
+        raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
+        wrapped   = _wrap_jp(raw_title, 8)
+        branch    = step.get("branch", "")
+        label     = badge + "\\n" + wrapped
+        if branch:
+            parent.node(sid, label=label,
+                        shape="diamond", style="filled",
+                        fillcolor="#FFF2CC", fontcolor="#7F6000",
+                        fontname=_FC_FONT, fontsize="12",
+                        width="1.8", height="1.4", margin="0.3,0.2")
+        else:
+            parent.node(sid, label=label,
+                        shape="box", style="filled,rounded",
+                        fillcolor=C_STEP_BG, fontcolor="white",
+                        fontname=_FC_FONT, fontsize="12",
+                        width="1.8", height="1.4", margin="0.3,0.2")
 
-    # 下段: コンポーネント名ラベル（同ランク＝横並び・枠なし）
-    with g.subgraph() as bot:
-        bot.attr(rank="same")
+    def _draw_comp_label(step):
+        sid       = str(step.get("step", ""))
+        component = step.get("component", "")
+        cid       = f"_c{sid}"
+        g.node(cid,
+               label=_wrap_name(component, 12) if component else "",
+               shape="none", margin="0",
+               fontname=_FC_FONT, fontsize="10", fontcolor="#555555")
+        g.edge(sid, cid, style="invis", weight="100")
+
+    if need_wrap:
+        # 複数行: ROW_SIZE ごとに rank=same サブグラフ → 行末→次行頭エッジで折り返し
+        chunks = [steps[i:i + ROW_SIZE] for i in range(0, len(steps), ROW_SIZE)]
+        for ri, chunk in enumerate(chunks):
+            with g.subgraph(name=f"_row_{ri}") as row:
+                row.attr(rank="same")
+                for step in chunk:
+                    _draw_step_node(row, step)
         for step in steps:
-            sid       = str(step.get("step", ""))
-            component = step.get("component", "")
-            cid       = f"_c{sid}"
-            bot.node(cid,
-                     label=_wrap_name(component, 12) if component else "",
-                     shape="none", margin="0",
-                     fontname=_FC_FONT, fontsize="10", fontcolor="#555555")
-            # 上段ノードと下段ラベルを不可視エッジで紐付け（縦位置を揃える）
-            g.edge(sid, cid, style="invis", weight="100")
+            _draw_comp_label(step)
+    else:
+        # 1行: 従来通り全ステップを rank=same
+        with g.subgraph() as top:
+            top.attr(rank="same")
+            for step in steps:
+                _draw_step_node(top, step)
+        with g.subgraph() as bot:
+            bot.attr(rank="same")
+            for step in steps:
+                _draw_comp_label(step)
 
     # フロー矢印（ステップ間）
     has_next = any(step.get("next") for step in steps)
@@ -655,6 +674,18 @@ _COMP_COLORS: dict[str, tuple[str, str]] = {
     "Batch":       ("#5A5A5A",  "#FFFFFF"),
     "User":        ("#FFC000",  "#000000"),
     "Entry":       ("#A5A5A5",  "#FFFFFF"),
+}
+
+# コンポーネント図: 起動元ノードの日本語ラベル
+_TRIGGER_LABEL_JA: dict[str, str] = {
+    "User":        "操作者",
+    "LWC":         "画面操作",
+    "Aura":        "画面操作",
+    "Visualforce": "画面操作",
+    "Trigger":     "レコード更新",
+    "Batch":       "バッチ処理",
+    "Flow":        "自動起動フロー",
+    "Entry":       "処理起点",
 }
 
 def render_component_diagram(
@@ -724,8 +755,10 @@ def render_component_diagram(
             trigger_type = "Flow"
         # else: 不明 → trigger_node 省略
 
+    _trigger_label: str = ""
     if trigger_type:
-        trigger_node = f"[{trigger_type}]"
+        trigger_node = "_trigger"  # ノードIDは固定（日本語は label で別途指定）
+        _trigger_label = _TRIGGER_LABEL_JA.get(trigger_type, f"[{trigger_type}]")
 
     # callees で参照されているコンポーネント（被呼び出し側）
     called_by: set[str] = set()
@@ -740,13 +773,12 @@ def render_component_diagram(
         for c in components if c.get("api_name", "") not in called_by
     }
 
-    # UI系（LWC / Aura / Visualforce）がトップレベルにあり、かつ trigger_type が User の場合は
-    # 冗長な [User] ノードを省略せず残す（操作の起点が見える方が分かりやすい）。
-    # LWC がトップレベルで steps から推定した trigger でない場合のみ従来通り省略。
+    # LWC/Aura がトップレベルにある場合は「画面操作」ノードを省略（UI コンポーネントが起点を担う）
     if trigger_type in {"LWC", "Aura"} and any(
         t in {"LWC", "Aura"} for t in top_level_types
     ):
         trigger_node = None
+        _trigger_label = ""
 
     # callees が全部空かつノード数が多い場合は「グリッド配置」モード
     # （多量 UI コンポーネントの一覧表示に適したレイアウト）
@@ -782,10 +814,10 @@ def render_component_diagram(
     if trigger_node:
         fill, fg = _COMP_COLORS.get(trigger_type, ("#00B0F0", "#000000"))
         g.node(trigger_node,
-               label=trigger_node,
+               label=_trigger_label,
                shape="box", style="filled,rounded",
                fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="10", width="1.0")
+               fontname=FONT_JP, fontsize="10", width="1.2")
 
     # コンポーネントノード（名前 + 種別のみ。ロールは表に記載するため除外）
     if use_grid:
@@ -818,6 +850,19 @@ def render_component_diagram(
             for row in rows:
                 g.edge(trigger_node, row[0],
                        color=C_EDGE, arrowsize="0.7", style="dashed")
+        # step_order から推論した隣接コンポーネント間を点線エッジで接続
+        drawn_grid_edges: set[tuple[str, str]] = set()
+        comps_by_step = sorted(
+            [n for n in names_ordered if n in step_order],
+            key=lambda n: step_order[n],
+        )
+        for i in range(len(comps_by_step) - 1):
+            src_n, dst_n = comps_by_step[i], comps_by_step[i + 1]
+            if src_n != dst_n and (src_n, dst_n) not in drawn_grid_edges:
+                g.edge(src_n, dst_n,
+                       color=C_EDGE, arrowsize="0.5",
+                       style="dotted", constraint="false")
+                drawn_grid_edges.add((src_n, dst_n))
     else:
         for comp in components:
             name  = comp.get("api_name", "")

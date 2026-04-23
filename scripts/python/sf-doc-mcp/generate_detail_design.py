@@ -596,6 +596,44 @@ def _parse_apex_fields(cls_path: Path) -> dict[str, set]:
         if prop_fields:
             result.setdefault(trigger_obj, set()).update(prop_fields)
 
+    # G-6: Site.* / System.setPassword 呼び出しがあれば User オブジェクトを操作とみなす
+    if _re.search(
+        r'\bSite\.(?:login|forgotPassword|validatePassword|createPortalUser|changePassword|passwordless)\b'
+        r'|\bSystem\.setPassword\b', content):
+        result.setdefault("User", set()).update({"Username", "Email", "IsActive"})
+        # Contact もポータル連携で暗黙に参照される（login → Contact を辿る）
+        if _re.search(r'\bSite\.(?:login|createPortalUser)\b', content):
+            result.setdefault("Contact", set()).update({"Email", "Name"})
+
+    return result
+
+
+def _parse_vf_fields(vf_path: Path) -> dict[str, set]:
+    """Visualforce ページから使用オブジェクト+フィールドを抽出する。
+    Returns {obj_api: {field_api}}
+    """
+    try:
+        content = vf_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return {}
+    result: dict[str, set] = {}
+    # standardController="Contact" → オブジェクト特定
+    ctrl_m = _re.search(r'standardController="([A-Za-z][A-Za-z0-9_]*)"', content)
+    if ctrl_m:
+        obj_api = ctrl_m.group(1)
+        for m in _re.finditer(
+            r'(?:inputField|outputField)[^>]+value="\{!(?:[A-Za-z_]\w*\.)?([A-Za-z][A-Za-z0-9_]*(?:__c)?)\}"',
+            content,
+        ):
+            field = m.group(1)
+            if _re.match(r'^[A-Za-z]', field):
+                result.setdefault(obj_api, set()).add(field)
+    # カスタムオブジェクト直参照: {!MyObj__c.Field__c}
+    for m in _re.finditer(
+        r'\{!([A-Za-z][A-Za-z0-9_]*__c)\.([A-Za-z][A-Za-z0-9_]*(?:__c)?)\}', content
+    ):
+        obj_api2, field = m.group(1), m.group(2)
+        result.setdefault(obj_api2, set()).add(field)
     return result
 
 
@@ -641,6 +679,26 @@ def _load_sf_metadata(sf_project_path: str) -> None:
                 continue
             comp_api = cls_file.name.replace(".cls", "")
             obj_fields = _parse_apex_fields(cls_file)
+            if obj_fields:
+                _SF_COMP_FIELDS[comp_api] = {k: v for k, v in obj_fields.items()}
+
+    # pages: Visualforce コンポーネント別フィールド
+    # G-6: controller="ClassName" を辿って Apex クラス側のフィールド（Site.* 検出を含む）も引き込む
+    pages_dir = base / "pages"
+    if pages_dir.exists():
+        for vf_file in pages_dir.glob("*.page"):
+            comp_api = vf_file.name.replace(".page", "")
+            obj_fields = _parse_vf_fields(vf_file)
+            try:
+                vf_content = vf_file.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                vf_content = ""
+            ctrl_m = _re.search(r'(?<!standard)[Cc]ontroller="([A-Za-z][A-Za-z0-9_]*)"', vf_content)
+            if ctrl_m:
+                ctrl_name = ctrl_m.group(1)
+                ctrl_fields = _SF_COMP_FIELDS.get(ctrl_name, {})
+                for k, v in ctrl_fields.items():
+                    obj_fields.setdefault(k, set()).update(v)
             if obj_fields:
                 _SF_COMP_FIELDS[comp_api] = {k: v for k, v in obj_fields.items()}
 
@@ -730,10 +788,14 @@ def _load_sf_metadata(sf_project_path: str) -> None:
 
 
 def _sf_field_label(obj_api: str, field_api: str) -> str:
-    """フィールドAPI名を日本語ラベルに変換する（メタデータ優先、なければ加工済みAPI名）。"""
+    """フィールドAPI名を日本語ラベルに変換する（メタデータ優先、なければ標準予備辞書→加工済みAPI名）。"""
     label = _SF_FIELD_LABELS.get(obj_api, {}).get(field_api)
     if label:
         return label
+    # G-5: 標準オブジェクトの主要項目は予備辞書から日本語化
+    for f in _STD_OBJ_FIELDS_FALLBACK.get(obj_api, []):
+        if f["api_name"] == field_api:
+            return f["label"]
     return field_api.replace("__c", "").replace("__", "_")
 
 
@@ -760,6 +822,64 @@ _STD_OBJ_LABELS = {
     "Event":               "行動",
     "User":                "ユーザー",
     "Quote":               "見積",
+}
+
+# 標準オブジェクトの主要項目フォールバック（_SF_FIELD_LABELS に翻訳が無い場合の予備）
+_STD_OBJ_FIELDS_FALLBACK: dict[str, list[dict[str, str]]] = {
+    "User": [
+        {"api_name": "Username",  "label": "ユーザー名",     "note": "ログイン ID"},
+        {"api_name": "Email",     "label": "メールアドレス", "note": ""},
+        {"api_name": "Name",      "label": "氏名",           "note": ""},
+        {"api_name": "IsActive",  "label": "有効",           "note": ""},
+        {"api_name": "ContactId", "label": "取引先責任者",   "note": "ポータル連携"},
+    ],
+    "Contact": [
+        {"api_name": "Name",      "label": "氏名",           "note": ""},
+        {"api_name": "Email",     "label": "メールアドレス", "note": ""},
+        {"api_name": "Phone",     "label": "電話番号",       "note": ""},
+        {"api_name": "AccountId", "label": "取引先",         "note": ""},
+    ],
+    "Account": [
+        {"api_name": "Name",  "label": "取引先名", "note": ""},
+        {"api_name": "Phone", "label": "電話番号", "note": ""},
+    ],
+    "Lead": [
+        {"api_name": "Name",    "label": "氏名",           "note": ""},
+        {"api_name": "Email",   "label": "メールアドレス", "note": ""},
+        {"api_name": "Company", "label": "会社名",         "note": ""},
+    ],
+    "Case": [
+        {"api_name": "CaseNumber", "label": "ケース番号",   "note": ""},
+        {"api_name": "Subject",    "label": "件名",         "note": ""},
+        {"api_name": "Status",     "label": "ステータス",   "note": ""},
+    ],
+}
+
+# 標準オブジェクトの canonical 名（lowercase variant → PascalCase API 名）
+# VF の {!user.firstname} のような小文字参照を正規 API 名に寄せるための辞書
+_STD_OBJ_CANONICAL_NAMES: dict[str, dict[str, str]] = {
+    "User": {
+        "firstname": "FirstName", "lastname": "LastName", "email": "Email",
+        "username": "Username", "name": "Name", "isactive": "IsActive",
+        "contactid": "ContactId", "accountid": "AccountId", "profileid": "ProfileId",
+        "userroleid": "UserRoleId", "phone": "Phone", "mobilephone": "MobilePhone",
+        "title": "Title", "department": "Department", "usertype": "UserType",
+        "languagelocalekey": "LanguageLocaleKey", "localesidkey": "LocaleSidKey",
+        "timezonesidkey": "TimeZoneSidKey", "emailencodingkey": "EmailEncodingKey",
+        "city": "City", "country": "Country", "state": "State", "street": "Street",
+        "postalcode": "PostalCode", "fax": "Fax", "extension": "Extension",
+        "communitynickname": "CommunityNickname", "alias": "Alias",
+        "lastlogindate": "LastLoginDate", "id": "Id",
+    },
+    "Contact": {
+        "firstname": "FirstName", "lastname": "LastName", "email": "Email",
+        "name": "Name", "phone": "Phone", "mobilephone": "MobilePhone",
+        "accountid": "AccountId", "title": "Title", "department": "Department",
+        "id": "Id",
+    },
+    "Account": {
+        "name": "Name", "phone": "Phone", "id": "Id",
+    },
 }
 
 # 技術英語ジャーゴン → 日本語変換（SF オブジェクト名以外の技術用語）
@@ -1464,6 +1584,11 @@ _RE_CAMEL_IDENT   = _re.compile(r'\b([A-Z][a-z]+){2,}[A-Za-z0-9_]*\b')  # CamelC
 _RE_CMP_PAREN     = _re.compile(r'[（(]CMP[‐\-][0-9]+[）)]')  # 「（CMP-015）」
 _RE_MULTI_SPACE   = _re.compile(r'[ \t]{2,}')
 _RE_ORPHAN_PARTICLE = _re.compile(r'[ 　][をはがにでとのやもへ][ 　]')
+# 追加: 英語残留パターン（_strip_tech_identifiers で適用）
+_RE_REL_FIELD   = _re.compile(r'[A-Za-z][A-Za-z0-9_]*__r\.[A-Za-z_]\w*')  # User_portal__r.Field
+_RE_DOT_CHAIN   = _re.compile(r'\b[A-Z][A-Za-z0-9]+(?:\.[A-Za-z_]\w*)+\b')  # ClassName.method（括弧なし）
+_RE_URL_QUERY   = _re.compile(r'\?[a-zA-Z_]\w*(?:=[^\s。、）)]*)?')         # ?appkbn=0/1
+_RE_LOWER_CAMEL = _re.compile(r'(?<![A-Za-z_])[a-z]+[A-Z][a-zA-Z]+(?![A-Za-z_])')  # lowerCamelCase
 
 
 def _strip_tech_identifiers(text: str) -> str:
@@ -1471,6 +1596,12 @@ def _strip_tech_identifiers(text: str) -> str:
     _clean_tech_business / _translate_sf_fields を通した後の残渣をさらに除去する。"""
     if not text:
         return text
+    # __r リレーション参照（User_portal__r.UserName 等）
+    text = _RE_REL_FIELD.sub('', text)
+    # ClassName.method 形式（括弧なし: Site.validatePassword / System.setPassword 等）
+    text = _RE_DOT_CHAIN.sub('', text)
+    # URL クエリパラメータ（?appkbn=0/1 等）
+    text = _RE_URL_QUERY.sub('', text)
     text = _RE_METHOD_CALL.sub('', text)
     text = _RE_FILE_EXT.sub('', text)
     text = _RE_FLOW_META_EXT.sub('', text)
@@ -1479,6 +1610,8 @@ def _strip_tech_identifiers(text: str) -> str:
     # CamelCase 識別子（Controller, Handler などのクラス名）も除去。
     # ただし "Experience Cloud" のような既知ブランドは保護（事前にプレースホルダ化してから呼ぶ）
     text = _RE_CAMEL_IDENT.sub('', text)
+    # lowerCamelCase 識別子（objId, userName 等）
+    text = _RE_LOWER_CAMEL.sub('', text)
     # 除去で生じた連続空白・孤立助詞・読点連続を整える
     text = _RE_MULTI_SPACE.sub(' ', text)
     # 句点直後の孤立助詞（"。の結果" "。を呼び出し" 等）→ 句点のみに
@@ -1489,6 +1622,12 @@ def _strip_tech_identifiers(text: str) -> str:
     text = _re.sub(r'(?<=[ぁ-んァ-ヶ])て[にでをがはと](?=[ぁ-んァ-ヶ一-龯])', 'て', text)
     # 前後スペースで挟まれた孤立助詞（" の結果"）→ 前スペースだけ除去
     text = _re.sub(r'\s+([をはがにでとのやもへ])\s*(?=[ぁ-んァ-ヶ一-龯])', r'\1', text)
+    # 連続矢印（要素除去後に → → → と残るケース）→ 1つに
+    text = _re.sub(r'→(?:[ \t]*→)+', '→', text)
+    # 接続詞直後の孤立助詞（「またはに」「およびで」等）
+    text = _re.sub(r'(または|および|かつ|ただし)[ \t]*([をがはにでへと])(?=[ぁ-んァ-ヶ一-龯])', r'\1', text)
+    # 末尾の孤立矢印
+    text = _re.sub(r'[ \t]*→[ \t]*$', '', text)
     # 読点連続を1つに
     text = _re.sub(r'[、，]\s*[、，]+', '、', text)
     # スペース + 句読点 → 句読点のみ
@@ -1497,21 +1636,53 @@ def _strip_tech_identifiers(text: str) -> str:
     text = _re.sub(r'([、，。])\s+', r'\1', text)
     # 連続スペースを再圧縮
     text = _RE_MULTI_SPACE.sub(' ', text)
+    # G-1: 記号残留対策
+    text = _re.sub(r'\.{2,}', '', text)                                  # 連続ドット（__r 除去後の .. 等）
+    text = _re.sub(r'／(?:\s*／)+', '／', text)                           # 連続全角スラッシュ → 単一
+    text = _re.sub(r'→\s*[+・\-\/／＋=]\s*→', '→', text)               # 矢印間の裸記号（→ + → 等）
+    text = _re.sub(r'(?<=[ぁ-んァ-ヶ一-龯て])で([がをにはと])(?=[ぁ-んァ-ヶ一-龯])', 'で', text)  # でが 系二連助詞
+    text = _re.sub(r'→\s*(?:=|は)\s*(?=\s|$)', '', text)                 # 矢印末尾の裸記号
+    text = _re.sub(r'([。、])\s*[+・\-\/／＋=]\s*', r'\1', text)         # 句読点直後の裸記号
+    # G-3: 行頭の孤児助詞（英語除去で前詞が消えたケース "から 契約申込を特定し" 等）
+    text = _re.sub(r'^\s*(?:から|まで|より|へ|を|に|で|と|の|は|が)\s+', '', text)
+    text = _re.sub(r'^\s*(URL)\s+(?:から|まで|より|へ|を|に|で|と|の|は|が)\s+', r'\1 ', text)
+    # G-3b: 行頭の裸スラッシュ（コンポーネント名連結除去後の "／ は..." "／は..." "（／）は..."）
+    text = _re.sub(r'^[\s　]*[（(][\s　]*／[\s　]*[）)][\s　]*(?:は|が|を|に|で|と|の)?[\s　]*', '', text)
+    text = _re.sub(r'^[\s　]*／[\s　]*(?:は|が|を|に|で|と|の|へ|まで|から)?[\s　]*', '', text)
+    # G-3c: 連続助詞の補正（Class名を空置換後の "がに" "にで" など、右側を残す）
+    text = _re.sub(r'([がはをにと])([がはをにと])(?=[ぁ-んァ-ヶ一-龯])', r'\2', text)
+    # G-3d: 末尾・中間の孤立「=」（"=のため" "=true" 等の残渣）
+    text = _re.sub(r'\s*=\s*(?=のため|の結果|のとき|でない|である)', '', text)
+    text = _re.sub(r'\s*=\s*$', '', text)
+    text = _re.sub(r'[、，]\s*系は\s*', '、', text)  # 「は、系は」の中間「系は」は元 "IsXxx 系は" の残骸
+    # G-3e: タイトル行頭の単一助詞（VF名/Class名除去の副作用、仮名/漢字/長音が続く場合のみ）
+    text = _re.sub(r'^(?:で|は|を|に|と|が)(?=[一-龯ァ-ヶー][ぁ-んァ-ヶ一-龯ー])', '', text)
+    # G-3f: 中間位置の裸「（／）」「（／／）」等（コンポーネント名連結除去後）
+    text = _re.sub(r'[（(][\s　]*(?:／[\s　]*)+[）)]', '', text)
     text = _re.sub(r'^[\s、，。]+', '', text)
     text = _re.sub(r'[\s、，]+$', '', text)
     return text.strip()
 
 
 def _deep_clean_ja(text: str) -> str:
-    """業務テキスト用の総合クリーニング: SF 用語日本語化 → 技術識別子除去。"""
+    """業務テキスト用の総合クリーニング: 英語のうちに先行除去 → 日本語化 → 残渣除去。"""
     if not text:
         return text
     # Experience Cloud を保護
     text = text.replace("Experience Cloud", _EC_PLACEHOLDER)
+    # 英語のうちに除去（日本語訳が混入すると正規表現が日本語始まりになり効かなくなるため）
+    text = _RE_REL_FIELD.sub('', text)   # Contact__r.UserName 等
+    text = _RE_DOT_CHAIN.sub('', text)   # Site.validatePassword 等
+    text = _RE_URL_QUERY.sub('', text)   # ?appkbn=0/1 等
+    # 日本語化
     text = _translate_sf_fields(text)
     text = _translate_sf_objects(text)
     text = _translate_jargon(text)
+    # 残渣除去
     text = _strip_tech_identifiers(text)
+    for pat, repl in _TECH_REPL_BIZ:
+        text = pat.sub(repl, text)
+    text = _strip_tech_identifiers(text)  # TECH_REPL_BIZ 適用後の残渣を再除去
     text = text.replace(_EC_PLACEHOLDER, "Experience Cloud")
     return text.strip()
 
@@ -1535,11 +1706,24 @@ def _normalize_process_steps(steps: list[dict]) -> None:
             ps["title"] = _short_title(desc)
 
 
+def _summarize_action(s: str) -> str:
+    """action を 25 文字以内の一言に要約する（読点/句点で最初の節を採用）。
+    G-2: "Experience Cloud" を単一トークン扱いし、途中切断を防ぐ。"""
+    if not s or len(s) <= 25:
+        return s
+    # EC を一時的に短いプレースホルダに差し替えてから節選択・切断
+    s_w = s.replace("Experience Cloud", _EC_PLACEHOLDER)
+    parts = _re.split(r'[、。]', s_w)
+    head = next((p.strip() for p in parts if len(p.strip()) >= 4), s_w).strip()
+    result = (head[:24] + '…') if len(head) > 25 else head
+    return result.replace(_EC_PLACEHOLDER, "Experience Cloud")
+
+
 def _normalize_business_flow(flows: list[dict]) -> None:
     """business_flow[] の actor / action をクリーニングする（in-place）。
 
     - actor: コンポーネント名（CamelCase + __c 等）は「システム」に置換
-    - action: API 名・メソッド呼び出し・拡張子を除去し日本語化。技術ワード単独は業務表現に差し替え
+    - action: API 名・メソッド呼び出し・拡張子を除去し日本語化。25文字以内に要約
     """
     _BF_TECH_ONLY = ("画面フロー", "フロー", "Apex", "Apexクラス", "Batch",
                      "Flow", "Trigger", "LWC", "Aura", "Visualforce",
@@ -1547,7 +1731,7 @@ def _normalize_business_flow(flows: list[dict]) -> None:
     for s in flows:
         actor = str(s.get("actor", "") or "").strip()
         # アクターが CamelCase クラス名風、__c 付き、（CMP-XXX）を含む等はコンポーネント名扱い → 「システム」に
-        if (_RE_CAMEL_IDENT.search(actor)
+        if (_RE_CAMEL_IDENT.search(actor) or _RE_LOWER_CAMEL.search(actor)
                 or "__c" in actor or "（CMP" in actor or "(CMP" in actor):
             s["actor"] = "システム"
 
@@ -1559,20 +1743,13 @@ def _normalize_business_flow(flows: list[dict]) -> None:
             else:
                 s["action"] = "画面から必要情報を入力し、処理を起動する"
         elif act:
-            # API 名・メソッド呼び出し・拡張子・CamelCase 識別子を含む場合のみクリーニング
-            needs_clean = bool(
-                _RE_METHOD_CALL.search(act) or _RE_FILE_EXT.search(act)
-                or _RE_FLOW_META_EXT.search(act) or _RE_CUSTOM_OBJ.search(act)
-                or _RE_CAMEL_IDENT.search(act)
-            )
-            if needs_clean:
-                cleaned = _deep_clean_ja(act)
-                # クリーニングで空になってしまった場合は actor に応じて定型に差し替え
-                if not cleaned or len(cleaned) < 4:
-                    actor2 = s.get("actor", "")
-                    cleaned = ("処理を起動する" if actor2 in ("自動フロー", "システム")
-                               else "画面から必要情報を入力し、処理を起動する")
-                s["action"] = cleaned
+            cleaned = _deep_clean_ja(act)
+            # クリーニングで空・極短になった場合は actor に応じて定型に差し替え
+            if not cleaned or len(cleaned) < 4:
+                actor2 = s.get("actor", "")
+                cleaned = ("処理を起動する" if actor2 in ("自動フロー", "システム")
+                           else "画面から必要情報を入力し、処理を起動する")
+            s["action"] = _summarize_action(cleaned)
 
 
 def _obj_label_from_api(api: str) -> str:
@@ -1606,6 +1783,19 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
 
     for comp in data.get("components", []):
         name = comp.get("api_name", "")
+
+        # G-6: _SF_COMP_FIELDS（Apex/VF メタデータ由来）で User/Contact 等が紐付いていれば登録
+        comp_key = _re.sub(r'（[^）]+）$', '', name).strip()
+        meta_fields = _SF_COMP_FIELDS.get(comp_key, {}) or _SF_COMP_FIELDS.get(name, {})
+        for meta_obj in meta_fields.keys():
+            if meta_obj in ("__any__", "Id"):
+                continue
+            # outputs 文脈で「更新／登録」が言及されていれば W、そうでなければ R
+            out_text = comp.get("outputs", "") or ""
+            if _re.search(r'更新|登録|作成|保存|設定', out_text):
+                _register(meta_obj, name, "W")
+            else:
+                _register(meta_obj, name, "R")
 
         # inputs → R（参照）。ただし trigger newList / trigger.new 文脈では INSERT
         for text in [comp.get("inputs", "")]:
@@ -1752,27 +1942,46 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
         if not fields:
             # Flow/Apexメタデータからフィールドを補完
             meta = _SF_FIELD_LABELS.get(obj_api, {})
-            seen_apis: set[str] = set()
+            # G-5: 大小混在の重複（Username/username）を避けるため小文字キーで dedup。
+            # 標準オブジェクトは正規 API 名（_STD_OBJ_FIELDS_FALLBACK/_STD_OBJ_CANONICAL_NAMES）を優先採用。
+            canonical_names: dict[str, str] = {}  # lowercase → canonical api_name
+            for std in _STD_OBJ_FIELDS_FALLBACK.get(obj_api, []):
+                canonical_names[std["api_name"].lower()] = std["api_name"]
+            for fapi in meta.keys():
+                canonical_names.setdefault(fapi.lower(), fapi)
+            for _low, _pascal in _STD_OBJ_CANONICAL_NAMES.get(obj_api, {}).items():
+                canonical_names[_low] = _pascal
+
+            seen_lower: set[str] = set()
+            raw_fields: list[tuple[str, str]] = []
             for comp in data.get("components", []):
-                # JSONのapi_nameから型接尾辞（（Flow）等）を除去してコンポーネントキーに変換
                 raw_api = comp.get("api_name", "")
                 comp_key = _re.sub(r'（[^）]+）$', '', raw_api).strip()
                 comp_field_map = _SF_COMP_FIELDS.get(comp_key, {})
-                # 対象オブジェクトに直接マッチするフィールド
                 for fapi in comp_field_map.get(obj_api, set()):
-                    if fapi in seen_apis:
+                    lower = fapi.lower()
+                    if lower in seen_lower:
                         continue
-                    seen_apis.add(fapi)
-                    label = meta.get(fapi) or _sf_field_label(obj_api, fapi)
-                    fields.append({"api_name": fapi, "label": label, "access": obj_combined_op, "note": ""})
+                    seen_lower.add(lower)
+                    canonical = canonical_names.get(lower, fapi)
+                    raw_fields.append((canonical, comp_key))
+
+            # 標準オブジェクトの場合はノイズフィルタ（主要フィールド + __c カスタム項目のみ）
+            if obj_api in _STD_OBJ_FIELDS_FALLBACK:
+                allowed = {f["api_name"].lower() for f in _STD_OBJ_FIELDS_FALLBACK[obj_api]}
+                # objectTranslations にラベルがあるものも許可
+                allowed.update(k.lower() for k in meta.keys())
+                raw_fields = [(n, c) for (n, c) in raw_fields
+                              if n.lower() in allowed or n.endswith("__c")]
+
+            for fapi, _comp_key in raw_fields:
+                label = meta.get(fapi) or _sf_field_label(obj_api, fapi)
+                fields.append({"api_name": fapi, "label": label, "access": obj_combined_op, "note": ""})
 
         if not fields:
-            # 最終フォールバック
-            if has_insert and not has_read:
-                label = "（レコード新規登録）"
-            else:
-                label = "（対象項目は別途設計書を参照）"
-            fields = [{"api_name": "—", "label": label, "access": obj_combined_op, "note": ""}]
+            # G-4/G-5: プレースホルダ行は挿入せず、_normalize_schema の最終段で
+            # _STD_OBJ_FIELDS_FALLBACK / _SF_FIELD_LABELS から補完する
+            fields = []
         else:
             # 既存フィールドの access もオブジェクト合算値に統一
             for f in fields:
@@ -1816,10 +2025,11 @@ def _hydrate_from_feature_groups(data: dict, project_dir: str) -> None:
     if not fg_path.exists():
         return
     try:
-        fg_data = _yaml.safe_load(fg_path.read_text(encoding="utf-8")) or []
+        raw = _yaml.safe_load(fg_path.read_text(encoding="utf-8")) or []
+        fg_data = raw.get("groups", []) if isinstance(raw, dict) else raw
     except Exception:
         return
-    group = next((g for g in fg_data if g.get("group_id") == feature_id), None)
+    group = next((g for g in fg_data if isinstance(g, dict) and g.get("group_id") == feature_id), None)
     if not group:
         return
     obj_apis = group.get("related_objects") or []
@@ -1965,6 +2175,8 @@ def _normalize_schema(data: dict) -> dict:
         # 最初の文のみ使用（2文目以降は技術実装詳細が多い）
         first_sent = purpose_raw.split("。")[0]
         data["summary"] = _clean_tech_business(first_sent)
+    elif data.get("summary"):
+        data["summary"] = _deep_clean_ja(data["summary"])  # G-extra: キャッシュ値も再クリーン
 
     if not data.get("purpose") and purpose_raw:
         # 全文をクリーンして目的とする（data_flow_overview は技術的すぎるので使わない）
@@ -1974,6 +2186,8 @@ def _normalize_schema(data: dict) -> dict:
             if cleaned_notes:
                 cleaned_purpose += f"\n【前提・補足】{cleaned_notes}"
         data["purpose"] = cleaned_purpose
+    elif data.get("purpose"):
+        data["purpose"] = _deep_clean_ja(data["purpose"])  # G-extra: キャッシュ値も再クリーン
 
     # 利用者推定
     if not data.get("users"):
@@ -1986,11 +2200,16 @@ def _normalize_schema(data: dict) -> dict:
     # 操作トリガー: prerequisites を日本語化してセット
     if not data.get("trigger") and data.get("prerequisites"):
         data["trigger"] = _clean_tech_business(data["prerequisites"])
+    elif data.get("trigger"):
+        data["trigger"] = _deep_clean_ja(data["trigger"])  # G-extra: キャッシュ値も再クリーン
 
     # components: responsibility → role（日本語化）& callees 初期化
+    # G-extra: キャッシュ済 role も英語残留を一掃する（Class名・メソッド名・__c.field 等）
     for comp in data.get("components", []):
         if not comp.get("role"):
-            comp["role"] = _clean_tech(comp.get("responsibility", ""))
+            comp["role"] = _deep_clean_ja(comp.get("responsibility", ""))
+        else:
+            comp["role"] = _deep_clean_ja(comp["role"])
         if "callees" not in comp:
             comp["callees"] = []
 
@@ -2016,6 +2235,48 @@ def _normalize_schema(data: dict) -> dict:
     # さらに既存 related_objects（hydrate 由来など）とマージしてフィールド補完する。
     rel_objs_auto, obj_access_auto = _build_related_objects_and_access(data)
     existing_ro = data.get("related_objects") or []
+
+    # G-4: キャッシュ済のプレースホルダ行（api_name="—" / label に「別途設計書」）を除去
+    # さらに大小混在の重複（Username / username 等）を canonical 名でまとめる
+    _ro_canonical: dict[str, dict[str, str]] = {}  # obj_api → {lower → canonical}
+    for _obj_api_c, _std_fs in _STD_OBJ_FIELDS_FALLBACK.items():
+        _ro_canonical[_obj_api_c] = {f["api_name"].lower(): f["api_name"] for f in _std_fs}
+    for _obj_api_c, _meta_labels in _SF_FIELD_LABELS.items():
+        _ro_canonical.setdefault(_obj_api_c, {})
+        for _k in _meta_labels.keys():
+            _ro_canonical[_obj_api_c].setdefault(_k.lower(), _k)
+    # 標準オブジェクトの canonical 名辞書を上書きマージ（VF の小文字参照対応）
+    for _obj_api_c, _canon_map in _STD_OBJ_CANONICAL_NAMES.items():
+        _ro_canonical.setdefault(_obj_api_c, {})
+        for _low, _pascal in _canon_map.items():
+            _ro_canonical[_obj_api_c][_low] = _pascal
+    for o in existing_ro:
+        api = o.get("api_name", "")
+        cleaned: list[dict] = []
+        seen_lower: set[str] = set()
+        for f in (o.get("fields") or []):
+            fapi = f.get("api_name") or ""
+            # プレースホルダ除去
+            if fapi in ("—", "", None):
+                continue
+            if "別途設計書" in (f.get("label") or "") or "別途設計書" in (f.get("note") or ""):
+                continue
+            if "（レコード新規登録）" in (f.get("label") or ""):
+                continue
+            # 大小混在の重複を除去し、canonical 名に正規化
+            low = fapi.lower()
+            if low in seen_lower:
+                continue
+            seen_lower.add(low)
+            canonical = _ro_canonical.get(api, {}).get(low, fapi)
+            if canonical != fapi:
+                f = dict(f)
+                f["api_name"] = canonical
+                # label が元 API 名と同一なら再ラベルを試みる
+                if (f.get("label") or "") in (fapi, canonical):
+                    f["label"] = _sf_field_label(api, canonical)
+            cleaned.append(f)
+        o["fields"] = cleaned
 
     if existing_ro or rel_objs_auto:
         merged: dict[str, dict] = {}
@@ -2048,14 +2309,31 @@ def _normalize_schema(data: dict) -> dict:
     if any(not (o.get("fields") or []) for o in data.get("related_objects", [])):
         _enrich_related_object_fields(data)
 
-    # フォールバック: それでも fields が空ならプレースホルダ行を入れる（表に行が出るように）
+    # フォールバック: fields が空のオブジェクトは以下の順で補完
+    # 1) SF ラベル辞書（objectTranslations／field-meta 由来）
+    # 2) _STD_OBJ_FIELDS_FALLBACK（User/Contact 等の標準オブジェクト予備辞書）
     for obj in data.get("related_objects", []):
         if not (obj.get("fields") or []):
-            obj["fields"] = [{
-                "api_name": "—",
-                "label": "（対象項目は別途設計書を参照）",
-                "access": "R", "note": "",
-            }]
+            obj_api = obj.get("api_name", "")
+            access_default = "W" if "更新" in (obj.get("access_ja") or "") \
+                             else ("R" if "参照" in (obj.get("access_ja") or "") else "R")
+            labels = _SF_FIELD_LABELS.get(obj_api, {})
+            picks_by_label: list[tuple[str, str]] = []
+            if labels:
+                picks_by_label = [(k, v) for k, v in labels.items()
+                                  if k == "Name" or k.endswith("__c")][:8]
+            if picks_by_label:
+                obj["fields"] = [{"api_name": k, "label": v, "access": access_default, "note": ""}
+                                 for k, v in picks_by_label]
+            else:
+                # G-5: 標準オブジェクト予備辞書
+                std_fields = _STD_OBJ_FIELDS_FALLBACK.get(obj_api, [])
+                if std_fields:
+                    obj["fields"] = [{"api_name": f["api_name"],
+                                      "label": f["label"],
+                                      "access": access_default,
+                                      "note": f.get("note", "")}
+                                     for f in std_fields]
             if not obj.get("access_ja"):
                 obj["access_ja"] = "参照"
 
