@@ -748,14 +748,19 @@ def render_component_diagram(
     ):
         trigger_node = None
 
-    # ノード数に応じてレイアウトを切替（縦一列潰れの回避）
+    # callees が全部空かつノード数が多い場合は「グリッド配置」モード
+    # （多量 UI コンポーネントの一覧表示に適したレイアウト）
+    all_callees_empty = not any(c.get("callees") for c in components)
     num_nodes = len(components) + (1 if trigger_node else 0)
-    if num_nodes <= 6:
+    use_grid = all_callees_empty and len(components) >= 10
+
+    if use_grid:
+        _rankdir, _splines = "LR", "line"
+    elif num_nodes <= 6:
         _rankdir, _splines = "LR", "ortho"
     elif num_nodes <= 18:
         _rankdir, _splines = "TB", "ortho"
     else:
-        # 大量（20+ノード）: 直線スプラインで自由レイアウト + 詰めた間隔
         _rankdir, _splines = "TB", "polyline"
 
     g = _gv.Digraph(
@@ -764,8 +769,8 @@ def render_component_diagram(
             "bgcolor": "white",
             "rankdir": _rankdir,
             "splines": _splines,
-            "nodesep": "0.35" if num_nodes > 18 else "0.5",
-            "ranksep": "0.6" if num_nodes > 18 else "1.0",
+            "nodesep": "0.3" if use_grid or num_nodes > 18 else "0.5",
+            "ranksep": "0.5" if use_grid else ("0.6" if num_nodes > 18 else "1.0"),
             "fontname": FONT_JP,
             "pad": "0.4",
             "dpi": "150",
@@ -783,40 +788,70 @@ def render_component_diagram(
                fontname=FONT_JP, fontsize="10", width="1.0")
 
     # コンポーネントノード（名前 + 種別のみ。ロールは表に記載するため除外）
-    for comp in components:
-        name  = comp.get("api_name", "")
-        ctype = comp.get("type", "Apex")
-        fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-        lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
-        g.node(name,
-               label=lbl,
-               shape="box", style="filled,rounded",
-               fillcolor=fill, fontcolor=fg,
-               fontname=FONT_JP, fontsize="9", width="1.8")
+    if use_grid:
+        import math as _math
+        # グリッド幅: コンポーネント数から妥当な列数を計算（4〜6列）
+        row_width = min(6, max(4, int(_math.sqrt(len(components)) + 0.5)))
+        names_ordered = [c.get("api_name", "") for c in components]
+        rows = [names_ordered[i:i + row_width]
+                for i in range(0, len(names_ordered), row_width)]
+        type_lookup = {c.get("api_name", ""): c.get("type", "Apex") for c in components}
+        # 各行を subgraph(rank=same) に入れる
+        for ri, row in enumerate(rows):
+            with g.subgraph(name=f"cluster_row_{ri}") as sg:
+                sg.attr(rank="same")
+                sg.attr(style="invis")
+                for name in row:
+                    ctype = type_lookup.get(name, "Apex")
+                    fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
+                    lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
+                    sg.node(name,
+                            label=lbl,
+                            shape="box", style="filled,rounded",
+                            fillcolor=fill, fontcolor=fg,
+                            fontname=FONT_JP, fontsize="9", width="1.8")
+        # 行間の順序保証（不可視エッジ）: 前行先頭 → 次行先頭
+        for ri in range(len(rows) - 1):
+            g.edge(rows[ri][0], rows[ri + 1][0], style="invis", weight="10")
+        # trigger_node → 各行の先頭ノードに dashed エッジ（左からグリッドが広がる形）
+        if trigger_node and rows:
+            for row in rows:
+                g.edge(trigger_node, row[0],
+                       color=C_EDGE, arrowsize="0.7", style="dashed")
+    else:
+        for comp in components:
+            name  = comp.get("api_name", "")
+            ctype = comp.get("type", "Apex")
+            fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
+            lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
+            g.node(name,
+                   label=lbl,
+                   shape="box", style="filled,rounded",
+                   fillcolor=fill, fontcolor=fg,
+                   fontname=FONT_JP, fontsize="9", width="1.8")
 
-    # callees の明示依存エッジ
-    for comp in components:
-        src = comp.get("api_name", "")
-        for callee in comp.get("callees", []):
-            if callee not in known:
-                g.node(callee, label=callee,
-                       shape="box", style="filled,rounded",
-                       fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
-                       fontname=FONT_JP, fontsize="9")
-            g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
+        # callees の明示依存エッジ
+        for comp in components:
+            src = comp.get("api_name", "")
+            for callee in comp.get("callees", []):
+                if callee not in known:
+                    g.node(callee, label=callee,
+                           shape="box", style="filled,rounded",
+                           fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
+                           fontname=FONT_JP, fontsize="9")
+                g.edge(src, callee, color=C_EDGE, arrowsize="0.7")
 
-    # 起動元 → 直接呼び出されていないトップレベルコンポーネントをエッジ追加
-    # （step順でソートして ①②③ ラベルを付ける）
-    if trigger_node:
-        top_level = [
-            c.get("api_name", "") for c in components
-            if c.get("api_name", "") not in called_by
-        ]
-        top_level_sorted = sorted(top_level, key=lambda n: step_order.get(n, 999))
-        for i, name in enumerate(top_level_sorted, 1):
-            g.edge(trigger_node, name,
-                   color=C_EDGE, arrowsize="0.7",
-                   style="dashed")
+        # 起動元 → 直接呼び出されていないトップレベルコンポーネントをエッジ追加
+        if trigger_node:
+            top_level = [
+                c.get("api_name", "") for c in components
+                if c.get("api_name", "") not in called_by
+            ]
+            top_level_sorted = sorted(top_level, key=lambda n: step_order.get(n, 999))
+            for i, name in enumerate(top_level_sorted, 1):
+                g.edge(trigger_node, name,
+                       color=C_EDGE, arrowsize="0.7",
+                       style="dashed")
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:

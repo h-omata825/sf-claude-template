@@ -1455,6 +1455,111 @@ def _build_process_steps(data: dict) -> list[dict]:
     return steps
 
 
+# API 名・メソッド呼び出し・拡張子付きファイル名の検出パターン
+_RE_METHOD_CALL   = _re.compile(r'\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*\([^)]*\)')
+_RE_FILE_EXT      = _re.compile(r'\b[A-Za-z_][A-Za-z0-9_]*\.(?:page|cls|trigger|cmp|app|evt|js|html|css|xml)\b')
+_RE_FLOW_META_EXT = _re.compile(r'\b[A-Za-z_][A-Za-z0-9_]*\.flow-meta(?:\.xml)?\b')
+_RE_CUSTOM_OBJ    = _re.compile(r'\b[A-Z][A-Za-z0-9_]*__c\b')  # カスタムAPI名（__c 付き）
+_RE_CAMEL_IDENT   = _re.compile(r'\b([A-Z][a-z]+){2,}[A-Za-z0-9_]*\b')  # CamelCase 識別子（連続2語以上）
+_RE_CMP_PAREN     = _re.compile(r'[（(]CMP[‐\-][0-9]+[）)]')  # 「（CMP-015）」
+_RE_MULTI_SPACE   = _re.compile(r'[ \t]{2,}')
+_RE_ORPHAN_PARTICLE = _re.compile(r'[ 　][をはがにでとのやもへ][ 　]')
+
+
+def _strip_tech_identifiers(text: str) -> str:
+    """テキストから API 名・メソッド呼び出し・拡張子付きファイル名・CamelCase 識別子を除去する。
+    _clean_tech_business / _translate_sf_fields を通した後の残渣をさらに除去する。"""
+    if not text:
+        return text
+    text = _RE_METHOD_CALL.sub('', text)
+    text = _RE_FILE_EXT.sub('', text)
+    text = _RE_FLOW_META_EXT.sub('', text)
+    text = _RE_CMP_PAREN.sub('', text)
+    text = _RE_CUSTOM_OBJ.sub('', text)
+    # CamelCase 識別子（Controller, Handler などのクラス名）も除去。
+    # ただし "Experience Cloud" のような既知ブランドは保護（事前にプレースホルダ化してから呼ぶ）
+    text = _RE_CAMEL_IDENT.sub('', text)
+    # 除去で生じた連続空白・孤立助詞を整える
+    text = _RE_MULTI_SPACE.sub(' ', text)
+    text = _re.sub(r'[、，]\s*[、，]+', '、', text)
+    text = _re.sub(r'^[\s、，。]+', '', text)
+    text = _re.sub(r'[\s、，]+$', '', text)
+    return text.strip()
+
+
+def _deep_clean_ja(text: str) -> str:
+    """業務テキスト用の総合クリーニング: SF 用語日本語化 → 技術識別子除去。"""
+    if not text:
+        return text
+    # Experience Cloud を保護
+    text = text.replace("Experience Cloud", _EC_PLACEHOLDER)
+    text = _translate_sf_fields(text)
+    text = _translate_sf_objects(text)
+    text = _translate_jargon(text)
+    text = _strip_tech_identifiers(text)
+    text = text.replace(_EC_PLACEHOLDER, "Experience Cloud")
+    return text.strip()
+
+
+def _normalize_process_steps(steps: list[dict]) -> None:
+    """既存の process_steps をクリーニングする（in-place）。
+
+    - description: API 名・メソッド呼び出し・拡張子付きファイル名を除去し日本語化
+    - title: 空なら description から _short_title で短文生成。ある場合もクリーニング
+    """
+    for ps in steps:
+        desc = ps.get("description", "") or ""
+        title = ps.get("title", "") or ""
+        if desc:
+            desc = _deep_clean_ja(desc)
+            ps["description"] = desc
+        if title:
+            ps["title"] = _deep_clean_ja(title)
+        # title が空 or 貧弱（2文字未満）なら description から生成
+        if desc and (not ps.get("title") or len(ps.get("title", "")) < 2):
+            ps["title"] = _short_title(desc)
+
+
+def _normalize_business_flow(flows: list[dict]) -> None:
+    """business_flow[] の actor / action をクリーニングする（in-place）。
+
+    - actor: コンポーネント名（CamelCase + __c 等）は「システム」に置換
+    - action: API 名・メソッド呼び出し・拡張子を除去し日本語化。技術ワード単独は業務表現に差し替え
+    """
+    _BF_TECH_ONLY = ("画面フロー", "フロー", "Apex", "Apexクラス", "Batch",
+                     "Flow", "Trigger", "LWC", "Aura", "Visualforce",
+                     "VF", "Integration", "Controller", "Service", "Handler")
+    for s in flows:
+        actor = str(s.get("actor", "") or "").strip()
+        # アクターが CamelCase クラス名風、__c 付き、（CMP-XXX）を含む等はコンポーネント名扱い → 「システム」に
+        if (_RE_CAMEL_IDENT.search(actor)
+                or "__c" in actor or "（CMP" in actor or "(CMP" in actor):
+            s["actor"] = "システム"
+
+        act = str(s.get("action", "") or "").strip()
+        if act in _BF_TECH_ONLY:
+            actor2 = s.get("actor", "")
+            if actor2 in ("自動フロー", "システム"):
+                s["action"] = "処理を起動する"
+            else:
+                s["action"] = "画面から必要情報を入力し、処理を起動する"
+        elif act:
+            # API 名・メソッド呼び出し・拡張子・CamelCase 識別子を含む場合のみクリーニング
+            needs_clean = bool(
+                _RE_METHOD_CALL.search(act) or _RE_FILE_EXT.search(act)
+                or _RE_FLOW_META_EXT.search(act) or _RE_CUSTOM_OBJ.search(act)
+                or _RE_CAMEL_IDENT.search(act)
+            )
+            if needs_clean:
+                cleaned = _deep_clean_ja(act)
+                # クリーニングで空になってしまった場合は actor に応じて定型に差し替え
+                if not cleaned or len(cleaned) < 4:
+                    actor2 = s.get("actor", "")
+                    cleaned = ("処理を起動する" if actor2 in ("自動フロー", "システム")
+                               else "画面から必要情報を入力し、処理を起動する")
+                s["action"] = cleaned
+
+
 def _obj_label_from_api(api: str) -> str:
     """オブジェクトAPIから日本語ラベルを推定する（メタデータ優先）。"""
     if api in _STD_OBJ_LABELS:
@@ -1676,6 +1781,47 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
     return related_objects, object_access
 
 
+def _hydrate_from_feature_groups(data: dict, project_dir: str) -> None:
+    """feature_groups.yml から related_objects を補完する（JSON が空の場合）。
+
+    FG 単位の設計書で、対象 FG の related_objects がプロジェクト定義に
+    登録されているが JSON に含まれていない場合、最低限のレコード（api_name のみ）
+    として追加する。fields は _build_related_objects_and_access が別途埋める。
+    """
+    if data.get("related_objects"):
+        return
+    feature_id = data.get("feature_id", "")
+    if not feature_id or not feature_id.startswith("FG-"):
+        return
+    try:
+        import yaml as _yaml
+    except ImportError:
+        return
+    fg_path = Path(project_dir) / "docs" / ".sf" / "feature_groups.yml"
+    if not fg_path.exists():
+        return
+    try:
+        fg_data = _yaml.safe_load(fg_path.read_text(encoding="utf-8")) or []
+    except Exception:
+        return
+    group = next((g for g in fg_data if g.get("group_id") == feature_id), None)
+    if not group:
+        return
+    obj_apis = group.get("related_objects") or []
+    if not obj_apis:
+        return
+    seed = []
+    for obj_api in obj_apis:
+        seed.append({
+            "api_name": obj_api,
+            "label": _obj_label_from_api(obj_api),
+            "fields": [],      # _build_related_objects_and_access が埋める or フォールバックで "—" 行
+            "relations": [],
+        })
+    data["related_objects"] = seed
+    # fields 補完のために access_ja は後段（_enrich_related_object_fields or _build_~）に委ねる
+
+
 def _enrich_related_object_fields(data: dict) -> None:
     """既存の related_objects + object_access を保持したまま、fields のみ補完する。
 
@@ -1837,44 +1983,66 @@ def _normalize_schema(data: dict) -> dict:
     if not any(comp.get("callees") for comp in data.get("components", [])):
         _infer_callees(data)
 
-    # process_steps: components から日本語説明で生成
+    # process_steps: components から生成 or 既存をクリーニング
     if not data.get("process_steps"):
         data["process_steps"] = _build_process_steps(data)
+    else:
+        # 既存 process_steps は API 名・メソッド呼び出し等を除去して日本語化する
+        _normalize_process_steps(data["process_steps"])
 
-    # business_flow: 業務レベルフロー生成
-    _BF_TECH_ONLY = ("画面フロー", "フロー", "Apex", "Apexクラス", "Batch",
-                     "Flow", "Trigger", "LWC", "Aura", "Visualforce",
-                     "VF", "Integration", "Controller", "Service", "Handler")
+    # business_flow: 業務レベルフロー生成 or 既存をクリーニング
     _bf = data.get("business_flow") or []
     if not _bf:
         data["business_flow"] = _build_business_flow(data)
     else:
-        # キャッシュされた業務フローに技術ワードのみの action（"画面フロー" 等）が含まれる場合は
-        # 該当ステップの action だけを業務的な表現に差し替える（他のステップは保持する）。
-        for s in _bf:
-            act = str(s.get("action", "")).strip()
-            if act in _BF_TECH_ONLY:
-                actor = str(s.get("actor", "")).strip()
-                if "画面フロー" in act or act == "画面フロー":
-                    s["action"] = "画面から必要情報を入力し、処理を起動する"
-                elif actor in ("自動フロー", "システム"):
-                    s["action"] = "処理を起動する"
-                else:
-                    s["action"] = "画面から必要情報を入力し、処理を起動する"
+        _normalize_business_flow(_bf)
 
     # related_objects + object_access: components の inputs/outputs から構築
-    _ro = data.get("related_objects") or []
-    _oa = data.get("object_access") or []
-    _ro_all_empty = bool(_ro) and all(not (o.get("fields") or []) for o in _ro)
-    if not _ro or not _oa:
-        rel_objs, obj_access = _build_related_objects_and_access(data)
-        if not _ro:
-            data["related_objects"] = rel_objs
-        if not _oa:
-            data["object_access"] = obj_access
-    elif _ro_all_empty:
-        # 既存 related_objects と object_access は保持し、fields のみ SF メタデータから補完する。
+    # さらに既存 related_objects（hydrate 由来など）とマージしてフィールド補完する。
+    rel_objs_auto, obj_access_auto = _build_related_objects_and_access(data)
+    existing_ro = data.get("related_objects") or []
+
+    if existing_ro or rel_objs_auto:
+        merged: dict[str, dict] = {}
+        for o in existing_ro:
+            api = o.get("api_name")
+            if api:
+                merged[api] = o
+        for ao in rel_objs_auto:
+            api = ao.get("api_name")
+            if not api:
+                continue
+            if api in merged:
+                cur = merged[api]
+                # 既存エントリの fields が空なら自動生成のものを採用
+                if not (cur.get("fields") or []) and ao.get("fields"):
+                    cur["fields"] = ao["fields"]
+                # access_ja / label は既存優先、空なら auto
+                if not cur.get("access_ja") and ao.get("access_ja"):
+                    cur["access_ja"] = ao["access_ja"]
+                if not cur.get("label") and ao.get("label"):
+                    cur["label"] = ao["label"]
+            else:
+                merged[api] = ao
+        data["related_objects"] = list(merged.values())
+
+    if not data.get("object_access"):
+        data["object_access"] = obj_access_auto
+
+    # fields が空のオブジェクトを SF メタデータから補完
+    if any(not (o.get("fields") or []) for o in data.get("related_objects", [])):
         _enrich_related_object_fields(data)
+
+    # フォールバック: それでも fields が空ならプレースホルダ行を入れる（表に行が出るように）
+    for obj in data.get("related_objects", []):
+        if not (obj.get("fields") or []):
+            obj["fields"] = [{
+                "api_name": "—",
+                "label": "（対象項目は別途設計書を参照）",
+                "access": "R", "note": "",
+            }]
+            if not obj.get("access_ja"):
+                obj["access_ja"] = "参照"
 
     return data
 
@@ -2120,9 +2288,22 @@ def main():
                         help="作成者名。JSON の author が空の場合にフォールバックで使用")
     parser.add_argument("--force", action="store_true",
                         help="差分ゼロ・ソースハッシュ一致でも再生成する（ロジック改修検証用）")
+    parser.add_argument("--project-dir", default="",
+                        help="プロジェクトルート。指定時は docs/.sf/feature_groups.yml を参照して "
+                             "related_objects 等を補完する")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+
+    # --project-dir が指定されていれば SF メタデータを先にロードし、
+    # feature_groups.yml から related_objects を補完する
+    if args.project_dir:
+        try:
+            _load_sf_metadata(args.project_dir)
+        except Exception as _e:
+            print(f"  [WARN] project_dir からのメタデータロード失敗: {_e}")
+        _hydrate_from_feature_groups(data, args.project_dir)
+
     data = _normalize_schema(data)   # GFスキーマ → 標準スキーマ変換
     today  = _date.today().strftime("%Y-%m-%d")
     # --author が指定された場合は JSON 側に反映（改版履歴の変更者と表紙の両方に効く）

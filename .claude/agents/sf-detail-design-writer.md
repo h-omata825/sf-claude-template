@@ -57,6 +57,38 @@ tools:
 | `interfaces[].description` | 「画面の保存ボタン押下時に呼ばれる。バリデーション後に Service に委譲し、結果に応じて遷移先を返す」 | 「String a, Id b を引数にとり Id を返す」（シグネチャの翻訳） |
 | `screens[].items[].validation` | 「必須入力。100文字以内。既存見積件名との重複チェックあり（SOQL）」 | 「required=trueの場合バリデーション」 |
 
+### 禁止: API 名・メソッド名・拡張子付きファイル名を日本語テキストに混ぜない
+
+**`business_flow[].action` / `components[].responsibility` / `interfaces[].description` / `screens[].items[].validation` / `processing_purpose` / `data_flow_overview`** など、**すべての自然言語テキスト項目**で以下を禁止する:
+
+- API 名（`ContractApplication__c`・`User_portal__r` 等の `__c` / `__r` 付き識別子）
+- メソッド呼び出し形式（`foo()` / `Controller.bar()` / `Site.login()` 等）
+- ファイル拡張子付き名称（`.page` / `.cls` / `.trigger` / `.flow-meta.xml` / `.cmp` / `.js` / `.html`）
+- コンポーネント API 名の露出（`CustomPasswordResetController` / `ChangePasswordPage` 等の CamelCase 識別子）
+- 「CMP-XXX」等の内部機能ID
+
+これらはすべて **日本語の業務表現**に置き換える。対応表:
+
+| 技術表現 | 業務表現 |
+|---|---|
+| `CustomPasswordReset.page にアクセス` | 「パスワードリセット画面にアクセスする」 |
+| `ContractApplication__c` | 「契約申込」（オブジェクト名の日本語ラベル） |
+| `PasswordReset() → System.setPassword` | 「新しいパスワードを設定して保存する」 |
+| `Site.validatePassword` | 「パスワードの形式・強度を検証する」 |
+| `CustomSiteLogin の customSiteLogin() が契約区分に応じて URL 組立` | 「契約区分に応じた遷移先画面を組み立ててログインする」 |
+
+### 禁止: `business_flow[].actor` にコンポーネント名を書かない
+
+actor は **業務上の登場人物**のみ。以下は禁止:
+- `CustomPasswordResetController（CMP-015）` → ✗（コンポーネント名）
+- `MicrobatchSelfReg` → ✗（コンポーネント名）
+
+OK 例: 「お客様」「ポータルユーザ」「GF社担当者」「管理者」「システム」「自動フロー」
+
+### process_steps は書かなくてよい
+
+`process_steps` は Python 側の `_build_process_steps` が `components[].responsibility` から自動生成する。**JSON に `process_steps` を含める必要はない**（含めてもクリーニングはされるが、書かないほうがクリーン）。
+
 ### インターフェース定義の対象
 
 全メソッドを書く必要はない。以下を優先する:
