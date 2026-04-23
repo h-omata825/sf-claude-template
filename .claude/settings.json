@@ -2,8 +2,6 @@
   "_mode": "テスト中 / 実運用前",
   "_activate_instructions": "実運用開始時: __pending.git_workflow.rules の各文字列を permissions.deny 配列へコピーする。例: \"Bash(git push origin main*)\" を deny の末尾に追加。",
 
-  "model": "sonnet",
-
   "env": {
     "_comment_PYTHONIOENCODING": "Windows の Python はデフォルト stdout が cp932。Claude Code は UTF-8 期待のため、print('小俣') 等が化ける。全 Python 実行を UTF-8 stdout に統一する。",
     "PYTHONIOENCODING": "utf-8"
