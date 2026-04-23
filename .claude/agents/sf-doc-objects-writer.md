@@ -95,7 +95,8 @@ print('target_org:', target_org)
 prof = pathlib.Path(r'{project_dir}/docs/overview/org-profile.md')
 if prof.exists():
     text = prof.read_text(encoding='utf-8')
-    for pat in [r'\|\s*組織名\s*\|\s*(.+?)\s*\|', r'システム名[^\n:：]*[:：]\s*(.+)', r'プロジェクト名[^\n:：]*[:：]\s*(.+)']:
+    # cat1 の「プロジェクト基本情報」テーブル（| キー | 値 |）と、箇条書き/見出し形式の両方に対応
+    for pat in [r'\|\s*システム名\s*\|\s*(.+?)\s*\|', r'\|\s*プロジェクト名\s*\|\s*(.+?)\s*\|', r'システム名[^\n:：]*[:：]\s*(.+)', r'プロジェクト名[^\n:：]*[:：]\s*(.+)']:
         m = re.search(pat, text)
         if m:
             print('system_name:', m.group(1).strip())
@@ -142,7 +143,7 @@ print('LATEST:', files[0] if files else '')
 
 ## Phase 4: システム名称
 
-**新規作成の場合:** `docs/overview/org-profile.md` からシステム名を取得する（`組織名`・`システム名`・`プロジェクト名` の順で検索。Phase 2 で取得済みの値を再利用してもよい）。
+**新規作成の場合:** **Phase 2 で取得した `system_name` を再利用する**（Phase 2 の Python 出力の `system_name:` 行）。Phase 2 で取得できなかった場合のみ、同じパターンで org-profile.md を再取得する（`システム名`・`プロジェクト名` の順で検索）。
 **更新の場合:** 既存ファイルの `_meta` シートから前回値を読む:
 ```bash
 python -c "
@@ -174,9 +175,24 @@ Other が選ばれた場合はチャットで入力してもらう。
 python -c "
 import re, pathlib
 text = pathlib.Path(r'{project_dir}/docs/catalog/_index.md').read_text(encoding='utf-8')
-rows = re.findall(r'\|\s*[^\|]+\|\s*`?([A-Za-z][A-Za-z0-9_]*)`?\s*\|', text)
-skip = {'API名', 'キープレフィックス', 'オブジェクト', 'バージョン', '定義書'}
-all_objs = list(dict.fromkeys(r.strip() for r in rows if r.strip() not in skip))
+# cat2 Phase 4.5 規約: 列順は任意。ヘッダ行から API名 列のインデックスを動的検出してから値行を抽出する。
+lines = [l.rstrip() for l in text.splitlines() if l.strip().startswith('|')]
+api_col = None
+for i, line in enumerate(lines):
+    cells = [c.strip() for c in line.strip('|').split('|')]
+    if 'API名' in cells:
+        api_col = cells.index('API名')
+        data_start = i + 2  # ヘッダ行 + セパレータ行を飛ばす
+        break
+all_objs = []
+if api_col is not None:
+    for line in lines[data_start:]:
+        cells = [c.strip() for c in line.strip('|').split('|')]
+        if len(cells) > api_col:
+            val = cells[api_col].strip('`').strip()
+            if re.match(r'^[A-Za-z][A-Za-z0-9_]*$', val):
+                all_objs.append(val)
+all_objs = list(dict.fromkeys(all_objs))
 standard = [o for o in all_objs if not o.endswith('__c')]
 custom   = [o for o in all_objs if o.endswith('__c')]
 print(' '.join(standard + custom))
