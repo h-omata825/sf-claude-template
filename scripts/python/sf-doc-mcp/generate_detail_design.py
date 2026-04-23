@@ -530,8 +530,19 @@ _SF_FIELD_LABELS: dict[str, dict[str, str]] = {}
 _SF_OBJ_LABELS: dict[str, str] = {}
 # コンポーネント別フィールドマップ {comp_api_name: {obj_api: {field_api}}}
 _SF_COMP_FIELDS: dict[str, dict[str, set]] = {}
+# K-C: コンポーネント別 operation マップ {comp_api_name: {obj_api: "R" | "W" | "INSERT"}}
+# Apex の DML / VF の inputField / Site.* 検出結果を格納する
+_SF_COMP_OPS: dict[str, dict[str, str]] = {}
 # 直近にロードしたSFプロジェクトのベースパス（VF→Apex 補強で参照）
 _CURRENT_SF_BASE_PATH: str = ""
+
+
+def _merge_op(dst: dict[str, str], obj: str, op: str) -> None:
+    """op を dst[obj] に合成する（INSERT > W > R の優先度）。"""
+    rank = {"R": 1, "W": 2, "INSERT": 3}
+    cur = dst.get(obj)
+    if not cur or rank.get(op, 0) > rank.get(cur, 0):
+        dst[obj] = op
 
 
 def _parse_flow_fields(flow_path: Path) -> dict[str, set]:
@@ -552,6 +563,69 @@ def _parse_flow_fields(flow_path: Path) -> dict[str, set]:
             if fields:
                 result.setdefault(obj_api, set()).update(fields)
     return result
+
+
+def _parse_apex_ops(content: str, fields_by_obj: dict[str, set]) -> dict[str, str]:
+    """Apex クラスから {obj_api: op} を推定する（op は "R" / "W" / "INSERT"）。
+
+    優先度:
+      1. `insert xxx;` / `Database.insert(...)` → INSERT
+      2. `update xxx;` / `upsert xxx;` / `Database.update(...)` / `Database.upsert(...)` → W
+      3. `Site.setPassword` / `System.setPassword` / `Site.changePassword` / `Site.validatePassword` → W (User)
+      4. `Site.createPortalUser` → INSERT (User, Contact)
+      5. SOQL で SELECT のみ → R
+    """
+    ops: dict[str, str] = {}
+    # 型宣言とローカル変数名を収集: List<User> users; Map<Id, Contact> cmap; User u; Contact c;
+    var_types: dict[str, str] = {}
+    for m in _re.finditer(
+        r'\b(?:List|Set|Iterable|Queue|Map<[^>,]+,)\s*<\s*([A-Za-z][A-Za-z0-9_]*)\s*>\s+(\w+)\s*[=;,)]',
+        content):
+        obj_t, var = m.group(1), m.group(2)
+        if obj_t[0].isupper():
+            var_types[var] = obj_t
+    # 単体型宣言: User u = ...;  Contact c = new Contact();
+    for m in _re.finditer(
+        r'\b([A-Z][A-Za-z0-9_]*(?:__c)?)\s+(\w+)\s*=\s*(?:new\s+|\[|[\w.])',
+        content):
+        obj_t, var = m.group(1), m.group(2)
+        if obj_t in ("String", "Integer", "Long", "Decimal", "Double", "Boolean",
+                     "Date", "Datetime", "Time", "Id", "Object", "Blob", "PageReference",
+                     "ApexPages", "System", "Database", "Schema", "JSON", "Test"):
+            continue
+        var_types.setdefault(var, obj_t)
+
+    # DML 動詞による op 推定
+    for m in _re.finditer(r'\b(insert|update|upsert|delete)\s+(\w+)\s*[;,]', content):
+        verb, var = m.group(1).lower(), m.group(2)
+        obj_t = var_types.get(var)
+        if not obj_t:
+            continue
+        op = "INSERT" if verb in ("insert", "upsert") else "W"
+        _merge_op(ops, obj_t, op)
+    # Database.insert / update / upsert
+    for m in _re.finditer(r'\bDatabase\.(insert|update|upsert|delete)\s*\(\s*(\w+)', content):
+        verb, var = m.group(1).lower(), m.group(2)
+        obj_t = var_types.get(var)
+        if not obj_t:
+            continue
+        op = "INSERT" if verb in ("insert", "upsert") else "W"
+        _merge_op(ops, obj_t, op)
+
+    # Site.* / System.setPassword による User 更新/新規作成
+    if _re.search(r'\bSite\.(?:login|forgotPassword|validatePassword|changePassword|passwordless)\b'
+                  r'|\bSystem\.setPassword\b', content):
+        _merge_op(ops, "User", "W")
+    if _re.search(r'\bSite\.createPortalUser\b', content):
+        _merge_op(ops, "User", "INSERT")
+        _merge_op(ops, "Contact", "INSERT")
+
+    # SOQL で参照のみの場合、R を埋める（既に W/INSERT があれば上書きしない）
+    for obj_api in fields_by_obj.keys():
+        if obj_api in ("__any__", "Id"):
+            continue
+        _merge_op(ops, obj_api, "R")
+    return ops
 
 
 def _parse_apex_fields(cls_path: Path) -> dict[str, set]:
@@ -641,9 +715,37 @@ def _parse_vf_fields(vf_path: Path) -> dict[str, set]:
     return result
 
 
+def _parse_vf_ops(content: str, fields_by_obj: dict[str, set]) -> dict[str, str]:
+    """VF ページから {obj_api: op} を推定する。
+    - <apex:inputField> を含む → W（ユーザー入力で更新される）
+    - <apex:outputField> / <apex:inputText> などのみ → R
+    - <apex:commandButton action="{!save}"> / "{!create}" 等が並ぶ → INSERT/W
+    """
+    ops: dict[str, str] = {}
+    # standardController の対象オブジェクト
+    ctrl_m = _re.search(r'standardController="([A-Za-z][A-Za-z0-9_]*)"', content)
+    ctrl_obj = ctrl_m.group(1) if ctrl_m else None
+    has_input = bool(_re.search(r'<apex:inputField\b', content, _re.IGNORECASE))
+    has_save = bool(_re.search(r'action="\{!\s*(?:save|update|upsert|edit)\b', content, _re.IGNORECASE))
+    has_create = bool(_re.search(r'action="\{!\s*(?:create|insert|register|signUp|selfReg)\b', content, _re.IGNORECASE))
+    if ctrl_obj:
+        if has_create:
+            _merge_op(ops, ctrl_obj, "INSERT")
+        elif has_input or has_save:
+            _merge_op(ops, ctrl_obj, "W")
+        else:
+            _merge_op(ops, ctrl_obj, "R")
+    # fields_by_obj 由来は R（outputField など）
+    for obj_api in fields_by_obj.keys():
+        if obj_api == "__any__":
+            continue
+        _merge_op(ops, obj_api, "R")
+    return ops
+
+
 def _load_sf_metadata(sf_project_path: str) -> None:
     """SFプロジェクトの objectTranslations/flows/classes からメタデータを構築してグローバルに格納する。"""
-    global _SF_FIELD_LABELS, _SF_OBJ_LABELS, _SF_COMP_FIELDS, _CURRENT_SF_BASE_PATH
+    global _SF_FIELD_LABELS, _SF_OBJ_LABELS, _SF_COMP_FIELDS, _SF_COMP_OPS, _CURRENT_SF_BASE_PATH
     _CURRENT_SF_BASE_PATH = sf_project_path
     base = Path(sf_project_path) / "force-app/main/default"
 
@@ -686,6 +788,14 @@ def _load_sf_metadata(sf_project_path: str) -> None:
             obj_fields = _parse_apex_fields(cls_file)
             if obj_fields:
                 _SF_COMP_FIELDS[comp_api] = {k: v for k, v in obj_fields.items()}
+                # K-C: Apex DML / Site.* から op を推定
+                try:
+                    cls_content = cls_file.read_text(encoding="utf-8", errors="ignore")
+                    ops = _parse_apex_ops(cls_content, obj_fields)
+                    if ops:
+                        _SF_COMP_OPS[comp_api] = ops
+                except Exception:
+                    pass
 
     # pages: Visualforce コンポーネント別フィールド
     # G-6: controller="ClassName" を辿って Apex クラス側のフィールド（Site.* 検出を含む）も引き込む
@@ -698,6 +808,7 @@ def _load_sf_metadata(sf_project_path: str) -> None:
                 vf_content = vf_file.read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 vf_content = ""
+            ctrl_name = None
             ctrl_m = _re.search(r'(?<!standard)[Cc]ontroller="([A-Za-z][A-Za-z0-9_]*)"', vf_content)
             if ctrl_m:
                 ctrl_name = ctrl_m.group(1)
@@ -706,6 +817,13 @@ def _load_sf_metadata(sf_project_path: str) -> None:
                     obj_fields.setdefault(k, set()).update(v)
             if obj_fields:
                 _SF_COMP_FIELDS[comp_api] = {k: v for k, v in obj_fields.items()}
+            # K-C: VF 自身の op + controller Apex の op をマージ
+            vf_ops = _parse_vf_ops(vf_content, obj_fields) if vf_content else {}
+            if ctrl_name:
+                for k, v in _SF_COMP_OPS.get(ctrl_name, {}).items():
+                    _merge_op(vf_ops, k, v)
+            if vf_ops:
+                _SF_COMP_OPS[comp_api] = vf_ops
 
     # objects: field-meta.xml からラベルを補完（objectTranslations にないカスタムフィールド対応）
     objects_dir = base / "objects"
@@ -1670,6 +1788,14 @@ def _strip_tech_identifiers(text: str) -> str:
     _clean_tech_business / _translate_sf_fields を通した後の残渣をさらに除去する。"""
     if not text:
         return text
+    # K-B: XML/JSX 風タグの裸出し（<c:xxx>, <apex:xxx>, <c:> 等）
+    #       → タグだけ除去し、中身の意味語（カスタムコンポーネント等）は LLM 側で保持
+    text = _re.sub(r'<\s*[cC]\s*:\s*[A-Za-z0-9_]*\s*/?>', '', text)
+    text = _re.sub(r'<\s*/?\s*[aA][pP][eE][xX]\s*:\s*[A-Za-z0-9_]*\s*/?>', '', text)
+    text = _re.sub(r'<\s*/\s*[cC]\s*:\s*[A-Za-z0-9_]*\s*>', '', text)
+    # K-B: 裸パス残渣（/apex/, /answers/, /apex/answers 等の先頭/末尾スラッシュ付きパス）
+    # 日本語句読点・矢印・行頭行末に隣接する裸パスのみ対象（URL として意味ある形は保護しない前提）
+    text = _re.sub(r'(?<![A-Za-z0-9])\/[a-z]+(?:\/[a-z]+)*\/?(?![A-Za-z0-9])', '', text)
     # __r リレーション参照（User_portal__r.UserName 等）
     text = _RE_REL_FIELD.sub('', text)
     # ClassName.method 形式（括弧なし: Site.validatePassword / System.setPassword 等）
@@ -1739,6 +1865,12 @@ def _strip_tech_identifiers(text: str) -> str:
     text = _re.sub(r'(または|および|かつ)\s*(?:を|が|は|に|で|と|へ|の)(?=[ぁ-んァ-ヶ一-龯])', r'\1', text)
     # H-3c: 行頭「は、ため〜」「が、ため〜」（技術識別子除去で主語が消えたケース）
     text = _re.sub(r'^[、。\s]*(?:(?:は|が)[、，]?\s*)?ため(?=[ぁ-んァ-ヶ一-龯])', '', text)
+    # K-B: 文中「。は、ため〜」「、が、ため〜」等のフラグメント除去（句点前までを保持）
+    # 例: "VF。は、ため動作不全" → "VF。" / "処理実行。が、ため失敗" → "処理実行。"
+    text = _re.sub(r'([。、])\s*(?:は|が|を)[、，]?\s*ため[ぁ-んァ-ヶ一-龯ーA-Za-z0-9]*(?=[。、]|$)', r'\1', text)
+    # K-B: 矢印直後の裸助詞（を/が/は/で/と/へ）— 「→を使用」「→が発生」等。
+    # 注意: 「に」は「→に遷移」等で意味語として機能するので除外
+    text = _re.sub(r'→\s*(?:を|が|は|で|と|へ)(?=[ぁ-んァ-ヶ一-龯])', '→', text)
     text = _re.sub(r'^[\s、，。]+', '', text)
     text = _re.sub(r'[\s、，]+$', '', text)
     return text.strip()
@@ -1873,12 +2005,21 @@ def _build_related_objects_and_access(data: dict) -> tuple[list[dict], list[dict
         # G-6: _SF_COMP_FIELDS（Apex/VF メタデータ由来）で User/Contact 等が紐付いていれば登録
         comp_key = _re.sub(r'（[^）]+）$', '', name).strip()
         meta_fields = _SF_COMP_FIELDS.get(comp_key, {}) or _SF_COMP_FIELDS.get(name, {})
+        # K-C: Apex/VF パース時に推定した op を優先使用
+        meta_ops = _SF_COMP_OPS.get(comp_key, {}) or _SF_COMP_OPS.get(name, {})
         for meta_obj in meta_fields.keys():
             if meta_obj in ("__any__", "Id"):
                 continue
-            # outputs 文脈で「更新／登録」が言及されていれば W、そうでなければ R
+            # 優先1: メタデータ由来の op (DML / Site.* / VF save)
+            est_op = meta_ops.get(meta_obj)
+            if est_op:
+                _register(meta_obj, name, est_op)
+                continue
+            # 優先2: outputs 文脈で「更新／登録／作成」言及があれば W、なければ R
             out_text = comp.get("outputs", "") or ""
-            if _re.search(r'更新|登録|作成|保存|設定', out_text):
+            if _re.search(r'新規作成|新規登録|insert', out_text, _re.IGNORECASE):
+                _register(meta_obj, name, "INSERT")
+            elif _re.search(r'更新|登録|作成|保存|設定', out_text):
                 _register(meta_obj, name, "W")
             else:
                 _register(meta_obj, name, "R")

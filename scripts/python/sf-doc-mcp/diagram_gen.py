@@ -865,8 +865,24 @@ def render_component_diagram(
             for row in rows:
                 g.edge(trigger_node, row[0],
                        color=C_EDGE, arrowsize="0.7", style="dashed")
-        # step_order から推論した隣接コンポーネント間を点線エッジで接続
+        # K-D: callees の明示依存エッジ（grid モードでも描画）
+        # VF→Apex 等のコントローラ呼び出しを solid 矢印で描く
         drawn_grid_edges: set[tuple[str, str]] = set()
+        for comp in components:
+            src = comp.get("api_name", "")
+            for callee in comp.get("callees", []):
+                if not callee or (src, callee) in drawn_grid_edges:
+                    continue
+                if callee not in known:
+                    g.node(callee, label=callee,
+                           shape="box", style="filled,rounded",
+                           fillcolor=C_EXT_BG, fontcolor=C_EXT_FG,
+                           fontname=FONT_JP, fontsize="9")
+                g.edge(src, callee,
+                       color=C_EDGE, arrowsize="0.7",
+                       style="solid", constraint="false")
+                drawn_grid_edges.add((src, callee))
+        # step_order から推論した隣接コンポーネント間を点線エッジで接続
         comps_by_step = sorted(
             [n for n in names_ordered if n in step_order],
             key=lambda n: step_order[n],
