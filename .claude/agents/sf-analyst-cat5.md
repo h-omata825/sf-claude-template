@@ -183,7 +183,7 @@ ls force-app/main/default/triggers/ 2>/dev/null
 
 | 優先度 | ルール |
 |---|---|
-| 1 | **Triggerの TableEnumOrId 一致**: 最も信頼性が高い。UC の related_objects に含まれるオブジェクトと一致するUCに割り当て |
+| 1 | **Triggerの TableEnumOrId 一致**: 最も信頼性が高い。UC の related_objects に含まれるオブジェクトと一致するUCに割り当て。**複数UCが候補になる場合**は、Trigger の `After Insert / After Update / Before Delete` 等のイベントと各UCの `trigger` 条件（ステータス遷移・フィールド変更）を突き合わせて最も近いUCを選ぶ。それでも決まらない場合は `uc_id` が小さい方を primary に割り当て、残りUCは `related_fgs` に列挙する（決定的ルール） |
 | 2 | **設計書の関連UC参照**: `docs/design/` 配下の設計書の「関連UC」フィールドが存在する場合はそれを優先 |
 | 3 | **全operated_objectsが1UCのrelated_objectsに含まれる**: 1対1マッチ → そのUCのFGへ |
 | 4 | **主要オブジェクト優先**: 複数UCにまたがる → 最もマッチ数が多いUCを primary、残りは `related_fgs` に列挙 |

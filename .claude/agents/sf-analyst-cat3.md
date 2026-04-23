@@ -86,7 +86,11 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 
 名称に `Product/Master/Type/Category/Config/Setting/Code/Item/Kind/Status/Grade/Plan` が含まれるものを優先的にマスタ系と判断する。cat2 のオブジェクト定義書も参照して判断精度を上げる。
 
-各候補オブジェクトのレコード件数を確認し、**1,000件以下をマスタ系の目安**とする（それ以上でも設定値的性質ならマスタ系と判断可）。
+各候補オブジェクトのレコード件数を確認し、**1,000件以下をマスタ系の目安**とする。1,000件を超える場合は、以下のいずれかを満たすもののみマスタ系と判断する（いずれも満たさない場合は CRM データとして cat3 の対象外）:
+
+- (a) 月次作成数が総件数の 10% 未満（= ほぼ追加されない静的データ）
+- (b) オブジェクト API名サフィックスに `Type` / `Code` / `Category` / `Setting` / `Master` / `Plan` のいずれかを含む
+- (c) CustomMetadata（`__mdt`）または Hierarchy CustomSetting である
 
 #### Step 2: マスタ系オブジェクトの全レコード取得
 
@@ -131,7 +135,9 @@ sf data query -q "SELECT Name, DeveloperName, FolderName, Subject, TemplateType,
 sf data query -q "SELECT Name, Subject, Body, HtmlValue, Encoding FROM EmailTemplate WHERE IsActive = true ORDER BY Name" --json
 ```
 
-記録内容: テンプレート名・件名・本文（個人情報変数は変数名のみ記録）・フォルダ・タイプ・利用UC（推定）
+記録内容: テンプレート名・件名・フォルダ・タイプ・利用UC（推定）
+
+**Body・HtmlValue の扱い（厳守）**: 取得した `Body` / `HtmlValue` には個人情報（実名・実顧客番号・担当者名等）が運用事故でハードコードされている可能性がある。**本文テキストそのものを docs/data/email-templates.md に書き出さない**。代わりに `{!Recipient.FirstName}` のような差し込み項目（merge field）の**変数名だけを抽出して列挙する**。本文の要約・抜粋・例示も禁止。
 
 ### Phase 3: レポート・ダッシュボードの収集（reports-dashboards.md）
 
@@ -153,7 +159,7 @@ sf data query -q "SELECT Id, EntityDefinitionId, DeveloperName, Description, IsA
 # 割り当てルール
 sf data query -q "SELECT Name, SobjectType FROM AssignmentRule WHERE Active = true" --json
 ```
-→ エラーが出ても続行（権限によっては取得できない場合あり）
+→ エラーが出ても続行（権限によっては取得できない場合あり）。**取得失敗時は `automation-config.md` の該当セクションに `**[要確認: API権限不足]**` と明記し、完了報告の「要確認事項」にも「SOQL 失敗: {対象テーブル名}」として列挙する**（空欄・無記載は禁止）。
 
 記録内容: キュー名・対象オブジェクト・用途（推定）。承認プロセスは **承認者の条件・段階数・差戻しルール** まで記録する（cat1 の usecases.md との紐付けを確認）。
 
