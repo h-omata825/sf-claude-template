@@ -48,14 +48,6 @@ Salesforce 開発プロジェクト向けの Claude Code テンプレート。
 | `/sf-retrieve [対象]` | package.xml を生成してメタデータをローカルに取得 | |
 | `/sf-memory` | 会話形式でカテゴリを選択し、組織の記憶形成を実行 | 4カテゴリ：組織概要・オブジェクト・マスタデータ・設計/機能グループ |
 
-**推奨実行順序（初期セットアップ）**
-
-| 順序 | コマンド | 備考 |
-|---|---|---|
-| 1 | `/sf-setup` | 本番組織の認証（記憶形成は本番推奨） |
-| 2 | `/sf-retrieve` | メタデータをローカルに取得 |
-| 3 | `/sf-memory`（全カテゴリ） | 会話形式でカテゴリ選択。更新時はカテゴリを個別指定 |
-
 ### 保守・開発系
 
 | コマンド | 概要 | 補足 |
@@ -100,19 +92,6 @@ Salesforce 開発プロジェクト向けの Claude Code テンプレート。
 
 ---
 
-## settings.json（自動ブロック設定）
-
-| 操作 | 挙動 |
-|---|---|
-| 本番 org（`*prod*` / `*production*`）へのデプロイ | 自動拒否 |
-| `rm -rf` / `.claude` の削除 | 自動拒否 |
-| `.claude/` / `scripts/` 配下の編集・書き込み | 自動拒否（テンプレート保護） |
-| Sandbox 等へのデプロイ | 自動実行 |
-
-チーム運用・PR 運用に切り替えるときは、`settings.json` の `__pending.git_workflow.rules` を `permissions.deny` に移動して `main` / `develop` への直接 push を禁止する。
-
----
-
 ## 新規プロジェクト作成
 
 ```bash
@@ -127,7 +106,7 @@ pip install -r scripts/python/sf-doc-mcp/requirements.txt
 
 ---
 
-## テンプレートの更新
+## テンプレートの更新（/upgrade）
 
 プロジェクト作成後にテンプレート側で更新があった場合、取り込める:
 
@@ -136,3 +115,17 @@ bash scripts/upgrade.sh
 ```
 
 `.claude/` / `scripts/` / `.gitignore` のみ更新され、プロジェクト固有ファイル（`CLAUDE.md` / `docs/` / `.mcp.json` / `force-app/`）は保護される。
+
+---
+
+## Git 同期（/git-sync）
+
+テンプレート更新・プロジェクトの pull/push を対話形式で実行する。3種類の操作から選択:
+
+| 操作 | 内容 |
+|---|---|
+| テンプレート部分を更新 | `upgrade.sh` を実行し、変更があれば自動で `git push` |
+| プロジェクト部分を取得 | `git pull` で最新を取得 |
+| プロジェクト部分を保存 | 変更ファイル（`docs/` / `CLAUDE.md`）を選択して自動コミット + `git push` |
+
+`/upgrade` はテンプレート更新のみ。`/git-sync` はテンプレート更新とプロジェクト側 pull/push の両方を1コマンドで実行できる。
