@@ -135,18 +135,17 @@ clone 完了後の次のステップ:
 bash scripts/upgrade.sh
 ```
 
-`.claude/` / `scripts/` / `.gitignore` のみ更新され、プロジェクト固有ファイル（`CLAUDE.md` / `docs/` / `.mcp.json` / `force-app/`）は保護される。
+`.claude/` / `scripts/` / `.gitignore` のみ更新され、プロジェクト固有ファイル（`CLAUDE.md` / `docs/` / `.mcp.json` / `force-app/`）は保護される。変更があった場合は自動でプロジェクトリポジトリへ push する。
 
 ---
 
 ## Git 同期（/git-sync）
 
-テンプレート更新・プロジェクトの pull/push を対話形式で実行する。3種類の操作から選択:
+プロジェクトリポジトリとの pull/push を対話形式で実行する。2種類の操作から選択:
 
 | 操作 | 内容 |
 |---|---|
-| テンプレート部分を更新 | `upgrade.sh` を実行し、変更があれば自動で `git push` |
 | プロジェクト部分を取得 | `git pull` で最新を取得 |
 | プロジェクト部分を保存 | 変更ファイル（`docs/` / `CLAUDE.md`）を選択して自動コミット + `git push` |
 
-`/upgrade` はテンプレート更新のみ。`/git-sync` はテンプレート更新とプロジェクト側 pull/push の両方を1コマンドで実行できる。
+テンプレート（`.claude/` / `scripts/`）の更新は `/upgrade` を使用。

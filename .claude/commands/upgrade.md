@@ -1,5 +1,5 @@
 ---
-description: "テンプレートリポジトリの最新版を取得し、.claude/ / scripts/ / .gitignore を更新する。プロジェクト固有ファイル（CLAUDE.md / docs/ / force-app/）は触らない。"
+description: "テンプレートリポジトリの最新版を取得し、.claude/ / scripts/ / .gitignore を更新してプロジェクトリポジトリへ push する。プロジェクト固有ファイル（CLAUDE.md / docs/ / force-app/）は触らない。"
 ---
 
 assistantエージェントとして、テンプレートのアップグレードを実行してください。
@@ -32,8 +32,23 @@ bash scripts/upgrade.sh -y $ARGUMENTS
 
 ## 実行後
 
-1. スクリプトの出力結果をユーザーに伝える
-2. 変更があった場合は `git diff .claude/` で変更内容を確認するよう提案する
+スクリプトの出力結果をユーザーに伝え、以下のように対応する:
+
+**変更があった場合**（"コミット完了" が出力に含まれる）:
+
+```bash
+git push origin HEAD
+```
+
+push 完了後:
+```
+✅ テンプレート更新 + push 完了
+```
+
+**変更がなかった場合**（"テンプレートは最新です" が出力に含まれる）:
+```
+✅ テンプレートは既に最新です。push は不要です。
+```
 
 > **注意**: `.gitignore` に `.claude/` が含まれている場合、`git diff` に差分が表示されない。
 > このテンプレートでは `.claude/` を Git 管理対象にしているため通常は問題ないが、
