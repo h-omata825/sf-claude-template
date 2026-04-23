@@ -794,9 +794,12 @@ def render_component_diagram(
 
     # callees が全部空かつノード数が多い場合は「グリッド配置」モード
     # （多量 UI コンポーネントの一覧表示に適したレイアウト）
+    # I-2 (v2): 20 コンポーネント以上なら callees があっても grid で描画し、
+    #           callees を edge として上書き描画する（VF→Apex 連鎖で callees が
+    #           入ったケースでも横長にならないようにするため）
     all_callees_empty = not any(c.get("callees") for c in components)
     num_nodes = len(components) + (1 if trigger_node else 0)
-    use_grid = all_callees_empty and len(components) >= 10
+    use_grid = (all_callees_empty and len(components) >= 10) or len(components) >= 20
 
     if use_grid:
         _rankdir, _splines = "LR", "line"
