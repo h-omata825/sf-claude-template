@@ -174,7 +174,7 @@ Other が選ばれた場合はチャットで入力してもらう。
 python -c "
 import re, pathlib
 text = pathlib.Path(r'{project_dir}/docs/catalog/_index.md').read_text(encoding='utf-8')
-rows = re.findall(r'\|\s*[^\|]+\|\s*([A-Za-z][A-Za-z0-9_]*)\s*\|', text)
+rows = re.findall(r'\|\s*[^\|]+\|\s*`?([A-Za-z][A-Za-z0-9_]*)`?\s*\|', text)
 skip = {'API名', 'キープレフィックス', 'オブジェクト', 'バージョン', '定義書'}
 all_objs = list(dict.fromkeys(r.strip() for r in rows if r.strip() not in skip))
 standard = [o for o in all_objs if not o.endswith('__c')]
