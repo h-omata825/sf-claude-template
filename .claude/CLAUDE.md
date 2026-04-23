@@ -29,7 +29,7 @@
 | `/sf-memory` 全カテゴリ完了後の2周目横断補完（用語統一・矛盾解消・相互参照補完） | `sf-org-analyst` |
 | `/sf-design` コマンドの詳細設計ステップ（グループ選択 + sf-detail-design-writer 委譲） | `sf-design-step1` |
 | `/sf-design` コマンドのプログラム設計ステップ（sf-screen-writer + sf-design-writer 委譲） | `sf-design-step2` |
-| `/sf-design` コマンドの機能一覧ステップ（sf-design-writer 機能一覧モード委譲） | `sf-design-step3` |
+| `/sf-design` コマンドの機能一覧ステップ（generate_feature_list.py 直接呼び出し） | `sf-design-step3` |
 | `sf-design-step2` から委譲（プログラム設計書・機能一覧 Excel生成） | `sf-design-writer` / `sf-screen-writer` |
 | `/sf-design` コマンド全体から委譲（基本/詳細設計 Excel生成） | `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
 

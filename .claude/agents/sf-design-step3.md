@@ -1,6 +1,6 @@
 ---
 name: sf-design-step3
-description: "sf-design コマンドから委譲される機能一覧ステップ専用エージェント。feature_list.json を読み込み、sf-design-writer 機能一覧モードに委譲して機能一覧.xlsx を生成する。「機能一覧のみ」または「詳細設計+機能一覧」選択時のみ呼ばれる。プログラム設計と同時選択時は sf-design-step2 が機能一覧を生成するため、このエージェントは呼ばれない。"
+description: "sf-design コマンドから委譲される機能一覧ステップ専用エージェント。feature_list.json を検証し、generate_feature_list.py を直接呼び出して機能一覧.xlsx を生成する。「機能一覧のみ」または「詳細設計+機能一覧」選択時のみ呼ばれる。プログラム設計と同時選択時は sf-design-step2 が機能一覧を生成するため、このエージェントは呼ばれない。"
 tools:
   - Read
   - Glob
@@ -11,7 +11,7 @@ tools:
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。
 
-> **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python {project_dir}/scripts/...` 形式を使用する。
+> **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python "{project_dir}/scripts/..."` 形式を使用する。
 
 # sf-design-step3: 機能一覧ステップ
 
@@ -58,21 +58,17 @@ for t, n in sorted(cnt.items()): print(f'  {t}: {n}件')
 "
 ```
 
-`docs/.sf/feature_list.json` を Read ツールで読み込み、内容を `feature_list` として保持する。
-
 ---
 
-## Phase 3: sf-design-writer に委譲（機能一覧モード）
+## Phase 3: 機能一覧.xlsx 生成
 
-以下の情報を渡して **sf-design-writer** エージェントを起動する:
-
-```
-project_dir:      {project_dir}
-output_dir:       {output_dir}/01_基本設計
-author:           {author}
-project_name:     {project_name}
-feature_list:     {feature_list}（docs/.sf/feature_list.json の内容）
-mode:             機能一覧（プログラム設計書は生成しない）
+```bash
+python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
+  --input "{project_dir}/docs/.sf/feature_list.json" \
+  --output-dir "{output_dir}/01_基本設計" \
+  --author "{author}" \
+  --project-name "{project_name}" \
+  --version-increment {version_increment}
 ```
 
-sf-design-writer は `{output_dir}/01_基本設計/機能一覧.xlsx` を生成して終了する。sf-design-writer の完了を確認してからこのエージェントを終了する。
+完了後、`{output_dir}/01_基本設計/機能一覧.xlsx` の存在を確認してからこのエージェントを終了する。
