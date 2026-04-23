@@ -44,7 +44,9 @@
       "Write(.claude/**)",
       "Edit(.claude/**)",
       "Write(scripts/**)",
-      "Edit(scripts/**)"
+      "Edit(scripts/**)",
+      "Write(**/.gitignore)",
+      "Edit(**/.gitignore)"
     ]
   },
 
