@@ -397,26 +397,54 @@ def get_flow_info(path: Path) -> tuple[str, str, str]:
         return path.stem, "Flow", ""
 
 
-def get_design_doc(docs_design_dir: Path, name: str) -> str | None:
+# 種別 → docs/design/ 配下のサブフォルダ名マッピング（cat4 の出力先と一致）
+_TYPE_TO_DESIGN_FOLDER = {
+    "Apex":        "apex",
+    "Trigger":     "apex",
+    "Batch":       "batch",
+    "Flow":        "flow",
+    "画面フロー":   "flow",
+    "LWC":         "lwc",
+    "Aura":        "aura",
+    "Visualforce": "vf",
+    "Integration": "integration",
+}
+
+
+def get_design_doc(docs_design_dir: Path, name: str, ftype: str = "") -> str | None:
     """docs/design/ 配下から機能名に対応するMDファイルのパスを返す。
 
-    マッチングは「スペース・ハイフン除去した小文字一致」で行い、
-    kebab-case の MD ファイル名（例: `bulk-create-payment-controller.md`）と
-    CamelCase の api_name（例: `BulkCreatePaymentController`）を突合できるようにする。
+    マッチングは「スペース・ハイフン除去した小文字一致（stem 完全一致）」のみで行い、
+    異なる種別同士の誤マッチ（例: Flow `QuoteRequestPending` が LWC `request.md` に
+    マッチしてしまう）を防ぐ。
+
+    種別が指定された場合はまず対応サブフォルダ内を探索し、見つからない場合のみ
+    docs/design/ 全体を再検索する。
     """
     def _normalize(s: str) -> str:
         return re.sub(r'[-_\s]', '', s.lower())
 
     target = _normalize(name)
-    for md in docs_design_dir.rglob("*.md"):
-        # ファイル名から "【CMP-XXX】" などのプレフィックスを除去した stem と比較
+
+    def _match(md: Path) -> bool:
+        # ファイル名から "【CMP-XXX】" や "【CMP-XXX〜CMP-YYY等】" などのプレフィックスを除去
         stem = re.sub(r'^【[^】]+】', '', md.stem)
-        if _normalize(stem) == target:
-            return md.as_posix()
-    # 完全一致がなければ部分一致で fallback
+        return _normalize(stem) == target
+
+    # 1. 種別に対応するサブフォルダ内をまず検索（誤マッチ防止）
+    folder = _TYPE_TO_DESIGN_FOLDER.get(ftype)
+    if folder:
+        sub_dir = docs_design_dir / folder
+        if sub_dir.exists():
+            for md in sub_dir.rglob("*.md"):
+                if _match(md):
+                    return md.as_posix()
+            # 同種フォルダに無ければ None を返す（他種別フォルダに誤マッチさせない）
+            return None
+
+    # 2. 種別不明時のみ全体を完全一致で検索
     for md in docs_design_dir.rglob("*.md"):
-        stem = re.sub(r'^【[^】]+】', '', md.stem)
-        if target in _normalize(stem) or _normalize(stem) in target:
+        if _match(md):
             return md.as_posix()
     return None
 
@@ -494,7 +522,7 @@ def scan(project_dir: Path) -> list[dict]:
             classified = classify_apex(cls_file)
             if classified is None:
                 continue
-            doc = get_design_doc(docs_design, cls_file.stem)
+            doc = get_design_doc(docs_design, cls_file.stem, classified)
             _add(classified, cls_file.stem, {
                 "name":        cls_file.stem,
                 "overview":    extract_javadoc(cls_file, cls_file.stem, doc),
@@ -507,7 +535,7 @@ def scan(project_dir: Path) -> list[dict]:
     if base.exists():
         for trig_file in sorted(base.glob("*.trigger")):
             handler = extract_trigger_handler(trig_file)
-            doc = get_design_doc(docs_design, trig_file.stem)
+            doc = get_design_doc(docs_design, trig_file.stem, "Trigger")
             _add("Trigger", trig_file.stem, {
                 "name":        trig_file.stem,
                 "overview":    extract_trigger_overview(trig_file, doc),
@@ -523,7 +551,8 @@ def scan(project_dir: Path) -> list[dict]:
             label, ptype, desc = get_flow_info(flow_file)
             flow_type = "画面フロー" if ptype == "Flow" and b"<screens>" in flow_file.read_bytes() else "Flow"
             api_name = flow_file.name.replace(".flow-meta.xml", "")
-            doc = get_design_doc(docs_design, flow_file.stem)
+            # flow_file.stem だと "X.flow-meta" のように .flow-meta が残ってしまうので api_name を使う
+            doc = get_design_doc(docs_design, api_name, flow_type)
             # 優先順: design_doc の title → description → label
             overview = extract_design_doc_title(doc) or desc.strip()
             if not overview and label and label != api_name:
@@ -547,7 +576,7 @@ def scan(project_dir: Path) -> list[dict]:
                 candidate = name[:-5]   # "Modal" / "modal" = 5文字
                 if candidate and candidate in lwc_names:
                     parent_name = candidate
-            doc = get_design_doc(docs_design, name)
+            doc = get_design_doc(docs_design, name, "LWC")
             _add("LWC", name, {
                 "name":        name,
                 "overview":    extract_lwc_overview(comp_dir, doc),
@@ -560,7 +589,7 @@ def scan(project_dir: Path) -> list[dict]:
     base = force_app / "aura"
     if base.exists():
         for comp_dir in sorted(p for p in base.iterdir() if p.is_dir()):
-            doc = get_design_doc(docs_design, comp_dir.name)
+            doc = get_design_doc(docs_design, comp_dir.name, "Aura")
             _add("Aura", comp_dir.name, {
                 "name":        comp_dir.name,
                 "overview":    extract_aura_overview(comp_dir, doc),
@@ -573,7 +602,7 @@ def scan(project_dir: Path) -> list[dict]:
     if base.exists():
         for page_file in sorted(base.glob("*.page-meta.xml")):
             api_name = page_file.name.replace(".page-meta.xml", "")
-            doc = get_design_doc(docs_design, api_name)
+            doc = get_design_doc(docs_design, api_name, "Visualforce")
             _add("Visualforce", api_name, {
                 "name":        api_name,
                 "overview":    extract_vf_overview(page_file, doc),
