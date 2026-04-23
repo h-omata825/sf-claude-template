@@ -6,12 +6,13 @@ tools:
   - Glob
   - Grep
   - Bash
+  - AskUserQuestion
   - TodoWrite
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。
 
-> **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python {project_dir}/scripts/...` 形式を使用する。
+> **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python "{project_dir}/scripts/..."` 形式を使用する。
 
 # sf-design-step1: 詳細設計ステップ
 

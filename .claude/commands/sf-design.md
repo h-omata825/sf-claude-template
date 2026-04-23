@@ -8,11 +8,11 @@ Salesforce プロジェクトの設計書を生成します。
 
 **AskUserQuestion のルール（厳守）:**
 - **1質問1回答**: 複数の質問を1つの AskUserQuestion にまとめない。必ず1問ずつ順番に聞く
-- **選択肢はデフォルト/スキップ値のみ**: choices に「Other」「自由入力」等は含めない
+- **選択肢はデフォルト/スキップ値のみ**（**テキスト入力代替の single select でのみ適用**。multiSelect で資料/項目種別を列挙する場合は対象外）: AskUserQuestion には自動で「Other（自由入力）」が付く。choices に Other・「自由入力」・「手動入力」等の選択肢を**絶対に含めない**。「スキップ」「デフォルト値を使う」等のみ記載する
 - テキスト入力（パス・名前等）はチャットで直接聞く
 
 **テンプレート置換ルール（厳守）:**
-- Python インラインコード内の `{project_dir}` `{output_dir}` `{author}` `{version_increment}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash に渡す前に、値の種別に応じて以下の規則で置換する:
+- Python インラインコード内、**および AskUserQuestion の label / description 内**の `{project_dir}` `{output_dir}` `{author}` `{last_author}` `{last_output_dir}` `{version_increment}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash / AskUserQuestion に渡す前に、値の種別に応じて以下の規則で置換する:
   - **パス値** (`{project_dir}` / `{output_dir}` 等): Windows パスの `\` はすべて `/` に置換し、末尾の `/` は除去する（例: `C:\work\` → `C:/work`）。raw string 末尾 `\` による SyntaxError を回避するため。`pathlib.Path` は Windows でも forward slash を正しく解釈する。
   - **任意文字列値** (`{author}` 等): シングルクォートで囲まれた箇所 (`'{author}'`) への埋め込み時は、値内の `'` を `\'` にエスケープする（例: `O'Brien` → `O\'Brien`）。
   - **列挙値** (`{version_increment}`): `minor` / `patch` / `major` 以外が指定された場合は `minor` にフォールバックし、ユーザーに「未知の値のためminorに置換」と警告する。
@@ -158,20 +158,22 @@ print('project_name:' + name)
 ```bash
 python -c "
 import pathlib, sys
+author_f = pathlib.Path('docs/.sf/.author_tmp')
+outdir_f = pathlib.Path('docs/.sf/.output_dir_tmp')
 try:
     import yaml
-    author_f = pathlib.Path('docs/.sf/.author_tmp')
-    outdir_f = pathlib.Path('docs/.sf/.output_dir_tmp')
     author = author_f.read_text(encoding='utf-8').strip() if author_f.exists() else ''
     output_dir = outdir_f.read_text(encoding='utf-8').strip() if outdir_f.exists() else ''
     p = pathlib.Path('docs/.sf/sf_design_config.yml')
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(yaml.dump({'author': author, 'output_dir': output_dir}, allow_unicode=True, default_flow_style=False), encoding='utf-8')
-    for f in [author_f, outdir_f]:
-        f.unlink(missing_ok=True)
 except Exception as e:
     print('設定の保存に失敗:', e, file=sys.stderr)
     sys.exit(1)
+finally:
+    # 成功・失敗にかかわらず一時ファイルは必ず削除する
+    for f in [author_f, outdir_f]:
+        f.unlink(missing_ok=True)
 "
 ```
 

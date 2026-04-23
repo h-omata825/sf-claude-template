@@ -6,6 +6,7 @@ tools:
   - Glob
   - Grep
   - Bash
+  - AskUserQuestion
   - TodoWrite
 ---
 
@@ -52,24 +53,6 @@ else:
 ```
 
 `alias:` 以降の値を **`detected_alias`** として控える。
-
-### org-profile.md からシステム名を取得
-
-```bash
-python -c "
-import pathlib, re
-p = pathlib.Path(r'{project_dir}/docs/.sf/org-profile.md')
-if p.exists():
-    text = p.read_text(encoding='utf-8')
-    m = re.search(r'alias[:\s]+(\S+)', text, re.IGNORECASE)
-    if m:
-        print('org_alias:' + m.group(1))
-    else:
-        print('org_alias:')
-else:
-    print('org_alias:')
-"
-```
 
 ### AskUserQuestion で SF_ALIAS を確定
 
