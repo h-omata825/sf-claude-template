@@ -1,6 +1,5 @@
 ---
 name: maintenance
-model: opus
 description: Salesforce保守運用専門。本番障害対応・Apexデバッグログ解析・パフォーマンス問題調査・ガバナ制限エラー解析・定期メンテナンス作業。障害発生時・パフォーマンス劣化・運用中の不具合調査に使用する。
 tools:
   - Read

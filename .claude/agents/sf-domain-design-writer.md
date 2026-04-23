@@ -1,6 +1,5 @@
 ---
 name: sf-domain-design-writer
-model: opus
 description: "ドメイン設計書（Excel）を業務ドメイン単位で生成する専門エージェント。プロジェクトのドキュメント・コード・feature_groups.yml を読み込み、ドメイン視点の業務フロー・画面構成・コンポーネント構成を含む設計書を生成する。"
 tools:
   - Read

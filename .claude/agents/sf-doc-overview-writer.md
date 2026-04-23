@@ -1,6 +1,5 @@
 ---
 name: sf-doc-overview-writer
-model: opus
 description: "sf-doc コマンドから委譲されるプロジェクト概要書生成エージェント。docs/ 配下の情報源を元に generate_basic_doc.py を呼び出してプロジェクト概要書.xlsx を生成する。単独実行（概要書のみ選択）または両方選択時の sf-doc-objects-writer からの連鎖呼び出しで起動する。"
 tools:
   - Read

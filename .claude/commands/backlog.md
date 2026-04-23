@@ -1,6 +1,5 @@
 ---
 description: "Backlog課題の調査・対応・記録を一気通貫で実施する。専門エージェントを順に起動し、各フェーズ完了後にユーザ確認を取りながら進める。/backlog [課題ID] または /backlog summary で工数サマリーを出力。"
-model: opus
 ---
 
 # /backlog [課題ID] または [summary]

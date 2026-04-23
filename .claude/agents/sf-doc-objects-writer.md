@@ -1,6 +1,5 @@
 ---
 name: sf-doc-objects-writer
-model: opus
 description: "sf-doc コマンドから委譲されるオブジェクト定義書生成エージェント。Salesforce組織に直接接続してフィールドメタデータを取得し、オブジェクト項目定義書_v*.xlsx を生成する。「オブジェクト定義書のみ」または「両方」選択時に sf-doc コマンドから起動される。両方選択時はこのエージェントが sf-doc-overview-writer を連鎖呼び出しする。"
 tools:
   - Read

@@ -1,6 +1,5 @@
 ---
 name: sf-screen-writer
-model: opus
 description: "LWC・画面フロー・Aura・Visualforce専用のプログラム設計書（画面）（Excel）生成エージェント。sf-design-step2 エージェントから委譲されて実行する。usecases[] 構造の画面設計書 JSON を生成し generate_screen_design.py で Excel に変換する。Apex・Flow（非画面）・Batch は対象外（sf-design-writer が担当）。"
 tools:
   - Read

@@ -1,6 +1,5 @@
 ---
 name: sf-design-step1
-model: opus
 description: "sf-design コマンドから委譲される詳細設計ステップ専用エージェント。グループ確定・詳細設計の実行・必要に応じた後続エージェント（sf-design-step2/step3）への連鎖呼び出しを担う。"
 tools:
   - Read

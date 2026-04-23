@@ -1,6 +1,5 @@
 ---
 name: sf-design-writer
-model: opus
 description: "プログラム設計書（Excel）と機能一覧（Excel）を生成する専門エージェント。sf-design-step2 エージェントから委譲されて実行する。force-app/ と docs/ を徹底的に読み込み、高品質な設計内容 JSON を生成してから Python スクリプトで Excel に変換する。"
 tools:
   - Read

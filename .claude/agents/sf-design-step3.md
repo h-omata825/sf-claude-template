@@ -1,6 +1,5 @@
 ---
 name: sf-design-step3
-model: opus
 description: "sf-design コマンドから委譲される機能一覧ステップ専用エージェント。feature_list.json を読み込み、sf-design-writer 機能一覧モードに委譲して機能一覧.xlsx を生成する。「機能一覧のみ」または「詳細設計+機能一覧」選択時のみ呼ばれる。プログラム設計と同時選択時は sf-design-step2 が機能一覧を生成するため、このエージェントは呼ばれない。"
 tools:
   - Read
