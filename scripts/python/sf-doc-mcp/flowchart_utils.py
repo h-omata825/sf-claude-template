@@ -318,10 +318,16 @@ def generate_flowchart(steps, out_path, fig_w=6.2, add_start_end=True,
             else:
                 calls_text = calls.get("text") or calls.get("name") or ""
             if calls_text:
-                cw = BOX_W_PROC * 1.0
-                cl = len(_wrap(calls_text, 12).split("\n"))
-                ch = BOX_H_PROC * 1.05 + max(0, cl - 1) * 0.18
-                _render_shape(ax, cx_branch, cy, cw, ch, "call", _wrap(calls_text, 12))
+                # Apex/LWC クラス名は18文字程度までが多い。折返しは18文字基準。
+                wrapped = _wrap(calls_text, 18)
+                lines = wrapped.split("\n")
+                cl = len(lines)
+                max_chars = max((len(ln) for ln in lines), default=0)
+                # ボックス幅を最長行に合わせて動的に拡張（fs=6.5 基準: 1文字≈0.10 inch, 左右マージン0.25）
+                cw = max(BOX_W_PROC * 1.0, max_chars * 0.10 + 0.25)
+                # 2行以上のときは行間を 0.22 inch 確保して下端切れを防ぐ
+                ch = BOX_H_PROC * 1.10 + max(0, cl - 1) * 0.22
+                _render_shape(ax, cx_branch, cy, cw, ch, "call", wrapped)
                 _arrow(ax, cx_main + w / 2 + 0.02, cy,
                        cx_branch - cw / 2 - 0.02, cy,
                        color="#444444", lw=1.1)

@@ -25,6 +25,13 @@ import tempfile
 from datetime import date as _date
 from pathlib import Path
 
+# Windows cp932 環境で print 時の UnicodeEncodeError/文字化けを防止する
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
@@ -695,6 +702,8 @@ def main():
                         help="更新時: 既存の画面設計書xlsxパス")
     parser.add_argument("--version-increment", default="minor",
                         choices=["minor", "major"])
+    parser.add_argument("--source-hash", default="",
+                        help="ソースのSHA256。_meta に保存して次回差分判定に使う")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -723,6 +732,13 @@ def main():
 
     prev_meta   = read_meta(source_file) if source_file else None
     prev_data   = prev_meta.get("data") if prev_meta else None
+
+    # 第1ゲート: ソースハッシュ一致ならExcel再生成スキップ（詳細設計と同じ方式）
+    if (prev_meta and args.source_hash
+            and args.version_increment == "minor"
+            and prev_meta.get("source_hash") == args.source_hash):
+        print("差分なし: ソースハッシュが既存ファイルと一致しているため更新をスキップしました")
+        sys.exit(0)
 
     if prev_meta:
         current_version = increment_version(
@@ -775,13 +791,16 @@ def main():
         _fill_events(wb, data)
 
         # _meta 保存（次回差分判定用）
-        write_meta(wb, {
+        meta_payload = {
             "version": current_version,
             "date":    today,
             "author":  author,
             "data":    data,
             "history": history,
-        })
+        }
+        if args.source_hash:
+            meta_payload["source_hash"] = args.source_hash
+        write_meta(wb, meta_payload)
 
         wb.save(out_path)
         print(f"画面設計書生成完了: v{current_version} → {out_path}")
