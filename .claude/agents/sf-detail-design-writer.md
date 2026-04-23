@@ -487,6 +487,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_detail_design.py \
   --input "{tmp_dir}/{group_id}_detail.json" \
   --template "{project_dir}/scripts/python/sf-doc-mcp/詳細設計書テンプレート.xlsx" \
   --output-dir "{output_dir}" \
+  --project-dir "{project_dir}" \
   --source-hash "{source_hash}"
 ```
 

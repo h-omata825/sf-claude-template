@@ -518,6 +518,8 @@ import re as _re
 _SF_PROJECT_PATHS: dict[str, str] = {
     # キーは小文字で統一。data.get('project_name') は .lower() して照合する
     "greenfield": "C:/workspace/16_グリーンフィールド/greenfield",
+    "link_prod":  "C:/workspace/21_リンク/link_prod",
+    "link":       "C:/workspace/21_リンク/link_prod",
 }
 _SF_EXTRA_LABEL_PATHS: list[str] = [
     "C:/workspace/16_グリーンフィールド/GF_UAT",
