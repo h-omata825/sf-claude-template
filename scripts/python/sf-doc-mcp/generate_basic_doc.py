@@ -483,8 +483,10 @@ def _pick_flows(swimlanes: dict) -> tuple[dict | None, dict | None]:
     優先順位:
       1. flow_type が `asis` / `tobe` で明示宣言されたフロー
       2. title に As-Is / To-Be 相当のキーワードを含むフロー
-      3. As-Is が見つからず overall が存在する場合のみ overall を As-Is に流用
-         （To-Be は流用せず、空欄のまま。下流で「フローデータなし」と明示される）
+      3. overall フロー（全体俯瞰）のフォールバック
+         - As-Is が未設定 → overall を As-Is に流用
+         - As-Is が明示登録されている & To-Be が未設定 → overall を To-Be に流用
+           （as-is=過去、overall=現行=to-be 相当 の意味論に基づく）
     """
     flows = swimlanes.get("flows", [])
     asis = tobe = overall = None
@@ -499,8 +501,13 @@ def _pick_flows(swimlanes: dict) -> tuple[dict | None, dict | None]:
             tobe = f
         elif ftype == "overall" and overall is None:
             overall = f
+    # As-Is が見つからない場合のみ overall を As-Is 枠へ流用
     if asis is None and overall is not None:
         asis = overall
+    # As-Is は明示登録されているが To-Be だけ未登録の場合、overall を To-Be に流用
+    # （As-Is に既に overall を当てている場合は重複流用しない）
+    elif tobe is None and overall is not None and asis is not overall:
+        tobe = overall
     return asis, tobe
 
 
