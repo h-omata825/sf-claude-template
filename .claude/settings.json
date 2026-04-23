@@ -1,12 +1,10 @@
 {
   "_mode": "テスト中 / 実運用前",
   "_activate_instructions": "実運用開始時: __pending.git_workflow.rules の各文字列を permissions.deny 配列へコピーする。例: \"Bash(git push origin main*)\" を deny の末尾に追加。",
-
   "env": {
     "_comment_PYTHONIOENCODING": "Windows の Python はデフォルト stdout が cp932。Claude Code は UTF-8 期待のため、print('小俣') 等が化ける。全 Python 実行を UTF-8 stdout に統一する。",
     "PYTHONIOENCODING": "utf-8"
   },
-
   "hooks": {
     "PreCompact": [
       {
@@ -29,30 +27,51 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let b='';process.stdin.on('data',c=>b+=c);process.stdin.on('end',()=>{const d=JSON.parse(b);const cmd=d.tool_input?.command||'';const segs=cmd.split(/&&|\\|\\||;/);const blocked=segs.some(s=>{const t=s.trim();return /^sf\\s+(project\\s+deploy|data\\s+(upsert|delete|update|create|import|bulk)|apex\\s+run|package\\s+(install|uninstall)|org\\s+delete)/i.test(t)&&/--target-org\\s+\\S*(prod|production)/i.test(t);});if(blocked){console.log(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:'[HARD-BLOCK] 本番組織への変更操作はブロックされています。'}}))}});\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
-
   "permissions": {
     "allow": [
       "Bash(*)"
     ],
     "deny": [
-      "Bash(sf project deploy start --target-org *prod*)",
-      "Bash(sf project deploy start --target-org *production*)",
-      "Bash(rm -rf *)",
-      "Bash(rm -r .claude*)",
-      "Write(.claude/**)",
-      "Edit(.claude/**)",
-      "Write(scripts/**)",
-      "Edit(scripts/**)",
-      "Write(**/.gitignore)",
-      "Edit(**/.gitignore)"
+      "Bash(sf project deploy* --target-org *prod*)",
+      "Bash(sf project deploy* --target-org *production*)",
+      "Bash(sf data upsert* --target-org *prod*)",
+      "Bash(sf data upsert* --target-org *production*)",
+      "Bash(sf data delete* --target-org *prod*)",
+      "Bash(sf data delete* --target-org *production*)",
+      "Bash(sf data update* --target-org *prod*)",
+      "Bash(sf data update* --target-org *production*)",
+      "Bash(sf data create* --target-org *prod*)",
+      "Bash(sf data create* --target-org *production*)",
+      "Bash(sf data import* --target-org *prod*)",
+      "Bash(sf data import* --target-org *production*)",
+      "Bash(sf data bulk* --target-org *prod*)",
+      "Bash(sf data bulk* --target-org *production*)",
+      "Bash(sf apex run --target-org *prod*)",
+      "Bash(sf apex run --target-org *production*)",
+      "Bash(sf package install* --target-org *prod*)",
+      "Bash(sf package install* --target-org *production*)",
+      "Bash(sf package uninstall* --target-org *prod*)",
+      "Bash(sf package uninstall* --target-org *production*)",
+      "Bash(sf org delete* --target-org *prod*)",
+      "Bash(sf org delete* --target-org *production*)"
     ]
   },
-
   "__pending": {
     "_note": "チーム利用開始・PR運用を開始するとき permissions.deny へ追加して有効化する",
-
     "git_workflow": {
       "_description": "Git操作の制限。main/develop への直接 push を禁止し、PR経由を強制する。feature/* / hotfix/* ブランチの commit・push は引き続き許可。",
       "_activate_when": "2名以上で同一リポジトリを使い始めるとき",
