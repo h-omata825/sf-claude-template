@@ -20,8 +20,8 @@ from writer import DefinitionWriter
 def connect_via_sf_cli(alias: str) -> SalesforceConnector:
     """SF CLI のアクセストークンで接続する"""
     result = subprocess.run(
-        f"sf org display --target-org {alias} --json",
-        capture_output=True, text=True, encoding="utf-8", timeout=30, shell=True,
+        ["sf", "org", "display", "--target-org", alias, "--json"],
+        capture_output=True, text=True, encoding="utf-8", timeout=30,
     )
     raw = result.stdout
     json_start = raw.find("{")

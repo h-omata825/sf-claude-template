@@ -13,8 +13,8 @@ from connector import SalesforceConnector
 
 def connect_via_sf_cli(alias: str) -> SalesforceConnector:
     result = subprocess.run(
-        f"sf org display --target-org {alias} --json",
-        capture_output=True, text=True, encoding="utf-8", timeout=30, shell=True,
+        ["sf", "org", "display", "--target-org", alias, "--json"],
+        capture_output=True, text=True, encoding="utf-8", timeout=30,
     )
     raw = result.stdout
     json_start = raw.find("{")

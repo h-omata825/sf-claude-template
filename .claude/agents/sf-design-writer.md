@@ -443,8 +443,7 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
   --author "{author}" \
   --project-name "{project_name}" \
   --version-increment {version_increment} \
-  --source-file "{feature_list_dir}/機能一覧.xlsx" \
-  --feature-groups "{project_dir}/docs/.sf/feature_groups.yml"
+  --source-file "{feature_list_dir}/機能一覧.xlsx"
 
 # 新規作成（初回）
 python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
@@ -452,8 +451,7 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
   --output-dir "{feature_list_dir}" \
   --author "{author}" \
   --project-name "{project_name}" \
-  --version-increment {version_increment} \
-  --feature-groups "{project_dir}/docs/.sf/feature_groups.yml"
+  --version-increment {version_increment}
 ```
 
 ---
