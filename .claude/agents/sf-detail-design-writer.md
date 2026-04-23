@@ -143,19 +143,18 @@ print(f'テンプレート確認OK: {tpl}')
 feature_groups.yml を読む:
 ```bash
 python -c "
-import yaml, json, sys
-with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
+import yaml, json, sys, pathlib
+p = pathlib.Path(r'{project_dir}/docs/.sf/feature_groups.yml')
+if not p.exists():
+    print('ERROR: feature_groups.yml が見つかりません。先に /sf-memory を実行してください。', file=sys.stderr)
+    sys.exit(1)
+with p.open(encoding='utf-8') as f:
     data = yaml.safe_load(f)
 print(json.dumps(data, ensure_ascii=False, indent=2))
 "
 ```
 
-> **なければ group_features.py を実行して生成する:**
-> ```bash
-> python {project_dir}/scripts/python/sf-doc-mcp/group_features.py \
->   --project-dir "{project_dir}" \
->   --output "{project_dir}/docs/.sf/feature_groups.yml"
-> ```
+> **注意**: `feature_groups.yml` は `sf-memory`（sf-analyst-cat5）が生成する正本で、手動整理された業務機能グループ定義を含む。無ければ `/sf-memory` を先に実行すること。自動生成で上書きしない。
 
 `target_group_ids` が指定されている場合は該当グループのみ処理する。
 

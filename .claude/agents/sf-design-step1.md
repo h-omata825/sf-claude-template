@@ -56,11 +56,18 @@ print('OK')
 "
 ```
 
-`feature_groups.yml` を生成:
+`feature_groups.yml` の存在確認（無ければ `/sf-memory` の先行実行を案内してエラー終了）:
 ```bash
-python "{project_dir}/scripts/python/sf-doc-mcp/group_features.py" \
-  --project-dir "{project_dir}" \
-  --output "{project_dir}/docs/.sf/feature_groups.yml"
+python -c "
+import pathlib, sys
+p = pathlib.Path(r'{project_dir}') / 'docs' / '.sf' / 'feature_groups.yml'
+if not p.exists():
+    print('ERROR: docs/.sf/feature_groups.yml が見つかりません。')
+    print('       先に /sf-memory を実行して sf-analyst-cat5 に生成させてください。')
+    print('       （feature_groups.yml は業務機能グループ定義の正本で、手動整理された内容を含むため自動上書きしません）')
+    sys.exit(1)
+print('OK')
+"
 ```
 
 グループ一覧を表示:
