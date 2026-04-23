@@ -70,10 +70,32 @@ Salesforce 開発プロジェクト向けの Claude Code テンプレート。
 
 ---
 
-## 新規プロジェクト作成
+## セットアップ
+
+`setup.sh` は「新規プロジェクト作成」と「既存プロジェクトへの参加」の2モードをサポートする。
+
+### 引数
+
+| 位置 | 内容 | 省略時 |
+|---|---|---|
+| `$1` | **作成するフォルダ名**（英数字推奨） | 対話入力 |
+| `$2` | **作成先ディレクトリ**（Unix 表記必須。日本語・スペース含む場合はクォート） | カレントディレクトリ |
+| `$3` | **プロジェクトリポジトリ URL**（指定: 参加モード、省略: 新規作成モード） | 省略 |
+
+> **パス表記の注意（Windows）**: Git Bash では `C:\workspace` ではなく `/c/workspace` と書く。日本語やスペースを含む場合はダブルクォートで囲む。
+> ```
+> 誤: C:\workspace\16_グリーンフィールド
+> 正: "/c/workspace/16_グリーンフィールド"
+> ```
+
+### 新規プロジェクトを作成する
 
 ```bash
+# 作成先: カレントディレクトリ
 curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s プロジェクト名
+
+# 作成先を指定する場合
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s プロジェクト名 /c/workspace
 ```
 
 作成後、Python ライブラリをインストール（設計書生成機能を使う場合）:
@@ -81,6 +103,27 @@ curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/s
 ```bash
 pip install -r scripts/python/sf-doc-mcp/requirements.txt
 ```
+
+### 既存プロジェクトに参加する（チームメンバーのオンボーディング）
+
+プロジェクトリポジトリ URL を第3引数に渡すと参加モードになる。リポジトリを clone するだけでテンプレート展開は行わない。
+
+```bash
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s フォルダ名 親ディレクトリ https://github.com/your-org/project-a.git
+
+# 例: /c/workspace/gf として clone する
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s gf /c/workspace https://github.com/your-org/project-a.git
+
+# 例: 作成先が日本語フォルダの場合（クォート必須）
+curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s gf "/c/workspace/16_グリーンフィールド" https://github.com/your-org/project-a.git
+```
+
+clone 完了後の次のステップ:
+1. `/sf-setup` — Sandbox 組織を認証する
+2. `CLAUDE.md` — 担当者名・Sandbox alias 等を記入する
+3. `/setup-mcp` — 外部ツール連携を設定する（任意）
+
+> **GitHub のアクセス権**: Public リポジトリは招待なしで clone できる。`git push` する場合は GitHub の Settings → Collaborators から招待が必要。
 
 ---
 
