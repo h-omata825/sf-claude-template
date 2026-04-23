@@ -374,17 +374,40 @@ def main():
     # ── 部分更新: 入力にない機能を _meta から保持してマージ ──────
     # 全件処理時は features = old_features と同じ範囲なので影響なし。
     # 一部機能のみ指定時は、指定外の機能を保持して削除されるのを防ぐ。
+    # ただし ledger で deprecated=true になっている機能は保持せず除外する
+    # （削除済み機能が xlsx に残り続けるのを防ぐ）。
     if prev_meta and not is_major and old_features:
         input_ids  = {f.get("id") for f in features if f.get("id")}
-        preserved  = [f for f in old_features if f.get("id") not in input_ids]
+        # 台帳から deprecated ID を取得（feature_list.json の隣にある feature_ids.yml を参照）
+        deprecated_ids: set = set()
+        try:
+            import yaml
+            ledger_path = Path(args.input).parent / "feature_ids.yml"
+            if ledger_path.exists():
+                ledger = yaml.safe_load(ledger_path.read_text(encoding="utf-8")) or {}
+                deprecated_ids = {e.get("id") for e in ledger.get("features", [])
+                                  if e.get("deprecated")}
+        except Exception:
+            pass
+        preserved  = [f for f in old_features
+                      if f.get("id") not in input_ids
+                      and f.get("id") not in deprecated_ids]
         old_subset = [f for f in old_features if f.get("id") in input_ids]
         # 差分は「今回処理した機能」のみで計算する
         diffs = compare_features(old_subset, features)
+        # 削除対象（deprecated）を diffs.removed に反映
+        dropped = [f for f in old_features
+                   if f.get("id") not in input_ids and f.get("id") in deprecated_ids]
+        if dropped:
+            diffs["removed"] = diffs.get("removed", []) + dropped
         # xlsx に書く完全リスト = 今回の更新分 + 保持分
         features = features + preserved
         n_preserved = len(preserved)
+        n_dropped = len(dropped)
         if n_preserved:
             print(f"  [INFO] {n_preserved}件の機能を _meta から保持（入力外）")
+        if n_dropped:
+            print(f"  [INFO] {n_dropped}件の deprecated 機能を _meta から除外（削除扱い）")
     else:
         diffs = compare_features(old_features, features)
 

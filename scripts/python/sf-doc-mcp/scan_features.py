@@ -108,18 +108,23 @@ def _apex_role_from_name(api_name: str) -> str:
     return ""
 
 
-def extract_javadoc(path: Path, api_name: str = "") -> str:
+def extract_javadoc(path: Path, api_name: str = "", design_doc: str | None = None) -> str:
     """Apex クラスの概要を抽出する。
 
     優先順:
-      1. クラス宣言の直前にある javadoc (`/** ... */` → `public class X`)
-      2. ファイル先頭の javadoc（クラス直前でなくても可）
-      3. クラス名 suffix からのヒューリスティック生成（api_name が渡された場合）
+      1. docs/design/ 配下の対応MDファイルの title 行（`# 【F-XXX】APIName — 説明文`）
+      2. クラス宣言の直前にある javadoc (`/** ... */` → `public class X`)
+      3. ファイル先頭の javadoc（クラス直前でなくても可）
+      4. クラス名 suffix からのヒューリスティック生成（api_name が渡された場合）
 
-    メソッド内部の javadoc（例: `/** start */` の直後に `public List<X> start(...)` ）は
-    クラス概要として不適切なため (1) で優先されず (2) の fallback も別メソッドの可能性があるが、
-    クラス直前の検出が最優先。
+    SFデフォルトの英語ボイラープレート javadoc（`An apex page controller that...` 等）は
+    (2)(3) で除外されて (4) に fallback する。
     """
+    # 1. Design doc MD を最優先
+    doc_title = extract_design_doc_title(design_doc)
+    if doc_title:
+        return doc_title
+
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
@@ -130,8 +135,7 @@ def extract_javadoc(path: Path, api_name: str = "") -> str:
                  if l.strip().strip('*').strip() and not l.strip().lstrip('*').strip().startswith('@')]
         return lines[0] if lines else ""
 
-    # 1. クラス宣言の直前の javadoc を優先
-    # ex: /** ... */\n(modifiers)?\s*(public|global|private|protected)?\s*(abstract|virtual|with sharing|without sharing|inherited sharing)?\s*class X
+    # 2. クラス宣言の直前の javadoc を優先
     m = re.search(
         r'/\*\*(.*?)\*/\s*(?:@\w+(?:\([^)]*\))?\s*)*'
         r'(?:public|global|private|protected)\s+'
@@ -141,41 +145,42 @@ def extract_javadoc(path: Path, api_name: str = "") -> str:
     )
     if m:
         line = _first_meaningful_line(m.group(1))
-        if line:
+        if line and not _is_default_javadoc(line):
             return line
 
-    # 2. ファイル先頭の javadoc（コード本体直前ではなくても拾う — ただしメソッド javadoc ではないと確認したい）
-    #    但し "start" "execute" 等のメソッド名だけが記載された javadoc を除外する
+    # 3. ファイル先頭の javadoc（メソッド名・デフォルトテンプレ除外）
     METHOD_NAMES = {"start", "execute", "finish", "run", "handle", "init", "constructor"}
     m = re.search(r'/\*\*(.*?)\*/', text, re.DOTALL)
     if m:
         line = _first_meaningful_line(m.group(1))
-        if line and line.lower() not in METHOD_NAMES:
+        if line and line.lower() not in METHOD_NAMES and not _is_default_javadoc(line):
             return line
 
-    # 3. Suffix ヒューリスティック
+    # 4. Suffix/Prefix ヒューリスティック
     return _apex_role_from_name(api_name)
 
 
-def extract_trigger_overview(trigger_path: Path) -> str:
-    """Triggerファイルから「{Object} の {events} トリガー」形式で概要を生成する。
+def extract_trigger_overview(trigger_path: Path, design_doc: str | None = None) -> str:
+    """Triggerファイルから概要を抽出する。
 
-    ファイル冒頭のコメントがあればそれを優先。無ければ trigger 宣言から自動生成。
-    例: `trigger FeedCommentTrigger on FeedComment (after insert) { ... }`
-         → "FeedComment の after insert トリガー"
+    優先順:
+      1. docs/design/ の MD title
+      2. ファイル先頭の javadoc
+      3. trigger 宣言から自動生成（例: `FeedComment の after insert トリガー`）
     """
+    doc_title = extract_design_doc_title(design_doc)
+    if doc_title:
+        return doc_title
     try:
         text = trigger_path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return ""
-    # 先頭の /** ... */ javadoc を優先
     m = re.match(r'\s*/\*\*(.*?)\*/', text, re.DOTALL)
     if m:
         lines = [l.strip().lstrip('*').strip() for l in m.group(1).split('\n')
                  if l.strip().strip('*').strip() and not l.strip().lstrip('*').strip().startswith('@')]
-        if lines:
+        if lines and not _is_default_javadoc(lines[0]):
             return lines[0]
-    # trigger 宣言から抽出
     m = re.search(r'trigger\s+\w+\s+on\s+(\w+)\s*\(([^)]+)\)', text)
     if m:
         obj = m.group(1)
@@ -184,14 +189,18 @@ def extract_trigger_overview(trigger_path: Path) -> str:
     return ""
 
 
-def extract_lwc_overview(lwc_dir: Path) -> str:
+def extract_lwc_overview(lwc_dir: Path, design_doc: str | None = None) -> str:
     """LWC コンポーネントバンドルから概要を抽出する。
 
     優先順:
-      1. .js-meta.xml の <description> / <masterLabel>
-      2. .js の冒頭 JSDoc（`/** ... */`）
-      3. .js の最初の単行コメント（`// ...`）
+      1. docs/design/lwc/ の MD title
+      2. .js-meta.xml の <description> / <masterLabel>
+      3. .js の冒頭 JSDoc（`/** ... */`）
+      4. .js の最初の単行コメント（`// ...`）
     """
+    doc_title = extract_design_doc_title(design_doc)
+    if doc_title:
+        return doc_title
     name = lwc_dir.name
     meta = lwc_dir / f"{name}.js-meta.xml"
     if meta.exists():
@@ -230,11 +239,17 @@ def extract_lwc_overview(lwc_dir: Path) -> str:
     return ""
 
 
-def extract_vf_overview(page_meta_path: Path) -> str:
+def extract_vf_overview(page_meta_path: Path, design_doc: str | None = None) -> str:
     """Visualforce ページから概要を抽出する。
 
-    優先順: .page-meta.xml の <description> → <label> → .page の <title> タグ
+    優先順:
+      1. docs/design/ の MD title
+      2. .page-meta.xml の <description> → <label>
+      3. .page の <title> タグ
     """
+    doc_title = extract_design_doc_title(design_doc)
+    if doc_title:
+        return doc_title
     try:
         content = page_meta_path.read_text(encoding="utf-8", errors="ignore")
         for tag in ("description", "label"):
@@ -260,14 +275,18 @@ def extract_vf_overview(page_meta_path: Path) -> str:
     return ""
 
 
-def extract_aura_overview(aura_dir: Path) -> str:
+def extract_aura_overview(aura_dir: Path, design_doc: str | None = None) -> str:
     """Aura コンポーネントバンドルから概要を抽出する。
 
     優先順:
-      1. .cmp-meta.xml の <description>（デフォルト値は除外）
-      2. .design の <design:component label="..."> 属性
-      3. .cmp の冒頭 HTML コメント
+      1. docs/design/aura/ の MD title
+      2. .cmp-meta.xml の <description>（デフォルト値は除外）
+      3. .design の <design:component label="..."> 属性
+      4. .cmp の冒頭 HTML コメント
     """
+    doc_title = extract_design_doc_title(design_doc)
+    if doc_title:
+        return doc_title
     name = aura_dir.name
     DEFAULT_DESCS = {"A Lightning Component Bundle"}
 
@@ -379,11 +398,73 @@ def get_flow_info(path: Path) -> tuple[str, str, str]:
 
 
 def get_design_doc(docs_design_dir: Path, name: str) -> str | None:
-    """docs/design/ 配下から機能名に対応するMDファイルのパスを返す"""
+    """docs/design/ 配下から機能名に対応するMDファイルのパスを返す。
+
+    マッチングは「スペース・ハイフン除去した小文字一致」で行い、
+    kebab-case の MD ファイル名（例: `bulk-create-payment-controller.md`）と
+    CamelCase の api_name（例: `BulkCreatePaymentController`）を突合できるようにする。
+    """
+    def _normalize(s: str) -> str:
+        return re.sub(r'[-_\s]', '', s.lower())
+
+    target = _normalize(name)
     for md in docs_design_dir.rglob("*.md"):
-        if name.lower() in md.stem.lower():
+        # ファイル名から "【CMP-XXX】" などのプレフィックスを除去した stem と比較
+        stem = re.sub(r'^【[^】]+】', '', md.stem)
+        if _normalize(stem) == target:
+            return md.as_posix()
+    # 完全一致がなければ部分一致で fallback
+    for md in docs_design_dir.rglob("*.md"):
+        stem = re.sub(r'^【[^】]+】', '', md.stem)
+        if target in _normalize(stem) or _normalize(stem) in target:
             return md.as_posix()
     return None
+
+
+def extract_design_doc_title(md_path: str | None) -> str:
+    """docs/design/ 配下の MD ファイルから title 行の説明文を抽出する。
+
+    想定フォーマット: `# 【F-XXX】APIName — 説明文` （全角ダッシュ `—` 区切り）
+    `—` 以降を説明文として返す。見つからない場合は空文字。
+    """
+    if not md_path:
+        return ""
+    try:
+        p = Path(md_path)
+        if not p.exists():
+            return ""
+        # 最初の `# ` 行を取得
+        for line in p.read_text(encoding="utf-8", errors="ignore").split("\n")[:20]:
+            line = line.strip()
+            if line.startswith("# "):
+                # `# 【F-XXX】APIName — 説明文` から説明文だけ取り出す
+                for sep in (" — ", " – ", " - "):
+                    if sep in line:
+                        desc = line.split(sep, 1)[1].strip()
+                        if desc:
+                            return desc
+                # `—` が無ければ `】` 以降をそのまま使う
+                if "】" in line:
+                    rest = line.split("】", 1)[1].strip()
+                    if rest:
+                        return rest
+                break
+    except Exception:
+        pass
+    return ""
+
+
+# Salesforce 新規作成時のデフォルト javadoc（ノイズ扱いで除外）
+_DEFAULT_JAVADOC_PATTERNS = [
+    re.compile(r'^An apex (page )?controller that\b', re.IGNORECASE),
+    re.compile(r'^An apex class that\b', re.IGNORECASE),
+    re.compile(r'^A Lightning Component Bundle$', re.IGNORECASE),
+]
+
+
+def _is_default_javadoc(text: str) -> bool:
+    """Salesforce が自動生成したボイラープレート javadoc か判定"""
+    return any(p.search(text or "") for p in _DEFAULT_JAVADOC_PATTERNS)
 
 
 def scan(project_dir: Path) -> list[dict]:
@@ -413,11 +494,12 @@ def scan(project_dir: Path) -> list[dict]:
             classified = classify_apex(cls_file)
             if classified is None:
                 continue
+            doc = get_design_doc(docs_design, cls_file.stem)
             _add(classified, cls_file.stem, {
                 "name":        cls_file.stem,
-                "overview":    extract_javadoc(cls_file, cls_file.stem),
+                "overview":    extract_javadoc(cls_file, cls_file.stem, doc),
                 "source_file": cls_file.as_posix(),
-                "design_doc":  get_design_doc(docs_design, cls_file.stem),
+                "design_doc":  doc,
             })
 
     # --- Trigger（ハンドラークラスに吸収）---
@@ -425,11 +507,12 @@ def scan(project_dir: Path) -> list[dict]:
     if base.exists():
         for trig_file in sorted(base.glob("*.trigger")):
             handler = extract_trigger_handler(trig_file)
+            doc = get_design_doc(docs_design, trig_file.stem)
             _add("Trigger", trig_file.stem, {
                 "name":        trig_file.stem,
-                "overview":    extract_trigger_overview(trig_file),
+                "overview":    extract_trigger_overview(trig_file, doc),
                 "source_file": trig_file.as_posix(),
-                "design_doc":  None,
+                "design_doc":  doc,
                 "absorb_into": handler,   # ハンドラークラスの steps/prerequisites に吸収
             })
 
@@ -440,15 +523,16 @@ def scan(project_dir: Path) -> list[dict]:
             label, ptype, desc = get_flow_info(flow_file)
             flow_type = "画面フロー" if ptype == "Flow" and b"<screens>" in flow_file.read_bytes() else "Flow"
             api_name = flow_file.name.replace(".flow-meta.xml", "")
-            # description が空なら label を overview に fallback（api_name と被らない場合のみ）
-            overview = desc.strip()
+            doc = get_design_doc(docs_design, flow_file.stem)
+            # 優先順: design_doc の title → description → label
+            overview = extract_design_doc_title(doc) or desc.strip()
             if not overview and label and label != api_name:
                 overview = label
             _add(flow_type, api_name, {
                 "name":        label,
                 "overview":    overview,
                 "source_file": flow_file.as_posix(),
-                "design_doc":  get_design_doc(docs_design, flow_file.stem),
+                "design_doc":  doc,
             })
 
     # --- LWC（モーダルコンポーネントは親に吸収）---
@@ -463,11 +547,12 @@ def scan(project_dir: Path) -> list[dict]:
                 candidate = name[:-5]   # "Modal" / "modal" = 5文字
                 if candidate and candidate in lwc_names:
                     parent_name = candidate
+            doc = get_design_doc(docs_design, name)
             _add("LWC", name, {
                 "name":        name,
-                "overview":    extract_lwc_overview(comp_dir),
+                "overview":    extract_lwc_overview(comp_dir, doc),
                 "source_file": comp_dir.as_posix(),
-                "design_doc":  get_design_doc(docs_design, name),
+                "design_doc":  doc,
                 "absorb_into": parent_name,   # None = 独立設計書を作る
             })
 
@@ -475,11 +560,12 @@ def scan(project_dir: Path) -> list[dict]:
     base = force_app / "aura"
     if base.exists():
         for comp_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+            doc = get_design_doc(docs_design, comp_dir.name)
             _add("Aura", comp_dir.name, {
                 "name":        comp_dir.name,
-                "overview":    extract_aura_overview(comp_dir),
+                "overview":    extract_aura_overview(comp_dir, doc),
                 "source_file": comp_dir.as_posix(),
-                "design_doc":  get_design_doc(docs_design, comp_dir.name),
+                "design_doc":  doc,
             })
 
     # --- Visualforce ---
@@ -487,11 +573,12 @@ def scan(project_dir: Path) -> list[dict]:
     if base.exists():
         for page_file in sorted(base.glob("*.page-meta.xml")):
             api_name = page_file.name.replace(".page-meta.xml", "")
+            doc = get_design_doc(docs_design, api_name)
             _add("Visualforce", api_name, {
                 "name":        api_name,
-                "overview":    extract_vf_overview(page_file),
+                "overview":    extract_vf_overview(page_file, doc),
                 "source_file": page_file.as_posix(),
-                "design_doc":  get_design_doc(docs_design, api_name),
+                "design_doc":  doc,
             })
 
     # 今回見つからなかった機能は deprecated にする
