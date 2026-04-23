@@ -14,6 +14,12 @@ tools:
 > **禁止**: `scripts/` 配下のスクリプトを修正・上書きしない。問題発見時は完了報告に「要修正: {ファイル名} — {概要}」として記録のみ。
 > **禁止**: Claude Code の組み込みmemory機能への書き込みは一切行わない。CLAUDE.md の自動更新は完了後のみ・空欄補完のみ。
 
+**テンプレート置換ルール（厳守）:**
+- Python インラインコード内の `{project_dir}` `{api_name}` `{source_file_paths}` `{new_hash}` `{kebab_name}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Python リテラルの空 `{}`（空 dict）は置換対象ではない。Bash に渡す前に、値の種別に応じて以下の規則で置換する:
+  - **パス値** (`{project_dir}` 等): Windows パスの `\` はすべて `/` に置換し、末尾の `/` は除去する（例: `C:\work\` → `C:/work`）。raw string 末尾 `\` による SyntaxError を回避するため。`pathlib.Path` は Windows でも forward slash を正しく解釈する。
+  - **任意文字列値** (`{api_name}` 等): シングルクォートで囲まれた箇所 (`'{api_name}'`) への埋め込み時は、値内の `'` を `\'` にエスケープする。シェル引数 (`"{api_name}"`) への埋め込み時は値内の `"` を `\"` にエスケープする。
+  - **リスト値** (`{source_file_paths}` 等): Python の list リテラル形式（例: `["path1", "path2"]`）で渡す。
+
 ## 受け取る情報
 
 - **プロジェクトフォルダのパス**
@@ -74,18 +80,18 @@ python {project_dir}/scripts/python/sf-doc-mcp/scan_features.py \
 
 ### Phase 0.5: 前段カテゴリの出力を読む（必須）
 
-以下を事前に読み込んでコンテキストを把握する:
+以下のファイルを **Read ツールで直接読み込む**（パスは厳密に以下の通り）。
+見つからない場合は「そのカテゴリの前段が未実行」と判断して進め、完了報告に
+「前段欠落: {ファイルパス}」として記載する。
 
-```bash
-# cat1の生成物を読み込む
-# - org-profile.md: 用語集（Glossary）・業種・ビジネス概要（設計書の表記に使う）
-# - usecases.md: 各UCで操作されるオブジェクト・フロー（どのUCにコンポーネントを紐付けるか）
-# - requirements.md: 機能要件（FR-XXX）とコンポーネントの対応
+**cat1 の生成物（docs/overview/ + docs/requirements/ + docs/flow/）:**
+- `docs/overview/org-profile.md` — 用語集（Glossary）・業種・ビジネス概要（設計書の表記に使う）
+- `docs/flow/usecases.md` — 各UCで操作されるオブジェクト・フロー（**配置は `docs/flow/` であり `docs/overview/` ではない**）
+- `docs/requirements/requirements.md` — 機能要件（FR-XXX）とコンポーネントの対応
 
-# cat2の生成物を読み込む
-# - docs/catalog/_index.md: 全オブジェクト一覧・用途（担当オブジェクト記載に使う）
-# - docs/catalog/custom/ 配下: 各オブジェクトの項目定義・入力規則（データ設計に使う）
-```
+**cat2 の生成物（docs/catalog/）:**
+- `docs/catalog/_index.md` — 全オブジェクト一覧・用途（担当オブジェクト記載に使う）
+- `docs/catalog/custom/` 配下の各オブジェクト項目定義 MD — 項目・入力規則（データ設計に使う。当該コンポーネントが触るオブジェクトに絞って読む）
 
 これらを参照して:
 - **用語集（Glossary）の表記に統一**する（cat1 と表記がズレないようにする）
@@ -147,7 +153,11 @@ sf data query -q "SELECT Name, JobType, CronExpression FROM CronTrigger WHERE St
 | Aura コンポーネント | `aura/` | AuraDefinitionBundle で検出 |
 | 外部API・Named Credential連携 | `integration/` | NamedCredential / callout 含む Apex |
 
-> **ハンドラクラスの扱い（重要）**: `xxxHandler.cls` のようなハンドラクラスは、関連するバッチ・トリガーの設計書に吸収・統合してもよい。ただし**ファイル名には吸収した全コンポーネントの CMP-xxx を必ず列挙する**（例: `【CMP-002〜CMP-003】alert-user-batch.md`）。`feature_ids.yml` に CMP-xxx が登録されているクラスはファイル名から省略不可。
+> **ハンドラクラスの扱い（重要）**: `xxxHandler.cls` のようなハンドラクラスは以下の条件で扱いを分ける:
+> - **吸収する**: Handler クラスが単独の責務を持たず、**特定の単一バッチ/単一トリガーから排他的に呼ばれる**場合 → 呼び出し元の設計書に統合する
+> - **独立設計書にする**: Handler クラスが**複数のトリガー/バッチ/Apex から共通に呼ばれる共通化コード**の場合 → 独立ファイルとして作成
+>
+> **ファイル名規約（吸収時のみ）**: ファイル名には吸収した全コンポーネントの CMP-xxx を必ず列挙する（例: `【CMP-002〜CMP-003】alert-user-batch.md`）。`feature_ids.yml` に CMP-xxx が登録されているクラスはファイル名から省略不可。
 
 ### Phase 1.5: ハッシュチェック（変更なしスキップ）
 
