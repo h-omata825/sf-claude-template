@@ -42,18 +42,119 @@ INTEGRATION_PATTERNS = re.compile(
 FLOW_NS = "http://soap.sforce.com/2006/04/metadata"
 
 
-def extract_javadoc(path: Path) -> str:
-    """Apexクラスのjavadocコメント最初の意味ある行を取得する"""
+# Apex クラス名の suffix → 和名ロール（fallback overview 生成用）
+_APEX_SUFFIX_ROLES = [
+    ("TriggerHandler", "トリガーハンドラ"),
+    ("FlowStarter",   "フロー起動クラス"),
+    ("Controller",    "コントローラ"),
+    ("Handler",       "ハンドラ"),
+    ("Scheduler",     "スケジューラ"),
+    ("Schedule",      "スケジューラ"),
+    ("Service",       "サービス"),
+    ("Helper",        "ヘルパー"),
+    ("Utility",       "ユーティリティ"),
+    ("Util",          "ユーティリティ"),
+    ("Factory",       "ファクトリ"),
+    ("Batch",         "バッチ"),
+    ("Wrapper",       "ラッパー"),
+    ("Builder",       "ビルダー"),
+    ("Mock",          "モッククラス"),
+    ("Mapper",        "マッパー"),
+    ("Validator",     "バリデータ"),
+    ("Parser",        "パーサ"),
+    ("Resolver",      "リゾルバ"),
+    ("Processor",     "プロセッサ"),
+    ("Starter",       "起動クラス"),
+    ("Entity",        "エンティティ"),
+]
+
+# Apex クラス名の prefix → 和名アクション（fallback overview 生成用）
+# verb-noun 形式（CreateXxx / CopyXxx / VerifyXxx 等）を想定。
+_APEX_PREFIX_ACTIONS = [
+    ("Create",  "作成クラス"),
+    ("Copy",    "コピークラス"),
+    ("Delete",  "削除クラス"),
+    ("Update",  "更新クラス"),
+    ("Verify",  "検証クラス"),
+    ("Select",  "選択クラス"),
+    ("Search",  "検索クラス"),
+    ("Fetch",   "取得クラス"),
+    ("Get",     "取得クラス"),
+    ("Send",    "送信クラス"),
+    ("Import",  "インポートクラス"),
+    ("Export",  "エクスポートクラス"),
+    ("Generate","生成クラス"),
+    ("Convert", "変換クラス"),
+    ("Register","登録クラス"),
+]
+
+
+def _apex_role_from_name(api_name: str) -> str:
+    """クラス名の suffix/prefix から「{残り} の {role}」形式の fallback overview を生成する。
+
+    優先順:
+      1. suffix マッチ（例: BulkPaymentController → "BulkPayment のコントローラ"）
+      2. prefix マッチ（例: CreateCustomerUser → "CustomerUser の作成クラス"）
+      一致しない場合は空文字を返す。
+    """
+    for suffix, role_ja in _APEX_SUFFIX_ROLES:
+        if api_name.endswith(suffix) and len(api_name) > len(suffix):
+            prefix = api_name[:-len(suffix)]
+            return f"{prefix} の{role_ja}"
+    for prefix_en, role_ja in _APEX_PREFIX_ACTIONS:
+        if api_name.startswith(prefix_en) and len(api_name) > len(prefix_en):
+            rest = api_name[len(prefix_en):]
+            return f"{rest} の{role_ja}"
+    return ""
+
+
+def extract_javadoc(path: Path, api_name: str = "") -> str:
+    """Apex クラスの概要を抽出する。
+
+    優先順:
+      1. クラス宣言の直前にある javadoc (`/** ... */` → `public class X`)
+      2. ファイル先頭の javadoc（クラス直前でなくても可）
+      3. クラス名 suffix からのヒューリスティック生成（api_name が渡された場合）
+
+    メソッド内部の javadoc（例: `/** start */` の直後に `public List<X> start(...)` ）は
+    クラス概要として不適切なため (1) で優先されず (2) の fallback も別メソッドの可能性があるが、
+    クラス直前の検出が最優先。
+    """
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
-        m = re.search(r'/\*\*(.*?)\*/', text, re.DOTALL)
-        if m:
-            lines = [l.strip().lstrip('*').strip() for l in m.group(1).split('\n')
-                     if l.strip().strip('*').strip() and not l.strip().lstrip('*').strip().startswith('@')]
-            return lines[0] if lines else ""
     except Exception:
-        pass
-    return ""
+        return _apex_role_from_name(api_name) if api_name else ""
+
+    def _first_meaningful_line(javadoc_body: str) -> str:
+        lines = [l.strip().lstrip('*').strip() for l in javadoc_body.split('\n')
+                 if l.strip().strip('*').strip() and not l.strip().lstrip('*').strip().startswith('@')]
+        return lines[0] if lines else ""
+
+    # 1. クラス宣言の直前の javadoc を優先
+    # ex: /** ... */\n(modifiers)?\s*(public|global|private|protected)?\s*(abstract|virtual|with sharing|without sharing|inherited sharing)?\s*class X
+    m = re.search(
+        r'/\*\*(.*?)\*/\s*(?:@\w+(?:\([^)]*\))?\s*)*'
+        r'(?:public|global|private|protected)\s+'
+        r'(?:(?:abstract|virtual|with\s+sharing|without\s+sharing|inherited\s+sharing)\s+)*'
+        r'class\s+\w+',
+        text, re.DOTALL,
+    )
+    if m:
+        line = _first_meaningful_line(m.group(1))
+        if line:
+            return line
+
+    # 2. ファイル先頭の javadoc（コード本体直前ではなくても拾う — ただしメソッド javadoc ではないと確認したい）
+    #    但し "start" "execute" 等のメソッド名だけが記載された javadoc を除外する
+    METHOD_NAMES = {"start", "execute", "finish", "run", "handle", "init", "constructor"}
+    m = re.search(r'/\*\*(.*?)\*/', text, re.DOTALL)
+    if m:
+        line = _first_meaningful_line(m.group(1))
+        if line and line.lower() not in METHOD_NAMES:
+            return line
+
+    # 3. Suffix ヒューリスティック
+    return _apex_role_from_name(api_name)
 
 
 def extract_trigger_overview(trigger_path: Path) -> str:
@@ -86,7 +187,10 @@ def extract_trigger_overview(trigger_path: Path) -> str:
 def extract_lwc_overview(lwc_dir: Path) -> str:
     """LWC コンポーネントバンドルから概要を抽出する。
 
-    優先順: .js-meta.xml の <description> → <masterLabel> → JS の JSDoc 冒頭行
+    優先順:
+      1. .js-meta.xml の <description> / <masterLabel>
+      2. .js の冒頭 JSDoc（`/** ... */`）
+      3. .js の最初の単行コメント（`// ...`）
     """
     name = lwc_dir.name
     meta = lwc_dir / f"{name}.js-meta.xml"
@@ -102,17 +206,25 @@ def extract_lwc_overview(lwc_dir: Path) -> str:
                         return val
         except Exception:
             pass
-    # Fallback: .js の先頭 JSDoc
+    # Fallback: .js
     js = lwc_dir / f"{name}.js"
     if js.exists():
         try:
             text = js.read_text(encoding="utf-8", errors="ignore")
+            # 2a: 先頭 JSDoc
             m = re.match(r'\s*/\*\*(.*?)\*/', text, re.DOTALL)
             if m:
                 lines = [l.strip().lstrip('*').strip() for l in m.group(1).split('\n')
                          if l.strip().strip('*').strip() and not l.strip().lstrip('*').strip().startswith('@')]
                 if lines:
                     return lines[0]
+            # 2b: 最初に出現する `// コメント` を拾う（import 後の概要コメントを想定）
+            for line in text.split('\n')[:30]:
+                stripped = line.strip()
+                if stripped.startswith('//'):
+                    val = stripped.lstrip('/').strip()
+                    if val and len(val) > 2:
+                        return val
         except Exception:
             pass
     return ""
@@ -151,12 +263,16 @@ def extract_vf_overview(page_meta_path: Path) -> str:
 def extract_aura_overview(aura_dir: Path) -> str:
     """Aura コンポーネントバンドルから概要を抽出する。
 
-    優先順: .cmp-meta.xml の <description> → .cmp の冒頭コメント
-    ただし "A Lightning Component Bundle" のデフォルト値は空扱いにする。
+    優先順:
+      1. .cmp-meta.xml の <description>（デフォルト値は除外）
+      2. .design の <design:component label="..."> 属性
+      3. .cmp の冒頭 HTML コメント
     """
     name = aura_dir.name
-    meta = aura_dir / f"{name}.cmp-meta.xml"
     DEFAULT_DESCS = {"A Lightning Component Bundle"}
+
+    # 1. cmp-meta.xml の description
+    meta = aura_dir / f"{name}.cmp-meta.xml"
     if meta.exists():
         try:
             content = meta.read_text(encoding="utf-8", errors="ignore")
@@ -167,7 +283,21 @@ def extract_aura_overview(aura_dir: Path) -> str:
                     return val
         except Exception:
             pass
-    # .cmp の冒頭の HTML コメント
+
+    # 2. .design ファイルの component label 属性（App Builder 表示名）
+    design = aura_dir / f"{name}.design"
+    if design.exists():
+        try:
+            content = design.read_text(encoding="utf-8", errors="ignore")
+            m = re.search(r'<design:component[^>]*\blabel\s*=\s*"([^"]+)"', content)
+            if m:
+                val = m.group(1).strip()
+                if val:
+                    return val
+        except Exception:
+            pass
+
+    # 3. .cmp の冒頭の HTML コメント
     cmp = aura_dir / f"{name}.cmp"
     if cmp.exists():
         try:
@@ -285,7 +415,7 @@ def scan(project_dir: Path) -> list[dict]:
                 continue
             _add(classified, cls_file.stem, {
                 "name":        cls_file.stem,
-                "overview":    extract_javadoc(cls_file),
+                "overview":    extract_javadoc(cls_file, cls_file.stem),
                 "source_file": cls_file.as_posix(),
                 "design_doc":  get_design_doc(docs_design, cls_file.stem),
             })
