@@ -1479,9 +1479,20 @@ def _strip_tech_identifiers(text: str) -> str:
     # CamelCase 識別子（Controller, Handler などのクラス名）も除去。
     # ただし "Experience Cloud" のような既知ブランドは保護（事前にプレースホルダ化してから呼ぶ）
     text = _RE_CAMEL_IDENT.sub('', text)
-    # 除去で生じた連続空白・孤立助詞を整える
+    # 除去で生じた連続空白・孤立助詞・読点連続を整える
     text = _RE_MULTI_SPACE.sub(' ', text)
+    # 文頭の孤立助詞（" を呼び出し" "  の 結果" 等）→ 助詞だけ除去
+    text = _re.sub(r'(?:^|[。、 \t])([をはがにでとのやもへ])(?=[ぁ-んァ-ヶ一-龯])', r' ', text)
+    # 除去跡の「 を」「 の」「 が」など孤立助詞（前がスペースで後ろが日本語）
+    text = _re.sub(r'\s+([をはがにでとのやもへ])\s*', r'\1', text)
+    # 読点連続を1つに
     text = _re.sub(r'[、，]\s*[、，]+', '、', text)
+    # スペース + 句読点 → 句読点のみ
+    text = _re.sub(r'\s+([、，。])', r'\1', text)
+    # 句読点直後の不要スペース
+    text = _re.sub(r'([、，。])\s+', r'\1', text)
+    # 連続スペースを再圧縮
+    text = _RE_MULTI_SPACE.sub(' ', text)
     text = _re.sub(r'^[\s、，。]+', '', text)
     text = _re.sub(r'[\s、，]+$', '', text)
     return text.strip()
