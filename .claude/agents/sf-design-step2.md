@@ -1,7 +1,6 @@
 ---
 name: sf-design-step2
 description: "sf-design コマンドから委譲されるプログラム設計ステップ専用エージェント。SF_ALIAS 取得・feature_list.json 読み込み・対象機能確定 → sf-screen-writer（画面系: LWC/画面フロー/Aura/VF）→ sf-design-writer（Apex系 + 機能一覧）の順に委譲する。プログラム設計+機能一覧の同時選択時も機能一覧を生成する（sf-design-step3 は呼ばれない）。"
-model: opus
 tools:
   - Read
   - Glob

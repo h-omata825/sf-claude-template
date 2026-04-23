@@ -1,7 +1,6 @@
 ---
 name: sf-analyst-cat2
 description: sf-memoryのカテゴリ2（オブジェクト・項目構成）を担当。docs/catalog/ 配下にオブジェクト定義書・ER図・インデックスを生成・更新する。/sf-memoryコマンドから委譲されて実行する。カテゴリ1の出力（org-profile.md/usecases.md）を参照して記述の用語・文脈を合わせる。
-model: opus
 tools:
   - Read
   - Edit
