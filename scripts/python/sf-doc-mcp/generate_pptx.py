@@ -32,6 +32,8 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.oxml.ns import qn
 from pptx.oxml import parse_xml
 
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
+
 
 # ── カラーパレット ──
 C = {
@@ -657,7 +659,7 @@ def build_mermaid_diagram(prs, slide_data: dict, page_num: int, total: int):
         }
     }
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(dir=get_project_tmp_dir()) as tmpdir:
         mmd_path = os.path.join(tmpdir, "diagram.mmd")
         png_path = os.path.join(tmpdir, "diagram.png")
         cfg_path = os.path.join(tmpdir, "config.json")
@@ -1577,7 +1579,7 @@ def build_er_image(prs, slide_data: dict, page_num: int, total: int):
     arrows   = elements.get("arrows", [])
     title    = slide_data.get("title", "")
 
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=get_project_tmp_dir()) as f:
         tmp_png = f.name
 
     try:
@@ -1612,7 +1614,7 @@ def build_er_legend_image(prs, slide_data: dict, page_num: int, total: int):
 
     slide = prs.slides.add_slide(prs.slide_layouts[6])
 
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=get_project_tmp_dir()) as f:
         tmp_png = f.name
 
     try:
@@ -1652,7 +1654,7 @@ def build_diagram_image(prs, slide_data: dict, page_num: int, total: int):
     groups   = elements.get("groups", [])
     title    = slide_data.get("title", "")
 
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=get_project_tmp_dir()) as f:
         tmp_png = f.name
 
     try:
@@ -1737,6 +1739,7 @@ def main():
     parser.add_argument("--output", required=True, help="出力 .pptx ファイルパス")
     args = parser.parse_args()
 
+    set_project_tmp_dir(args.output)
     json_data = json.loads(Path(args.json_file).read_text(encoding="utf-8"))
     generate(json_data, args.output)
 

@@ -39,6 +39,7 @@ from openpyxl.utils import get_column_letter
 
 import design_revision as dr
 from meta_store import read_meta, write_meta
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
 from version_manager import increment_version
 
 # ── 色定数 ─────────────────────────────────────────────────────────
@@ -546,6 +547,7 @@ def main():
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    set_project_tmp_dir(out_dir)
     out_path = out_dir / f"【{domain_id}】{safe_name}.xlsx"
 
     # ── バージョン判定 ────────────────────────────────────────────
@@ -600,7 +602,7 @@ def main():
     is_major        = (args.version_increment == "major")
 
     # ── 図形PNG生成 ──────────────────────────────────────────────
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with tempfile.TemporaryDirectory(dir=get_project_tmp_dir()) as tmp_dir:
         png_paths = _generate_diagrams(data, tmp_dir)
         wireframe_paths = _generate_wireframes(
             data, tmp_dir, args.project_dir or None)

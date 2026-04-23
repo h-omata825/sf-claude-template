@@ -1363,7 +1363,8 @@ label[style*="font-size"] { display: flex; align-items: center; font-size: 12px 
 </body></html>"""
 
     import tempfile, os
-    with tempfile.NamedTemporaryFile(suffix='.html', mode='w', encoding='utf-8', delete=False) as f:
+    from tmp_utils import get_project_tmp_dir
+    with tempfile.NamedTemporaryFile(suffix='.html', mode='w', encoding='utf-8', delete=False, dir=get_project_tmp_dir()) as f:
         f.write(html_doc)
         tmp_html = f.name
 

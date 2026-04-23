@@ -28,6 +28,8 @@ from collections import Counter
 from itertools import permutations
 from pathlib import Path
 
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
+
 # ── 定数 ────────────────────────────────────────────────────────────────────
 
 SLIDE_W_IN = 13.33   # 16:9 スライド幅 (インチ)
@@ -185,7 +187,8 @@ def _flow_to_mermaid(flow: dict, phases: list[dict] | None = None) -> str:
 def _render_mermaid(mmd_text: str, output_png: Path, width: int = 1600) -> bool:
     """mmdc (mermaid CLI) で PNG を生成する。失敗時は False を返す。"""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.mmd',
-                                    encoding='utf-8', delete=False) as f:
+                                    encoding='utf-8', delete=False,
+                                    dir=get_project_tmp_dir()) as f:
         f.write(mmd_text)
         mmd_path = Path(f.name)
     # Windows では npx.cmd を使う必要がある
@@ -333,6 +336,7 @@ def main() -> None:
     docs_dir   = Path(args.docs_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    set_project_tmp_dir(output_dir)
 
     swimlane_path = docs_dir / 'flow' / 'swimlanes.json'
     if not swimlane_path.exists():
@@ -358,7 +362,7 @@ def main() -> None:
 
     slides_data: list[dict] = []
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(dir=get_project_tmp_dir()) as tmp:
         tmp_dir = Path(tmp)
         for i, flow in enumerate(flows):
             flow_id    = flow.get('id', f'flow{i}')

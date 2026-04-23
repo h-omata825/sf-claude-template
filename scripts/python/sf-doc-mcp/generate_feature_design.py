@@ -34,6 +34,7 @@ from openpyxl.utils import get_column_letter
 
 from flowchart_utils import generate_flowchart
 from meta_store import read_meta, write_meta
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
 from version_manager import increment_version
 import design_revision as dr
 
@@ -542,6 +543,7 @@ def main():
     subfolder = TYPE_FOLDER.get(type_key, "other")
     out_dir   = Path(args.output_dir) / subfolder
     out_dir.mkdir(parents=True, exist_ok=True)
+    set_project_tmp_dir(out_dir)
     out_path  = out_dir / f"【{feat_id}】{name}.xlsx"
 
     # ── バージョン判定 ────────────────────────────────────────
@@ -620,7 +622,7 @@ def main():
     content_pts  = _estimate_content_height_pts(steps)
     target_h_in  = content_pts / 72  # pt → inch
     flowchart_path = None
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=get_project_tmp_dir()) as tmp:
         tmp_path = tmp.name
     if generate_flowchart(steps, tmp_path, fig_w=4.6, target_h=target_h_in):
         flowchart_path = tmp_path

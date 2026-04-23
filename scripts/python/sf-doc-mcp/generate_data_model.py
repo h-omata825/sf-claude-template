@@ -29,6 +29,8 @@ import tempfile
 from collections import defaultdict, deque
 from pathlib import Path
 
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
+
 SCRIPT_DIR = Path(__file__).parent
 
 _SKIP_FIELDS = {
@@ -1294,6 +1296,7 @@ def main():
     docs_dir   = Path(args.docs_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    set_project_tmp_dir(output_dir)
 
     catalog_dir = docs_dir / "catalog"
     index_path  = catalog_dir / "_index.md"
@@ -1324,7 +1327,8 @@ def main():
     output_path = output_dir / "データモデル定義書.pptx"
 
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
+        mode="w", suffix=".json", delete=False, encoding="utf-8",
+        dir=get_project_tmp_dir()
     ) as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         tmp_json = f.name

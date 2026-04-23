@@ -43,6 +43,7 @@ from build_detail_design_template import (
     C_BAND_BLUE, C_TITLE_DARK,
 )
 from meta_store import read_meta, write_meta
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
 from version_manager import increment_version
 
 # ── 色定数 ─────────────────────────────────────────────────────────
@@ -2112,6 +2113,7 @@ def main():
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    set_project_tmp_dir(out_dir)
     # 他の設計書（プログラム設計・オブジェクト定義書）と統一: 【{feature_id}】{safe_name}_詳細設計.xlsx
     if feature_id:
         out_path = out_dir / f"【{feature_id}】{safe_name}_詳細設計.xlsx"
@@ -2187,7 +2189,7 @@ def main():
     is_major           = (args.version_increment == "major")
 
     # ── 図形PNG生成 ──────────────────────────────────────────────
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with tempfile.TemporaryDirectory(dir=get_project_tmp_dir()) as tmp_dir:
         png_paths = _generate_diagrams(data, tmp_dir)
 
         # ── テンプレ読込 -> セル流し込み ──────────────────────────

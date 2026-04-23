@@ -41,6 +41,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 import diagram_gen as dg
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
 
 # ── デザインシステム（build_basic_doc_template.py と統一）────────
 C_TITLE_DARK = "1F3864"
@@ -568,7 +569,8 @@ def generate(docs_dir: Path, output: Path, author: str, project_name: str):
     asis_flow, tobe_flow = _pick_flows(swim)
 
     # 図を一時ディレクトリに生成
-    with tempfile.TemporaryDirectory() as tmpdir:
+    set_project_tmp_dir(output)
+    with tempfile.TemporaryDirectory(dir=get_project_tmp_dir()) as tmpdir:
         tmp = Path(tmpdir)
 
         sys_img = er_img = asis_img = tobe_img = None

@@ -41,6 +41,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.units import pixels_to_EMU
 
 from meta_store import read_meta, write_meta
+from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
 from version_manager import increment_version
 import design_revision as dr
 
@@ -717,6 +718,7 @@ def main():
     subfolder = TYPE_FOLDER.get(type_key, "other")
     out_dir   = Path(args.output_dir) / subfolder
     out_dir.mkdir(parents=True, exist_ok=True)
+    set_project_tmp_dir(out_dir)
     out_path  = out_dir / f"【{feat_id}】{name}.xlsx"
 
     # ── バージョン判定 ────────────────────────────────────────
@@ -776,7 +778,7 @@ def main():
     changed_sections = dr.changed_ids(diffs, "param_sections")
     changed_params   = _build_changed_params_map(diffs)
 
-    with tempfile.TemporaryDirectory(prefix="screen_design_") as tmp_dir:
+    with tempfile.TemporaryDirectory(prefix="screen_design_", dir=get_project_tmp_dir()) as tmp_dir:
         wb = load_workbook(args.template)
         fill_revision(wb["改版履歴"],         data, history)
         fill_overview(wb["画面概要"],         data,
