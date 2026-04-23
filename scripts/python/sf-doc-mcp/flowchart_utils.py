@@ -159,9 +159,13 @@ def _render_shape(ax, cx, cy, w, h, node_type, text):
 
 
 def _wrap(text, limit=12):
-    """limit文字を目安に折り返す。スペース・アンダースコアを折り返し優先位置とする。
-    API名（例: HolidayMaster7__c）はアンダースコアで自然に分割される。
-    limit を超えても区切り文字が見つからない場合は limit+3 文字で強制折り返し。
+    """limit文字を目安に折り返す。
+    折り返し優先順位:
+      1. スペース / アンダースコア（区切り文字自体は次行の先頭へ、スペースは捨てる）
+      2. CamelCase 境界（小文字→大文字の直前、例: "ConsultationController" → "Consultation|Controller"）
+      3. 強制折り返し（limit+3 文字）
+    API名（例: HolidayMaster7__c）はアンダースコアで自然に分割され、Apex/LWC の
+    キャメルケースクラス名（例: ConsultationController）は大文字境界で自然に分割される。
     """
     if text is None:
         return ""
@@ -174,15 +178,25 @@ def _wrap(text, limit=12):
         i = 0
         while i < len(para):
             ch = para[i]
-            # スペース・アンダースコアで limit 以上なら折り返す（区切り文字自体は次行の先頭へ、スペースは捨てる）
+            # (1) スペース・アンダースコアで limit 以上なら折り返す
             if ch in (' ', '_') and len(line) >= limit:
                 out.append(line)
                 line = ch if ch == '_' else ""
                 i += 1
                 continue
+            # (2) CamelCase 境界: 直前が英小文字/数字で、現在が英大文字。
+            # line が十分長く（limit*2/3 以上）、かつ残りが line を limit 超過させる場合のみ分割。
+            _cc_threshold = max(4, (limit * 2) // 3)
+            if (ch.isascii() and ch.isupper() and len(line) >= _cc_threshold
+                    and line and line[-1].isascii() and (line[-1].islower() or line[-1].isdigit())
+                    and len(para) - i + len(line) > limit):
+                out.append(line)
+                line = ch
+                i += 1
+                continue
             line += ch
             i += 1
-            # limit+3 以上で強制折り返し（区切り文字が見つからない長い単語の保険）
+            # (3) limit+3 以上で強制折り返し（区切り文字が見つからない長い単語の保険）
             if len(line) >= limit + 3:
                 out.append(line)
                 line = ""
