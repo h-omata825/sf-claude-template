@@ -1919,16 +1919,26 @@ def _normalize_process_steps(steps: list[dict]) -> None:
 
 
 def _summarize_action(s: str) -> str:
-    """action を 25 文字以内の一言に要約する（読点/句点で最初の節を採用）。
-    G-2: "Experience Cloud" を単一トークン扱いし、途中切断を防ぐ。"""
-    if not s or len(s) <= 25:
+    """action を 15 文字以内の一言ラベルに要約する。
+    - 矢印（→）・区切り記号（／・（・、・。）の先頭節を採用
+    - G-2: "Experience Cloud" を単一トークン扱い
+    - K-A: キャッシュされた短い action（≤25字）でも、action と label を分離するため
+      矢印・区切りで必ず先頭節のみ抽出して label を短くする"""
+    if not s:
         return s
     # EC を一時的に短いプレースホルダに差し替えてから節選択・切断
     s_w = s.replace("Experience Cloud", _EC_PLACEHOLDER)
-    parts = _re.split(r'[、。]', s_w)
-    head = next((p.strip() for p in parts if len(p.strip()) >= 4), s_w).strip()
-    result = (head[:24] + '…') if len(head) > 25 else head
-    return result.replace(_EC_PLACEHOLDER, "Experience Cloud")
+    # 矢印で切り落とし（「A → B」の先頭節）
+    head = _re.split(r'\s*→\s*', s_w, 1)[0]
+    # 区切り記号で切り落とし（「A／B」「A（B）」「A、B」「A。B」の先頭節）
+    head = _re.split(r'[／（、。]', head, 1)[0].strip()
+    # 長さ調整: 15 字超は 14+… で切る
+    if len(head) > 15:
+        head = head[:14] + '…'
+    # 元の s が十分短く、かつ結果が同じ（区切りが無かった）場合は最後まで保持
+    if not head:
+        head = s_w[:15]
+    return head.replace(_EC_PLACEHOLDER, "Experience Cloud")
 
 
 def _normalize_business_flow(flows: list[dict]) -> None:
@@ -2532,8 +2542,48 @@ def _normalize_schema(data: dict) -> dict:
                 merged[api] = ao
         data["related_objects"] = list(merged.values())
 
+    # K-C: キャッシュされた object_access があっても、ソースコード由来の W/INSERT を優先して反映する。
+    # 既存エントリと obj_access_auto を (component, object) キーでマージし、
+    # operation 優先度 INSERT > W > R で上書き。
     if not data.get("object_access"):
         data["object_access"] = obj_access_auto
+    elif obj_access_auto:
+        _op_priority = {"INSERT": 3, "W": 2, "R": 1, "": 0, None: 0}
+        existing_map: dict[tuple[str, str], dict] = {}
+        for entry in data["object_access"]:
+            key = (entry.get("component", ""), entry.get("object", ""))
+            existing_map[key] = entry
+        for auto in obj_access_auto:
+            key = (auto.get("component", ""), auto.get("object", ""))
+            auto_op = auto.get("operation", "")
+            if key in existing_map:
+                cur = existing_map[key]
+                cur_op = cur.get("operation", "")
+                if _op_priority.get(auto_op, 0) > _op_priority.get(cur_op, 0):
+                    cur["operation"] = auto_op
+            else:
+                data["object_access"].append(auto)
+                existing_map[key] = auto
+        # related_objects の access_ja / fields[].access も同様に再計算。
+        # obj_access_auto 側で算出した obj['access_ja']（R+INSERT → 参照・新規作成 等）を優先採用
+        auto_access_ja = {o.get("api_name"): o.get("access_ja")
+                          for o in rel_objs_auto if o.get("access_ja")}
+        auto_fields_access = {}  # {obj_api: {field_api: access}}
+        for o in rel_objs_auto:
+            auto_fields_access[o.get("api_name", "")] = {
+                f.get("api_name", ""): f.get("access", "")
+                for f in (o.get("fields") or [])
+            }
+        for o in data.get("related_objects", []):
+            api = o.get("api_name", "")
+            if api in auto_access_ja:
+                o["access_ja"] = auto_access_ja[api]
+            auto_fa = auto_fields_access.get(api, {})
+            for f in (o.get("fields") or []):
+                fapi = f.get("api_name", "")
+                new_access = auto_fa.get(fapi)
+                if new_access and _op_priority.get(new_access, 0) > _op_priority.get(f.get("access", ""), 0):
+                    f["access"] = new_access
 
     # fields が空のオブジェクトを SF メタデータから補完
     if any(not (o.get("fields") or []) for o in data.get("related_objects", [])):
