@@ -856,52 +856,107 @@ def render_component_diagram(
     # コンポーネントノード（名前 + 種別のみ。ロールは表に記載するため除外）
     if use_grid:
         import math as _math
-        # グリッド幅: コンポーネント数から妥当な列数を計算（4〜6列）
-        row_width = min(6, max(4, int(_math.sqrt(len(components)) + 0.5)))
         type_lookup = {c.get("api_name", ""): c.get("type", "Apex") for c in components}
-        # 依存順でソート: UI (VF/LWC/Aura) → Apex → その他。
-        # これにより上段=操作される画面、下段=呼び出される Apex、と自然な流れになる
+        entry_types = {"Visualforce", "LWC", "Aura"}
+        # U-2: primary / standard を分類
+        # - primary UI = VF/LWC/Aura で callees を持つ（実業務 UI、Apex controller を呼ぶ）
+        # - standards  = VF/LWC/Aura で callees を持たない（EC 標準テンプレ・エラーページ）
+        #   step_order_bases での判定は使わない理由: Phase M 以降 process_steps が全コンポーネントを
+        #   カバーするようになったため、step_order に全 VF が含まれ primary/standards の区別に使えない
+        primaries_set: set[str] = set()
+        standards_set: set[str] = set()
+        for c in components:
+            api = c.get("api_name", "")
+            ctype = c.get("type", "")
+            if ctype not in entry_types:
+                continue
+            if api in called_by:
+                continue  # 誰かから呼ばれている VF は primary 側のグリッドに含める
+            if c.get("callees"):
+                primaries_set.add(api)
+            else:
+                standards_set.add(api)
+
+        # primary block（primary + called_by UI + Apex/Trigger/Batch/Flow）
         _type_rank = {"Visualforce": 0, "LWC": 0, "Aura": 0,
                       "Apex": 1, "Trigger": 2, "Batch": 2,
                       "Flow": 3}
-        names_ordered = sorted(
-            [c.get("api_name", "") for c in components],
+        primary_names = sorted(
+            [c.get("api_name", "") for c in components
+             if c.get("api_name", "") not in standards_set],
             key=lambda n: (_type_rank.get(type_lookup.get(n, ""), 9),
                            step_order.get(n, 999), n)
         )
-        rows = [names_ordered[i:i + row_width]
-                for i in range(0, len(names_ordered), row_width)]
-        # 各行を subgraph(rank=same) に入れる
-        for ri, row in enumerate(rows):
+        standard_names = sorted(standards_set)
+
+        def _make_rows(names: list[str]) -> list[list[str]]:
+            if not names:
+                return []
+            rw = min(6, max(4, int(_math.sqrt(len(names)) + 0.5)))
+            return [names[i:i + rw] for i in range(0, len(names), rw)]
+
+        primary_rows = _make_rows(primary_names)
+        standard_rows = _make_rows(standard_names)
+
+        def _draw_node(scope, name: str) -> None:
+            ctype = type_lookup.get(name, "Apex")
+            fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
+            lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
+            scope.node(name,
+                       label=lbl,
+                       shape="box", style="filled,rounded",
+                       fillcolor=fill, fontcolor=fg,
+                       fontname=FONT_JP, fontsize="9", width="1.8")
+
+        # primary の各行（不可視 cluster）
+        for ri, row in enumerate(primary_rows):
             with g.subgraph(name=f"cluster_row_{ri}") as sg:
                 sg.attr(rank="same")
                 sg.attr(style="invis")
                 for name in row:
-                    ctype = type_lookup.get(name, "Apex")
-                    fill, fg = _COMP_COLORS.get(ctype, ("#5A5A5A", "#FFFFFF"))
-                    lbl = f"{_wrap_name(name, 14)}\\n[{ctype}]"
-                    sg.node(name,
-                            label=lbl,
-                            shape="box", style="filled,rounded",
-                            fillcolor=fill, fontcolor=fg,
-                            fontname=FONT_JP, fontsize="9", width="1.8")
-        # 行間の順序保証（不可視エッジ）: 前行先頭 → 次行先頭
-        for ri in range(len(rows) - 1):
-            g.edge(rows[ri][0], rows[ri + 1][0], style="invis", weight="10")
-        # U-1: trigger_node → 誰からも callees されていないトップレベル UI のみに fan-out
-        # 旧実装は行ごとの row[0] に dashed を引いていたが、依存関係と無関係な
-        # グルーピング矢印がノイズになり「操作者に矢印が返っている」ように見えていた
+                    _draw_node(sg, name)
+        for ri in range(len(primary_rows) - 1):
+            g.edge(primary_rows[ri][0], primary_rows[ri + 1][0],
+                   style="invis", weight="10")
+
+        # standard 群を visible cluster で描画（primary block の下にまとまる）
+        if standard_rows:
+            with g.subgraph(name="cluster_standards") as cl:
+                cl.attr(label="標準テンプレート・エラーページ",
+                        style="dashed,rounded",
+                        color="#A0A0A0",
+                        fontname=FONT_JP,
+                        fontsize="10",
+                        fontcolor="#606060",
+                        labeljust="l")
+                for si, srow in enumerate(standard_rows):
+                    with cl.subgraph(name=f"cluster_std_row_{si}") as sg:
+                        sg.attr(rank="same")
+                        sg.attr(style="invis")
+                        for name in srow:
+                            _draw_node(sg, name)
+                for si in range(len(standard_rows) - 1):
+                    cl.edge(standard_rows[si][0], standard_rows[si + 1][0],
+                            style="invis", weight="10")
+            # primary block 末尾 → cluster 先頭の不可視エッジで縦方向の順序を保証
+            if primary_rows and standard_rows:
+                g.edge(primary_rows[-1][0], standard_rows[0][0],
+                       style="invis", weight="5")
+
+        # U-2: trigger_node → primary UI に fan-out（+ cluster_standards に 1 本）
         if trigger_node:
-            entry_types = {"Visualforce", "LWC", "Aura"}
-            entries = [
-                c.get("api_name", "") for c in components
-                if c.get("api_name", "") not in called_by
-                and c.get("type", "") in entry_types
-            ]
-            entries = sorted(entries, key=lambda n: (step_order.get(n, 999), n))
-            for name in entries:
+            primaries_ordered = [n for n in primary_names if n in primaries_set]
+            primaries_ordered = sorted(primaries_ordered,
+                                       key=lambda n: (step_order.get(n, 999), n))
+            for name in primaries_ordered:
                 g.edge(trigger_node, name,
                        color=C_EDGE, arrowsize="0.7", style="dashed")
+            # 標準テンプレ群 → 1 本の dashed（cluster をヘッドに）
+            if standard_names:
+                g.attr(compound="true")
+                g.edge(trigger_node, standard_names[0],
+                       color="#A0A0A0", arrowsize="0.6",
+                       style="dashed", lhead="cluster_standards")
         # K-D: callees の明示依存エッジ（grid モードでも描画）
         # VF→Apex 等のコントローラ呼び出しを solid 矢印で描く
         drawn_grid_edges: set[tuple[str, str]] = set()
