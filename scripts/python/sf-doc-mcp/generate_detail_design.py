@@ -3011,8 +3011,13 @@ def _business_flow_to_swimlane(flows: list[dict]) -> dict:
     """business_flow リストを render_swimlane 用のフロー dict に変換する。
 
     図形ノードは label を優先（丁寧な action を図に突っ込むと横長・読み難いため）。
+    cross-lane 遷移（アクターが変わる遷移）は constraint=false で描画させ、
+    LR モードでのランク強制によるレーン横並び（横長画像）を防ぐ。
     """
     lane_names = list(dict.fromkeys(f.get("actor", "不明") for f in flows))
+    # actor→step の逆引き辞書（step ID → actor）
+    step_to_actor: dict[str, str] = {str(f.get("step", i + 1)): f.get("actor", "不明")
+                                      for i, f in enumerate(flows)}
     steps = [
         {"id": str(f.get("step", i + 1)), "lane": f.get("actor", "不明"),
          "label": f.get("label") or f.get("action", "")}
@@ -3022,14 +3027,20 @@ def _business_flow_to_swimlane(flows: list[dict]) -> dict:
     for i, f in enumerate(flows):
         nexts = f.get("next", [])
         src = str(f.get("step", i + 1))
+        src_actor = f.get("actor", "不明")
         if nexts:
             for n in nexts:
                 dst_step = n.get("to") or (flows[i + 1].get("step", i + 2) if i + 1 < len(flows) else None)
                 if dst_step:
+                    dst_actor = step_to_actor.get(str(dst_step), src_actor)
+                    cross = dst_actor != src_actor
                     transitions.append({"from": src, "to": str(dst_step),
-                                        "condition": n.get("condition", "")})
+                                        "condition": n.get("condition", ""), "cross": cross})
         elif i + 1 < len(flows):
-            transitions.append({"from": src, "to": str(flows[i + 1].get("step", i + 2))})
+            dst_step = str(flows[i + 1].get("step", i + 2))
+            dst_actor = flows[i + 1].get("actor", "不明")
+            cross = dst_actor != src_actor
+            transitions.append({"from": src, "to": dst_step, "cross": cross})
     return {
         "title": "業務フロー",
         "lanes": [{"name": n} for n in lane_names],

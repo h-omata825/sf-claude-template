@@ -476,17 +476,24 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
                    fontname=FONT_JP, fontsize="10")
 
     # 遷移エッジ
+    # cross=True（アクターが変わる遷移）は constraint=false でランク強制を外す
+    # → LR モードでレーンが横並びになる（横長画像）問題を防ぐ
     for t in trans_in:
         src = str(t.get("from", ""))
         dst = str(t.get("to", ""))
         cond = t.get("condition", "")
-        g.edge(src, dst,
-               label=cond,
-               color=C_EDGE,
-               fontname=FONT_JP,
-               fontsize="8",
-               fontcolor=C_EDGE,
-               arrowsize="0.8")
+        edge_kw: dict = dict(
+            label=cond,
+            color=C_EDGE,
+            fontname=FONT_JP,
+            fontsize="8",
+            fontcolor=C_EDGE,
+            arrowsize="0.8",
+        )
+        if t.get("cross"):
+            edge_kw["constraint"] = "false"
+            edge_kw["style"] = "dashed"
+        g.edge(src, dst, **edge_kw)
 
     png_bytes = g.pipe(format="png")
     with open(out_path, "wb") as f:
@@ -583,8 +590,21 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
 
     _FC_FONT = "Meiryo"
 
+    # I-2a: ROW_SIZE をステップ数から動的決定
+    # Phase X: ≤6 ステップは ROW_SIZE=ceil(n/2) で 2 行に分割。
+    #          7+ ステップは平方根ベース（4〜6 の範囲）
+    _step_n = len(steps)
+    if _step_n <= 6 and _step_n >= 2:
+        ROW_SIZE = max(2, math.ceil(_step_n / 2))  # 4steps→2行, 6steps→3行
+    else:
+        ROW_SIZE = max(4, min(6, math.ceil(math.sqrt(_step_n)))) if steps else 5
+    need_wrap = _step_n > ROW_SIZE
+
     # I-2c: 画像サイズを A4 縦比（1:1.4）付近に制限し、横スクロールを防ぐ
     # O-3⑤: サイズを 10,14! → 14,18! に拡大して Excel 上での視認性を向上
+    # Phase X: ステップが 1 行に収まる場合（need_wrap=False）は 7,6! を使い横長を防ぐ
+    _fc_size = "14,18!" if need_wrap else "7,6!"
+    _fc_ratio = "compress" if need_wrap else "auto"
     g = _gv.Digraph(
         "flowchart",
         graph_attr={
@@ -596,15 +616,10 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "fontname": _FC_FONT,
             "pad": "0.4",
             "dpi": "150",
-            "size": "14,18!",   # O-3⑤: 拡大（10,14! → 14,18!）
-            "ratio": "compress",
+            "size": _fc_size,
+            "ratio": _fc_ratio,
         },
     )
-
-    # I-2a: ROW_SIZE をステップ数の平方根から動的決定（4〜6 の範囲）
-    #   4steps→4 / 9→4 / 16→4 / 25→5 / 36→6 / 49→6
-    ROW_SIZE = max(4, min(6, math.ceil(math.sqrt(len(steps))))) if steps else 5
-    need_wrap = len(steps) > ROW_SIZE
 
     def _draw_step_node(parent, step):
         sid       = str(step.get("step", ""))
@@ -817,9 +832,10 @@ def render_component_diagram(
     # （多量 UI コンポーネントの一覧表示に適したレイアウト）
     # Phase V: 10 コンポーネント以上なら callees の有無に関わらず grid で描画
     #           callees を solid edge として上書き描画する
+    # Phase X: 6 コンポーネント以上に閾値を下げ、少数 FG でも格子配置で横長を防ぐ
     all_callees_empty = not any(c.get("callees") for c in components)
     num_nodes = len(components) + (1 if trigger_node else 0)
-    use_grid = len(components) >= 10
+    use_grid = len(components) >= 6
 
     if use_grid:
         # Q-3 (image4 縦長化): grid モードは rankdir=TB にして行 subgraph を縦方向に並べる
@@ -853,6 +869,10 @@ def render_component_diagram(
         else:
             _comp_graph_attr["size"] = "7,7!"
             _comp_graph_attr["ratio"] = "auto"
+    else:
+        # 非 grid でもサイズ制約を付けて横長化を防ぐ（FG-007/008 の 6:1 対策）
+        _comp_graph_attr["size"] = "7,8!"
+        _comp_graph_attr["ratio"] = "compress"
 
     g = _gv.Digraph(
         "components",
