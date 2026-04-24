@@ -35,7 +35,7 @@
 | `/sf-design` コマンド全体から委譲（基本/詳細設計 Excel生成） | `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
-> `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` 等はコマンド専用エージェント。ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる。
+> コマンド専用エージェント（ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる）: `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` / `sf-doc-overview-writer` / `sf-doc-objects-writer` / `backlog-investigator` / `backlog-planner` / `backlog-implementer` / `backlog-tester` / `backlog-releaser`
 
 ---
 
@@ -63,9 +63,9 @@
 | ブロック対象 | 理由 | 状態 |
 |---|---|---|
 | `.claude/` 配下の編集・書き込み | テンプレート保護（管理者以外の変更を防止） | **行動指示のみ**（技術的ブロックは未設定） |
-| `rm -rf` / `rm -r .claude` | テンプレート・プロジェクト資材の誤削除防止 | **常時有効** |
+| `rm -rf` / `rm -r .claude` | テンプレート・プロジェクト資材の誤削除防止 | **行動指示のみ**（技術的ブロックは未設定） |
 | 本番環境へのデプロイ | 本番操作は必ず人間が確認 | **常時有効** |
-| `git push origin main/develop` / `git reset --hard` 等 | PR経由運用の強制・破壊的操作の防止 | **チーム利用開始時に有効化**（`__pending`） |
+| `git push origin main/develop` / `git reset --hard` 等 | PR経由運用の強制・破壊的操作の防止 | **未実装**（チーム導入時に settings.json へ deny ルール追加） |
 
 ### テンプレート保護（.claude/ 配下）
 
@@ -91,9 +91,9 @@
 
 以下のパスへの書き込み・編集・削除は **禁止**（読み取りのみ許可）:
 
-- ネットワークドライブ（`\\server\...`, `//server/...`）
-- 他プロジェクトのフォルダ（このプロジェクトフォルダ外）
-- 社内共有フォルダ（SharePoint, OneDrive の共有領域等）
+- `G:\共有ドライブ` / `G:\Shared drives` — **hook によるハードブロック**（常時有効、pre-operation.js）
+- ネットワークドライブ（`\\server\...`, `//server/...`）・SharePoint・OneDrive — **行動指示による**（技術的ブロックなし）
+- 他プロジェクトのフォルダ（このプロジェクトフォルダ外）— **行動指示による**（技術的ブロックなし）
 
 **例外**: ユーザーが明示的にパスを指定し、書き込みを指示した場合のみ許可。その場合も確認プロンプトを出す。
 
@@ -101,7 +101,7 @@
 
 | 対象 | 操作 | 制御方法 |
 |---|---|---|
-| `.claude/` 配下 | 読み取りのみ | settings.json (deny Edit/Write) |
+| `.claude/` 配下 | 読み取りのみ | 行動指示による（技術的ブロックなし） |
 | `CLAUDE.md`（ルート） | 自由に編集可 | — |
 | `docs/` 配下 | 自由に追加・編集可 | — |
 | `force-app/` 配下 | 開発作業として編集可 | — |
@@ -235,7 +235,7 @@ Git操作・ファイル破壊・本番デプロイは上記 Security & Permissi
 2. 対象のメタデータを確認
 3. デプロイコマンドを提示（**本番へのデプロイは必ずユーザー確認**）
 
-#### 「スコープ外」と思われる依頼を受けたとき
+#### スコープ外の依頼を受けたとき（`docs/requirements/requirements.md` のスコープ定義と合致しない場合）
 
 開発依頼が `docs/requirements/requirements.md` のスコープ定義と合致しない場合:
 
