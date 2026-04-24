@@ -1863,7 +1863,7 @@ def generate_object_component_matrix(
     # Q-3: obj_h / hdr_h / legend_h を増やし、Excel 埋め込み後もズームなしで読めるサイズに
     # R-3: さらに行高を拡大してフォント 18-22 を収容
     obj_col_w = 4.8    # オブジェクト名列
-    obj_h     = 2.0    # 1オブジェクトの行高
+    obj_h     = 1.2    # Z-4c: 1オブジェクトの行高（2.0 から圧縮して matrix 縦幅を抑える）
     hdr_h     = 3.0    # ヘッダ行高
     legend_h  = 1.2
     margin    = 0.1

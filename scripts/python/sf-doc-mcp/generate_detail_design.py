@@ -183,13 +183,43 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
 
 
 # ── PNG埋め込み ────────────────────────────────────────────────────
+def _pad_png_to_aspect(png_path: str, target_w_h: float) -> str:
+    """PNG を target_w_h（幅/高さ）のアスペクトに白背景で padding して返す。
+    FG ごとに異なる graphviz 出力アスペクトを正規化し、全 FG で同一表示サイズを保証する。
+    元ファイルは保持し、padding 済みファイルを隣接 .pad.png として返す。
+    """
+    try:
+        from PIL import Image as _PILImage
+        img = _PILImage.open(png_path)
+        w, h = img.width, img.height
+        cur = w / h if h else 1.0
+        if abs(cur - target_w_h) < 0.02:
+            return png_path
+        if cur < target_w_h:
+            new_w = int(h * target_w_h)
+            new_h = h
+        else:
+            new_w = w
+            new_h = int(w / target_w_h)
+        canvas = _PILImage.new("RGBA", (new_w, new_h), (255, 255, 255, 255))
+        canvas.paste(img, ((new_w - w) // 2, (new_h - h) // 2))
+        out = png_path[:-4] + ".pad.png"
+        canvas.convert("RGB").save(out, "PNG")
+        return out
+    except Exception as e:
+        print(f"  [WARN] PNG padding 失敗({png_path}): {e}")
+        return png_path
+
+
 def _embed_image(ws, png_path: str, anchor: str,
                  img_w: int = 840, img_h: int | None = None,
                  max_h: int | None = None,
-                 max_w: int | None = None):
+                 max_w: int | None = None,
+                 target_aspect_wh: float | None = None):
     """PNGをExcelシートに埋め込む。
 
     動作モード（優先順）:
+      0. target_aspect_wh が指定されていれば _pad_png_to_aspect で正規化（FG 間サイズ均一化）
       1. img_h が指定されていれば固定サイズ（img_w × img_h・アスペクト比無視）
       2. max_w と max_h が両方指定 → fit-in-box:
          アスペクト比を維持したまま max_w × max_h の枠に収まる最大サイズに
@@ -200,6 +230,8 @@ def _embed_image(ws, png_path: str, anchor: str,
     try:
         if not Path(png_path).exists():
             return
+        if target_aspect_wh is not None:
+            png_path = _pad_png_to_aspect(png_path, target_aspect_wh)
         img = XLImage(png_path)
         img.anchor = anchor
         if img_h is not None:
@@ -279,10 +311,10 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
     diagram_area(ws, diagram_start, "業務フロー図（自動生成）", section_no=2)
 
     # 図埋め込み（fit-in-box: 横長・縦長どちらでも枠内に収まる最大サイズ）
-    # T-4: リファレンス xlsx の表示 cx=4686300, cy=6667500 EMU (492×700 px@96dpi) に合わせる
+    # Z-4b: target_aspect_wh=0.60 でアスペクト正規化（FG-010 REF1/REF2 の中央値）→ 全 FG で 500×800 枠に統一
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, max_w=500, max_h=700)
+        _embed_image(ws, png_path, img_anchor, target_aspect_wh=0.60, max_w=500, max_h=800)
 
 
 def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
@@ -428,8 +460,8 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # Y: pre-Phase-X 値に戻す。FG-010 REF2 (2100x539) を完全再現
-        _embed_image(ws, png_path, img_anchor, max_w=2100, max_h=1400)
+        # Z-4b: target_aspect_wh=5.0 でアスペクト正規化 → max_h=300 で全 FG 統一（ユーザー「大きすぎ」解消）
+        _embed_image(ws, png_path, img_anchor, target_aspect_wh=5.0, max_w=1400, max_h=300)
 
 
 def _estimate_row_height(text: str, chars_per_line: int = 34,
@@ -484,8 +516,8 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # Y: pre-Phase-X 値に戻す。FG-010 REF1 (1142x1200) / REF2 (1265x1200) を完全再現
-        _embed_image(ws, png_path, img_anchor, max_w=1600, max_h=1200)
+        # Z-4b: target_aspect_wh=1.05 でアスペクト正規化（FG-010 REF1/REF2 中央値）→ 全 FG で 1265×1200 枠に統一
+        _embed_image(ws, png_path, img_anchor, target_aspect_wh=1.05, max_w=1265, max_h=1200)
 
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
@@ -522,8 +554,8 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # Y: REF2 (545x700) を「少しだけ大きく」→ max_h 700→850 で 662x850 目標
-        _embed_image(ws, png_path, img_anchor, max_w=1140, max_h=850)
+        # Z-4b: target_aspect_wh=0.78 でアスペクト正規化（FG-010 基準）→ 全 FG で 662×849 枠に統一
+        _embed_image(ws, png_path, img_anchor, target_aspect_wh=0.78, max_w=662, max_h=849)
 
 
 

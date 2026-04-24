@@ -633,18 +633,21 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
             box_label = _wrap_jp(raw_title, 10)   # O-3⑤: wrap 幅 8 → 10
         label = badge + "\\n" + box_label
+        # Z-4e: ラベル行数に応じた動的ノード高さ（文字が切れず、余白も最小化）
+        _line_count = label.count("\\n") + 1
+        _dyn_h = str(max(1.0, min(2.5, 0.6 + _line_count * 0.4)))
         if branch:
             parent.node(sid, label=label,
                         shape="diamond", style="filled",
                         fillcolor="#FFF2CC", fontcolor="#7F6000",
-                        fontname=_FC_FONT, fontsize="14",   # O-3⑤: 12 → 14
-                        width="2.4", height="1.8", margin="0.22,0.18")  # O-3⑤: 拡大
+                        fontname=_FC_FONT, fontsize="14",
+                        width="2.4", height=_dyn_h, margin="0.22,0.18")
         else:
             parent.node(sid, label=label,
                         shape="box", style="filled,rounded",
                         fillcolor=C_STEP_BG, fontcolor="white",
-                        fontname=_FC_FONT, fontsize="14",   # O-3⑤: 12 → 14
-                        width="2.4", height="1.8", margin="0.22,0.18")  # O-3⑤: 拡大
+                        fontname=_FC_FONT, fontsize="14",
+                        width="2.4", height=_dyn_h, margin="0.22,0.18")
 
     def _draw_comp_label(step):
         sid       = str(step.get("step", ""))
@@ -986,7 +989,7 @@ def render_component_diagram(
             primaries_ordered = [n for n in primary_names if n in primaries_set]
             primaries_ordered = sorted(primaries_ordered,
                                        key=lambda n: (step_order.get(n, 999), n))
-            # X-4c: UI（VF/LWC/Aura）が一つも無い FG では Apex/Flow/Trigger を fan-out 対象にする
+            # Z-4d: UI が一つも無い FG では Apex/Flow/Trigger を fan-out 対象にする（[:6] 上限を撤廃）
             if not primaries_ordered:
                 fallback_types = {"Apex", "Flow", "Trigger", "Batch", "Schedulable",
                                   "AutoLaunchedFlow", "ScheduledFlow"}
@@ -995,8 +998,8 @@ def render_component_diagram(
                      if c.get("type", "") in fallback_types
                      and c.get("api_name", "") not in standards_set],
                     key=lambda n: (step_order.get(n, 999), n)
-                )[:6]  # 上位 6 件に限定してごちゃつきを防ぐ
-            for name in primaries_ordered[:6]:
+                )
+            for name in primaries_ordered:  # Z-4d: [:6] 上限撤廃 — 孤立コンポーネントをゼロにする
                 g.edge(trigger_node, name,
                        color=C_EDGE, arrowsize="0.7", style="dashed")
             # 標準テンプレ群 → 1 本の dashed（cluster をヘッドに）
@@ -1005,6 +1008,17 @@ def render_component_diagram(
                 g.edge(trigger_node, standard_names[0],
                        color="#A0A0A0", arrowsize="0.6",
                        style="dashed", lhead="cluster_standards")
+        # Z-4d: callees/called_by/fan-out のどの経路にも無い完全孤立ノードを救済
+        _connected = set(primaries_ordered if trigger_node else []) | set(called_by)
+        for _c in components:
+            _api = _c.get("api_name", "")
+            if not _api or _api in _connected or _api in standards_set:
+                continue
+            if any(_api in (_other.get("callees") or []) for _other in components):
+                continue  # callee として他コンポーネントから参照されている
+            if trigger_node:
+                g.edge(trigger_node, _api, color=C_EDGE, arrowsize="0.5",
+                       style="dotted", constraint="false")
         # K-D: callees の明示依存エッジ（grid モードでも描画）
         # VF→Apex 等のコントローラ呼び出しを solid 矢印で描く
         drawn_grid_edges: set[tuple[str, str]] = set()
