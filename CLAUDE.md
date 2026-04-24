@@ -56,7 +56,7 @@
 | 機能設計書 | `docs/design/{種別}/` | `/sf-memory` | apex/flow/batch/lwc/integration/config |
 | データ統計・マスタ | `docs/data/` | `/sf-memory` | マスタデータ・テンプレート・統計・品質 |
 | 変更履歴 | `docs/logs/changelog.md` | 自動 | コマンド実行時に自動追記 |
-| 工数ログ | `docs/logs/effort-log.md` | `/backlog` | 見込み・実績・削減効果。`/backlog` 実行時に自動追記 |
+| 工数ログ | `docs/logs/effort-log.md` | `/backlog` | 見込み工数。`/backlog` 実行時に自動追記 |
 | 対応履歴・判断記録 | `docs/decisions.md` | 自動 | 保守・開発の判断根拠。`/backlog` 完了時に自動追記 |
 | package.xml | `manifest/package.xml` | `/sf-retrieve` | standard / all / 個別指定の3モード |
 
