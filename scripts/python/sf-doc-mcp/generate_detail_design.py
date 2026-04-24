@@ -211,11 +211,31 @@ def _pad_png_to_aspect(png_path: str, target_w_h: float) -> str:
         return png_path
 
 
+def _resize_png_to_width(png_path: str, target_width: int) -> str:
+    """PNG を target_width にアスペクト維持リサイズ。FG 間でノード密度を揃えるため
+    graphviz の size 強制スケーリングを撤廃した代わりに、埋め込み前に幅を固定する。"""
+    try:
+        from PIL import Image as _PILImage
+        img = _PILImage.open(png_path)
+        if img.width == target_width:
+            return png_path
+        scale = target_width / img.width
+        new_h = max(1, int(img.height * scale))
+        resized = img.resize((target_width, new_h), _PILImage.LANCZOS)
+        out = png_path[:-4] + ".wfix.png"
+        resized.save(out, "PNG")
+        return out
+    except Exception as e:
+        print(f"  [WARN] PNG リサイズ失敗({png_path}): {e}")
+        return png_path
+
+
 def _embed_image(ws, png_path: str, anchor: str,
                  img_w: int = 840, img_h: int | None = None,
                  max_h: int | None = None,
                  max_w: int | None = None,
-                 target_aspect_wh: float | None = None):
+                 target_aspect_wh: float | None = None,
+                 target_width: int | None = None):
     """PNGをExcelシートに埋め込む。
 
     動作モード（優先順）:
@@ -232,6 +252,8 @@ def _embed_image(ws, png_path: str, anchor: str,
             return
         if target_aspect_wh is not None:
             png_path = _pad_png_to_aspect(png_path, target_aspect_wh)
+        if target_width is not None:
+            png_path = _resize_png_to_width(png_path, target_width)
         img = XLImage(png_path)
         img.anchor = anchor
         if img_h is not None:
@@ -314,7 +336,8 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
     # Z-4b: target_aspect_wh=0.60 でアスペクト正規化（FG-010 REF1/REF2 の中央値）→ 全 FG で 500×800 枠に統一
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, target_aspect_wh=0.60, max_w=500, max_h=800)
+        # AA: 幅固定・縦伸長。target_width で FG 間のノード密度を揃える（graphviz size 強制廃止の代替）
+        _embed_image(ws, png_path, img_anchor, target_width=900, max_w=500, max_h=9999)
 
 
 def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
@@ -516,8 +539,8 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # Z-4b: target_aspect_wh=1.05 でアスペクト正規化（FG-010 REF1/REF2 中央値）→ 全 FG で 1265×1200 枠に統一
-        _embed_image(ws, png_path, img_anchor, target_aspect_wh=1.05, max_w=1265, max_h=1200)
+        # AA: 幅固定・縦伸長。処理フロー図は幅 2100px に固定し高さは内容量で伸長
+        _embed_image(ws, png_path, img_anchor, target_width=2100, max_w=1265, max_h=9999)
 
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
@@ -554,8 +577,8 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # Z-4b: target_aspect_wh=0.78 でアスペクト正規化（FG-010 基準）→ 全 FG で 662×849 枠に統一
-        _embed_image(ws, png_path, img_anchor, target_aspect_wh=0.78, max_w=662, max_h=849)
+        # AA: 幅固定・縦伸長。コンポーネント図は幅 1050px に固定し高さは内容量で伸長
+        _embed_image(ws, png_path, img_anchor, target_width=1050, max_w=662, max_h=9999)
 
 
 

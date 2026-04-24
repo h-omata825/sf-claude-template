@@ -360,20 +360,7 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
         "fontsize": "14",
         "fontcolor": C_LANE_HDR,
     }
-    _sw_step_count = len(steps_in)
-    _sw_lane_count = len(set(l.get("name", "") for l in lanes_in))
-    if _sw_step_count > 5:
-        # R-3: 画面に収まるサイズへ縮小（10,14! → 7,10!）。DPI 150 で 1050x1500px 程度
-        _sw_graph_attr["size"] = "7,10!"
-        _sw_graph_attr["ratio"] = "compress"
-    elif _sw_lane_count <= 2 and _sw_step_count <= 4:
-        # W-4b: step/lane が少ない場合も最低高さを確保（FG-002 image1 が 114px になった対策）
-        _sw_graph_attr["size"] = "5,4!"
-        _sw_graph_attr["ratio"] = "auto"
-    else:
-        # 中規模（3-5 step / 3-5 lane）向け
-        _sw_graph_attr["size"] = "7,6!"
-        _sw_graph_attr["ratio"] = "auto"
+    # AA: graphviz 自然サイズ算出。size/ratio 強制なし → FG 間でノード密度が揃う
 
     g = _gv.Digraph(
         "swimlane",
@@ -600,11 +587,6 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         ROW_SIZE = max(4, min(6, math.ceil(math.sqrt(_step_n)))) if steps else 5
     need_wrap = _step_n > ROW_SIZE
 
-    # I-2c: 画像サイズを A4 縦比（1:1.4）付近に制限し、横スクロールを防ぐ
-    # O-3⑤: サイズを 10,14! → 14,18! に拡大して Excel 上での視認性を向上
-    # Phase X: ステップが 1 行に収まる場合（need_wrap=False）は 7,6! を使い横長を防ぐ
-    _fc_size = "14,18!" if need_wrap else "7,6!"
-    _fc_ratio = "compress" if need_wrap else "auto"
     g = _gv.Digraph(
         "flowchart",
         graph_attr={
@@ -612,12 +594,11 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "rankdir": "TB",
             "splines": "ortho",
             "nodesep": "0.5",
-            "ranksep": "0.83",  # O-3⑤: 行間をさらに広げる
+            "ranksep": "0.83",
             "fontname": _FC_FONT,
             "pad": "0.4",
             "dpi": "150",
-            "size": _fc_size,
-            "ratio": _fc_ratio,
+            # AA: size/ratio 強制スケーリング撤廃 → FG 間でノード密度が揃う
         },
     )
 
@@ -864,21 +845,7 @@ def render_component_diagram(
         "dpi": "150",
         "concentrate": "true",
     }
-    # Q-3 (image4 縦長化): grid モード（≥20 コンポ）は size を A4 縦比で強制圧縮
-    # R-3: 画面に収まるサイズへ縮小（10,14! → 7,10!）
-    # W-4b: 小規模 grid（10-19 コンポ）は 7,7! でアスペクト 1:1 目安
-    if use_grid:
-        n_comp_grid = len(components)
-        if n_comp_grid >= 20:
-            _comp_graph_attr["size"] = "7,10!"
-            _comp_graph_attr["ratio"] = "compress"
-        else:
-            _comp_graph_attr["size"] = "7,7!"
-            _comp_graph_attr["ratio"] = "auto"
-    else:
-        # 非 grid でもサイズ制約を付けて横長化を防ぐ（FG-007/008 の 6:1 対策）
-        _comp_graph_attr["size"] = "7,8!"
-        _comp_graph_attr["ratio"] = "compress"
+    # AA: size/ratio 強制スケーリング撤廃 → FG 間でノード密度が揃う（幅は PIL resize で制御）
 
     g = _gv.Digraph(
         "components",
