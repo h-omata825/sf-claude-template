@@ -3225,8 +3225,9 @@ def main():
             forced_major = True
         current_version = increment_version(
             prev_meta.get("version", "1.0"), args.version_increment)
-        history    = [] if forced_major else prev_meta.get("history", [])
-        is_initial = forced_major
+        # major 時は履歴リセット（手動・強制問わず。メジャーUP 1行だけ残す）
+        history    = [] if args.version_increment == "major" else prev_meta.get("history", [])
+        is_initial = False
         if forced_major:
             print(f"メジャー昇格モード（履歴リセット）: {prev_meta.get('version', '?')} -> {current_version}")
         else:

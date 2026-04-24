@@ -562,12 +562,24 @@ def main():
     prev_data   = prev_meta.get("data") if prev_meta else None
 
     if prev_meta:
+        prev_history_len = len(prev_meta.get("history", []))
+        # 改版履歴 20 行制限: 既存履歴が 20 以上なら minor 指定でも major に強制昇格し履歴リセット
+        forced_major = False
+        if prev_history_len >= 20 and args.version_increment == "minor":
+            print(f"  [WARN] 改版履歴が {prev_history_len} 件に達しているため minor → major に強制昇格し、履歴をリセットします")
+            args.version_increment = "major"
+            is_major = True
+            forced_major = True
         current_version = increment_version(
             prev_meta.get("version", "1.0"), args.version_increment)
-        history    = prev_meta.get("history", [])
+        # major 時は履歴リセット（手動・強制問わず。メジャーUP 1行だけ残す）
+        history    = [] if is_major else prev_meta.get("history", [])
         is_initial = False
-        print(f"更新モード: {prev_meta.get('version', '?')} → {current_version}"
-              + (" (メジャー)" if is_major else ""))
+        if forced_major:
+            print(f"メジャー昇格モード（履歴リセット）: {prev_meta.get('version', '?')} → {current_version}")
+        else:
+            print(f"更新モード: {prev_meta.get('version', '?')} → {current_version}"
+                  + (" (メジャー)" if is_major else ""))
     else:
         current_version = data.get("version") or "1.0"
         history    = []
