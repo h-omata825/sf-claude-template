@@ -567,18 +567,19 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
     _FC_FONT = "Meiryo"
 
     # I-2c: 画像サイズを A4 縦比（1:1.4）付近に制限し、横スクロールを防ぐ
+    # O-3⑤: サイズを 10,14! → 14,18! に拡大して Excel 上での視認性を向上
     g = _gv.Digraph(
         "flowchart",
         graph_attr={
             "bgcolor": "white",
             "rankdir": "TB",
             "splines": "ortho",
-            "nodesep": "0.6",
-            "ranksep": "0.7",   # I-2b: 行間のゆとり（0.3 → 0.7）
+            "nodesep": "0.5",
+            "ranksep": "0.83",  # O-3⑤: 行間をさらに広げる
             "fontname": _FC_FONT,
             "pad": "0.4",
             "dpi": "150",
-            "size": "10,14!",   # I-2c: inch。！ で強制スケーリング
+            "size": "14,18!",   # O-3⑤: 拡大（10,14! → 14,18!）
             "ratio": "compress",
         },
     )
@@ -592,23 +593,26 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
         sid       = str(step.get("step", ""))
         n         = int(step.get("step", 0))
         badge     = _badge(n)
-        raw_title = step.get("title", "") or step.get("description", "")
-        raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
-        wrapped   = _wrap_jp(raw_title, 8)
         branch    = step.get("branch", "")
-        label     = badge + "\\n" + wrapped
+        # O-3⑤: box_label 優先（2 行体裁）、なければ title/description から生成
+        box_label = step.get("box_label", "")
+        if not box_label:
+            raw_title = step.get("title", "") or step.get("description", "")
+            raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
+            box_label = _wrap_jp(raw_title, 10)   # O-3⑤: wrap 幅 8 → 10
+        label = badge + "\\n" + box_label
         if branch:
             parent.node(sid, label=label,
                         shape="diamond", style="filled",
                         fillcolor="#FFF2CC", fontcolor="#7F6000",
-                        fontname=_FC_FONT, fontsize="12",
-                        width="1.8", height="1.4", margin="0.3,0.2")
+                        fontname=_FC_FONT, fontsize="14",   # O-3⑤: 12 → 14
+                        width="2.4", height="1.8", margin="0.22,0.18")  # O-3⑤: 拡大
         else:
             parent.node(sid, label=label,
                         shape="box", style="filled,rounded",
                         fillcolor=C_STEP_BG, fontcolor="white",
-                        fontname=_FC_FONT, fontsize="12",
-                        width="1.8", height="1.4", margin="0.3,0.2")
+                        fontname=_FC_FONT, fontsize="14",   # O-3⑤: 12 → 14
+                        width="2.4", height="1.8", margin="0.22,0.18")  # O-3⑤: 拡大
 
     def _draw_comp_label(step):
         sid       = str(step.get("step", ""))

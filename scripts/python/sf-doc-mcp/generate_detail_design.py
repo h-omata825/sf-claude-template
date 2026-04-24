@@ -470,7 +470,8 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
+        # O-3⑤: 処理フロー図は max_w/max_h を拡大して視認性向上
+        _embed_image(ws, png_path, img_anchor, max_w=1600, max_h=1200)
 
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
@@ -1529,6 +1530,43 @@ def _is_desc_fragment(text: str) -> bool:
     return False
 
 
+# O-3②: role 欄の stale cache 断片マーカー
+_ROLE_FRAGMENT_MARKERS: tuple[str, ...] = (
+    "紐づくが動作不全",
+    "紐づくが",
+    "動作不全",
+    "対で、",
+    "へのリダイレクタ",
+    "使い ",        # 半角スペース混入（「使い 〜と紐付く」パターン）
+    "使っ(た)",
+    "使う標準テンプレート",
+    "を新規作成で挿入",
+    "と紐付く",
+    "紐付く",
+    "ランタイム解決",
+    "$でランタイム",
+    "VF。を",
+    "VF。紐",
+)
+
+
+def _is_role_fragment(text: str) -> bool:
+    """role 欄の stale cache 断片を検出。True なら破棄して辞書 / 型別 fallback で書き直す。"""
+    if not text or len(text.strip()) < 4:
+        return True
+    t = text.strip()
+    for marker in _ROLE_FRAGMENT_MARKERS:
+        if marker in t:
+            return True
+    # 文頭が裸助詞のみ（「を」「が」「は」「に」「で」で始まる）
+    if _re.match(r'^[をがはにでとへの]', t):
+        return True
+    # 裸ドット（半角スペース＋ドット）— 「使い 契約申込.と」等
+    if _re.search(r'\s+\.\S', t):
+        return True
+    return False
+
+
 def _title_from_desc(desc: str, max_len: int = 18) -> str:
     """description の先頭節から short title を生成する。「を行う」の機械付与をしない。"""
     if not desc:
@@ -1546,26 +1584,28 @@ def _title_from_desc(desc: str, max_len: int = 18) -> str:
     return first[:max_len]
 
 
-# 標準 VF/コンポーネント API 名 → 自然な日本語説明
+# 標準 VF/コンポーネント API 名 → 自然な日本語説明（O-3③: 「〜画面で〜を行う」形式に統一）
 _STD_VF_DESCRIPTIONS: dict[str, str] = {
-    "SiteLogin":                      "ポータルログイン画面（Experience Cloud 標準テンプレート）。",
-    "ForgotPassword":                 "パスワードリセット申請画面（Experience Cloud 標準テンプレート）。",
-    "ForgotPasswordConfirm":          "パスワードリセット申請完了画面（Experience Cloud 標準テンプレート）。",
-    "ChangePassword":                 "パスワード変更画面（Experience Cloud 標準テンプレート）。",
-    "FileNotFound":                   "404 エラー画面（Experience Cloud 標準テンプレート）。",
-    "Exception":                      "システム例外エラー画面（Experience Cloud 標準テンプレート）。",
-    "Unauthorized":                   "アクセス権限エラー画面（Experience Cloud 標準テンプレート）。",
-    "InMaintenance":                  "メンテナンス中画面（Experience Cloud 標準テンプレート）。",
-    "BandwidthExceeded":              "帯域超過エラー画面（Experience Cloud 標準テンプレート）。",
-    "AnswersHome":                    "Answers ホーム（旧コミュニティ機能、廃止予定）。",
-    "SiteRegister":                   "ポータルユーザ登録画面（Experience Cloud 標準テンプレート）。",
-    "SiteRegisterConfirm":            "ポータルユーザ登録完了画面（Experience Cloud 標準テンプレート）。",
-    "CommunitiesLogin":               "コミュニティログイン画面（Experience Cloud 標準テンプレート）。",
-    "CommunitiesSelfReg":             "コミュニティ自己登録画面（Experience Cloud 標準テンプレート）。",
-    "CommunitiesSelfRegConfirm":      "コミュニティ自己登録完了画面（Experience Cloud 標準テンプレート）。",
-    "CommunitiesForgotPassword":      "コミュニティパスワードリセット申請画面（Experience Cloud 標準テンプレート）。",
-    "CommunitiesForgotPasswordConfirm": "コミュニティパスワードリセット申請完了画面（Experience Cloud 標準テンプレート）。",
-    "CommunitiesChangePassword":      "コミュニティパスワード変更画面（Experience Cloud 標準テンプレート）。",
+    "SiteLogin":                        "ポータルログイン画面でユーザー認証を行う。",
+    "ForgotPassword":                   "パスワードリセット申請画面でメール宛先の入力を受け付け、リセット用メールを送信する。",
+    "ForgotPasswordConfirm":            "パスワードリセット申請完了画面でメール送信済みのメッセージを表示する。",
+    "ChangePassword":                   "パスワード変更画面で新しいパスワードの入力を受け付け、パスワードを更新する。",
+    "FileNotFound":                     "404 エラー画面でリソースが見つからない旨を表示する。",
+    "Exception":                        "システム例外エラー画面で想定外のエラーをキャッチしメッセージを表示する。",
+    "StdExceptionTemplate":             "例外テンプレート画面で共通のエラー表示レイアウトを提供する。",
+    "Unauthorized":                     "アクセス権限エラー画面で権限不足のメッセージを表示する。",
+    "InMaintenance":                    "メンテナンス中画面でサービス停止期間のメッセージを表示する。",
+    "BandwidthExceeded":                "帯域超過エラー画面で利用上限に達した旨を表示する。",
+    "AnswersHome":                      "旧 Answers 機能のトップ画面を表示する（廃止予定）。",
+    "IdeasHome":                        "旧 Ideas 機能のトップ画面を表示する（廃止予定）。",
+    "SiteRegister":                     "ポータルユーザ登録画面でユーザー情報の入力を受け付け、アカウントを登録する。",
+    "SiteRegisterConfirm":              "ポータルユーザ登録完了画面で登録完了のメッセージを表示する。",
+    "CommunitiesLogin":                 "コミュニティログイン画面でユーザー認証を行う。",
+    "CommunitiesSelfReg":               "コミュニティ自己登録画面でユーザー情報の入力を受け付け、アカウントを登録する。",
+    "CommunitiesSelfRegConfirm":        "コミュニティ自己登録完了画面で登録完了のメッセージを表示する。",
+    "CommunitiesForgotPassword":        "コミュニティのパスワードリセット申請画面でメール宛先の入力を受け付ける。",
+    "CommunitiesForgotPasswordConfirm": "コミュニティのパスワードリセット申請完了画面でメール送信済みのメッセージを表示する。",
+    "CommunitiesChangePassword":        "コミュニティのパスワード変更画面で新しいパスワードの入力を受け付け、パスワードを更新する。",
 }
 
 # 標準 Apex クラス除外（Apex→Apex callees 解析で誤検知しないためのスキップセット）
@@ -1842,27 +1882,76 @@ def _comp_type_label(comp: dict) -> str:
     return "Apexクラス"
 
 
+def _make_box_label(desc: str, comp_type: str = "") -> str:
+    """処理フロー図ボックス用の 2 行ラベルを生成する。
+    Q2 確定: 「画面名（1 行目）＋ アクション（2 行目）」の 2 行体裁。
+    - description が「〜画面で〜を行う」形式なら「で」を軸に分割。
+    - VF/LWC/Aura 以外（Apex/Flow/Trigger 等）は 1 行要約のみ。
+    - 「（Experience Cloud〜）」等の括弧注記は除去。
+    """
+    if not desc:
+        return ""
+    # 括弧注記を除去（「（Experience Cloud 標準テンプレート）」等）
+    clean = _re.sub(r'[（(][^）)]{2,30}[）)]', '', desc).strip()
+    clean = _re.sub(r'[。\s]+$', '', clean).strip()
+
+    # 「〜画面で〜する」パターンを分割
+    m = _re.search(r'^(.{3,20}画面)で(.{3,})', clean)
+    if m:
+        screen = m.group(1).strip()
+        action = m.group(2).strip()
+        # アクションは 18 字以内に圧縮
+        action = action[:18] + ('…' if len(action) > 18 else '')
+        return f"{screen}\n{action}"
+
+    # 画面系だが「で」なしの場合: 先頭 15 字でラベル化
+    if comp_type.lower() in ("visualforce", "vf", "lwc", "aura"):
+        return clean[:15] + ('…' if len(clean) > 15 else '')
+
+    # Apex/Flow 等: 先頭節を 1 行で
+    return clean[:18] + ('…' if len(clean) > 18 else '')
+
+
 def _build_process_steps(data: dict) -> list[dict]:
     """components の responsibility から日本語の処理概要 steps を生成する。
 
     M-5a: _deep_clean_ja（強い除去）を適用 → 断片なら _STD_VF_DESCRIPTIONS / 型別デフォルト にフォールバック。
+    O-3④: box_label（処理フロー図ボックス用 2 行ラベル）を追加。business_flow 順に並び替え。
     title は description の先頭節から生成（「を行う」機械付与廃止）。
     """
     # 型別デフォルト説明（責務が空または断片の場合のフォールバック）
     _TYPE_DEFAULTS: dict[str, str] = {
-        "Visualforce": "Experience Cloud 標準画面（ポータル用テンプレート）。",
-        "VF": "Experience Cloud 標準画面（ポータル用テンプレート）。",
-        "VisualForce": "Experience Cloud 標準画面（ポータル用テンプレート）。",
-        "Visualforce Page": "Experience Cloud 標準画面（ポータル用テンプレート）。",
+        "Visualforce": "ポータル画面で標準的な処理を行う。",
+        "VF": "ポータル画面で標準的な処理を行う。",
+        "VisualForce": "ポータル画面で標準的な処理を行う。",
+        "Visualforce Page": "ポータル画面で標準的な処理を行う。",
         "Apex": "バックエンド処理を担当する。",
         "Flow": "自動起動フローが処理を担当する。",
-        "LWC": "ユーザー操作画面を担当する。",
-        "Aura": "ユーザー操作画面を担当する。",
+        "LWC": "ユーザー操作画面でインタラクションを担当する。",
+        "Aura": "ユーザー操作画面でインタラクションを担当する。",
     }
 
+    # business_flow の actor/component 順でソートするための順序マップを作成
+    _bf_order: dict[str, int] = {}
+    for _step in (data.get("business_flow") or []):
+        _actor = _step.get("actor") or _step.get("component") or ""
+        if _actor and _actor not in _bf_order:
+            _bf_order[_actor] = len(_bf_order)
+
+    comps = list(data.get("components", []))
+    if _bf_order:
+        def _bf_sort_key(c: dict) -> int:
+            _name = c.get("api_name", "") or c.get("name", "")
+            # actor との部分一致でも順序を取る
+            for _actor, _idx in _bf_order.items():
+                if _name in _actor or _actor in _name:
+                    return _idx
+            return len(_bf_order) + 1  # 未マッチは末尾
+        comps = sorted(comps, key=_bf_sort_key)
+
     steps = []
-    n_comps = len(data.get("components", []))
-    for i, comp in enumerate(data.get("components", []), 1):
+    n_comps = len(comps)
+    for i, comp in enumerate(comps, 1):
         responsibility = comp.get("responsibility", "")
         comp_type = comp.get("type", "Apex")
         _raw_api = comp.get("api_name", "")
@@ -1889,10 +1978,14 @@ def _build_process_steps(data: dict) -> list[dict]:
         # M-5a: title は description の先頭節から生成（「を行う」機械付与廃止）
         title = _title_from_desc(desc_main)
 
+        # O-3④: box_label（処理フロー図ボックス用 2 行ラベル）
+        box_label = _make_box_label(desc_main, comp_type)
+
         steps.append({
             "step": i,
             "title": title,
             "description": desc_main,
+            "box_label": box_label,
             "component": comp_name,
             "comp_api_name": _raw_api,
             "branch": None,
@@ -2580,11 +2673,26 @@ def _normalize_schema(data: dict) -> dict:
 
     # components: responsibility → role（日本語化）& callees 初期化
     # M-5d: _gentle_clean_role（translate 系のみ、識別子削除しない）で role の破損を防ぐ
+    # O-3②: _is_role_fragment で stale cache 断片を検出→ _STD_VF_DESCRIPTIONS / 型別 fallback でリセット
     for comp in data.get("components", []):
+        api_name = comp.get("api_name", "")
         if not comp.get("role"):
-            comp["role"] = _gentle_clean_role(comp.get("responsibility", ""))
+            role_src = comp.get("responsibility", "")
+            comp["role"] = _gentle_clean_role(role_src)
         else:
             comp["role"] = _gentle_clean_role(comp["role"])
+        # 断片検出 → STD 辞書または型別 fallback で上書き
+        if _is_role_fragment(comp["role"]):
+            std = _STD_VF_DESCRIPTIONS.get(api_name)
+            if std:
+                comp["role"] = std
+            else:
+                # responsibility を再取得して gentle clean を試みる
+                resp = comp.get("responsibility", "")
+                if resp and not _is_role_fragment(_gentle_clean_role(resp)):
+                    comp["role"] = _gentle_clean_role(resp)
+                else:
+                    comp["role"] = ""  # 空にして LLM 再生成に任せる
         if "callees" not in comp:
             comp["callees"] = []
 
@@ -3060,11 +3168,21 @@ def main():
         sys.exit(0)
 
     if prev_meta:
+        prev_history_len = len(prev_meta.get("history", []))
+        # 改版履歴 20 行制限 (Phase N+1): 既存履歴が 20 以上なら minor 指定でも major に強制昇格し履歴リセット
+        forced_major = False
+        if prev_history_len >= 20 and args.version_increment == "minor":
+            print(f"  [WARN] 改版履歴が {prev_history_len} 件に達しているため minor → major に強制昇格し、履歴をリセットします")
+            args.version_increment = "major"
+            forced_major = True
         current_version = increment_version(
             prev_meta.get("version", "1.0"), args.version_increment)
-        history    = prev_meta.get("history", [])
-        is_initial = False
-        print(f"更新モード: {prev_meta.get('version', '?')} -> {current_version}")
+        history    = [] if forced_major else prev_meta.get("history", [])
+        is_initial = forced_major
+        if forced_major:
+            print(f"メジャー昇格モード（履歴リセット）: {prev_meta.get('version', '?')} -> {current_version}")
+        else:
+            print(f"更新モード: {prev_meta.get('version', '?')} -> {current_version}")
     else:
         current_version = data.get("version") or "1.0"
         history    = []
