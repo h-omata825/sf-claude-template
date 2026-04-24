@@ -360,10 +360,20 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
         "fontsize": "14",
         "fontcolor": C_LANE_HDR,
     }
-    if len(steps_in) > 5:
+    _sw_step_count = len(steps_in)
+    _sw_lane_count = len(set(l.get("name", "") for l in lanes_in))
+    if _sw_step_count > 5:
         # R-3: 画面に収まるサイズへ縮小（10,14! → 7,10!）。DPI 150 で 1050x1500px 程度
         _sw_graph_attr["size"] = "7,10!"
         _sw_graph_attr["ratio"] = "compress"
+    elif _sw_lane_count <= 2 and _sw_step_count <= 4:
+        # W-4b: step/lane が少ない場合も最低高さを確保（FG-002 image1 が 114px になった対策）
+        _sw_graph_attr["size"] = "5,4!"
+        _sw_graph_attr["ratio"] = "auto"
+    else:
+        # 中規模（3-5 step / 3-5 lane）向け
+        _sw_graph_attr["size"] = "7,6!"
+        _sw_graph_attr["ratio"] = "auto"
 
     g = _gv.Digraph(
         "swimlane",
@@ -834,9 +844,15 @@ def render_component_diagram(
     }
     # Q-3 (image4 縦長化): grid モード（≥20 コンポ）は size を A4 縦比で強制圧縮
     # R-3: 画面に収まるサイズへ縮小（10,14! → 7,10!）
+    # W-4b: 小規模 grid（10-19 コンポ）は 7,7! でアスペクト 1:1 目安
     if use_grid:
-        _comp_graph_attr["size"] = "7,10!"
-        _comp_graph_attr["ratio"] = "compress"
+        n_comp_grid = len(components)
+        if n_comp_grid >= 20:
+            _comp_graph_attr["size"] = "7,10!"
+            _comp_graph_attr["ratio"] = "compress"
+        else:
+            _comp_graph_attr["size"] = "7,7!"
+            _comp_graph_attr["ratio"] = "auto"
 
     g = _gv.Digraph(
         "components",

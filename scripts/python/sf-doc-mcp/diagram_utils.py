@@ -1849,8 +1849,15 @@ def generate_object_component_matrix(
     # コンポーネント列幅: 名前の長さに応じて動的調整
     # Q-3 (image3 視認性向上): cell_w を拡大して文字が潰れないように
     # R-3: フォント拡大に合わせて cell_w 下限を 2.8 → 3.4 に、上限を 3.8 → 4.6 に拡大
+    # W-4b: 列数が多いとき cell_w を縮小して横幅が Excel 画面を超えないようにする
     _max_name_len = max((len(_strip_type_suffix(c)) for c in comp_names), default=8)
-    cell_w    = min(4.6, max(3.4, _max_name_len * 0.22))
+    n_cols_raw = len(comp_names)
+    if n_cols_raw >= 15:
+        cell_w = min(2.4, max(1.8, _max_name_len * 0.13))   # 15 列以上: 小さめ
+    elif n_cols_raw >= 10:
+        cell_w = min(3.2, max(2.4, _max_name_len * 0.17))   # 10〜14 列: 中
+    else:
+        cell_w = min(4.6, max(3.4, _max_name_len * 0.22))   # 9 列以下: 従来通り
 
     # レイアウト定数（オブジェクト単位 = 項目列なし）
     # Q-3: obj_h / hdr_h / legend_h を増やし、Excel 埋め込み後もズームなしで読めるサイズに
