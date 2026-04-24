@@ -1965,7 +1965,7 @@ def _build_process_steps(data: dict) -> list[dict]:
             cleaned = _deep_clean_ja(responsibility)
             # トリガータイミング注釈（処理前（新規）/処理後（新規））等を除去
             cleaned = _re.sub(
-                r'[（(](?:処理前|処理後)[（(][^）)]+[）)](?:/(?:処理前|処理後)[（(][^）)]+[）)][）)]?', '', cleaned
+                r'[（(](?:処理前|処理後)[（(][^）)]+[）)](?:/(?:処理前|処理後)[（(][^）)]+[）)])?[）)]', '', cleaned
             ).strip()
             cleaned = _re.sub(r'\s{2,}', ' ', cleaned)
             if not _is_desc_fragment(cleaned):
