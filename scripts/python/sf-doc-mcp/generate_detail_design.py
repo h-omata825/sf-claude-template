@@ -1567,6 +1567,29 @@ def _is_role_fragment(text: str) -> bool:
     return False
 
 
+_APEX_ROLE_SUFFIXES: tuple[tuple[str, str], ...] = (
+    ("Controller",  "画面のコントローラー処理を担当する Apex クラス。"),
+    ("Extension",   "画面の拡張コントローラー処理を担当する Apex クラス。"),
+    ("Handler",     "トリガーまたはイベントのハンドラー処理を担当する Apex クラス。"),
+    ("Service",     "業務ロジックを提供するサービス層の Apex クラス。"),
+    ("Helper",      "共通処理を担うヘルパー Apex クラス。"),
+    ("Trigger",     "レコード変更時に起動する Apex トリガー。"),
+    ("Batch",       "大量レコードを分割処理する Apex バッチクラス。"),
+    ("Schedulable", "スケジュール起動される Apex クラス。"),
+    ("Queueable",   "非同期キューで処理される Apex クラス。"),
+)
+
+
+def _apex_role_from_api_name(api_name: str) -> str:
+    """api_name の末尾サフィックスから Apex の役割文を推論する。"""
+    if not api_name:
+        return ""
+    for suffix, role in _APEX_ROLE_SUFFIXES:
+        if api_name.endswith(suffix):
+            return role
+    return ""
+
+
 def _title_from_desc(desc: str, max_len: int = 18) -> str:
     """description の先頭節から short title を生成する。「を行う」の機械付与をしない。"""
     if not desc:
@@ -1900,8 +1923,8 @@ def _make_box_label(desc: str, comp_type: str = "") -> str:
     if m:
         screen = m.group(1).strip()
         action = m.group(2).strip()
-        # アクションは 18 字以内に圧縮
-        action = action[:18] + ('…' if len(action) > 18 else '')
+        # アクションは 22 字以内に圧縮（Q-3c: 18→22 に緩和して情報量を維持）
+        action = action[:22] + ('…' if len(action) > 22 else '')
         return f"{screen}\n{action}"
 
     # 画面系だが「で」なしの場合: 先頭 15 字でラベル化
@@ -2692,7 +2715,9 @@ def _normalize_schema(data: dict) -> dict:
                 if resp and not _is_role_fragment(_gentle_clean_role(resp)):
                     comp["role"] = _gentle_clean_role(resp)
                 else:
-                    comp["role"] = ""  # 空にして LLM 再生成に任せる
+                    comp_type = (comp.get("type") or "").lower()
+                    apex_role = _apex_role_from_api_name(api_name) if "apex" in comp_type else ""
+                    comp["role"] = apex_role or ""
         if "callees" not in comp:
             comp["callees"] = []
 
