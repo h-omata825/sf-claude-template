@@ -1848,15 +1848,17 @@ def generate_object_component_matrix(
 
     # コンポーネント列幅: 名前の長さに応じて動的調整
     # Q-3 (image3 視認性向上): cell_w を拡大して文字が潰れないように
+    # R-3: フォント拡大に合わせて cell_w 下限を 2.8 → 3.4 に、上限を 3.8 → 4.6 に拡大
     _max_name_len = max((len(_strip_type_suffix(c)) for c in comp_names), default=8)
-    cell_w    = min(3.8, max(2.8, _max_name_len * 0.16))
+    cell_w    = min(4.6, max(3.4, _max_name_len * 0.22))
 
     # レイアウト定数（オブジェクト単位 = 項目列なし）
     # Q-3: obj_h / hdr_h / legend_h を増やし、Excel 埋め込み後もズームなしで読めるサイズに
-    obj_col_w = 4.0    # オブジェクト名列
-    obj_h     = 1.6    # 1オブジェクトの行高
-    hdr_h     = 2.4    # ヘッダ行高
-    legend_h  = 1.0
+    # R-3: さらに行高を拡大してフォント 18-22 を収容
+    obj_col_w = 4.8    # オブジェクト名列
+    obj_h     = 2.0    # 1オブジェクトの行高
+    hdr_h     = 3.0    # ヘッダ行高
+    legend_h  = 1.2
     margin    = 0.1
 
     n_cols      = len(comp_names)
@@ -1879,14 +1881,14 @@ def generate_object_component_matrix(
 
     _rect(margin, hdr_y, obj_col_w, hdr_h, HDR_BG, ec=HDR_BG)
     ax.text(margin + obj_col_w / 2, hdr_y + hdr_h / 2, "オブジェクト",
-            ha="center", va="center", color=HDR_FG, **_fpkw(15, bold=True))
+            ha="center", va="center", color=HDR_FG, **_fpkw(22, bold=True))
 
     for ci, comp in enumerate(comp_names):
         x = margin + obj_col_w + ci * cell_w
         _rect(x, hdr_y, cell_w, hdr_h, HDR_BG, ec=HDR_BG)
         ax.text(x + cell_w / 2, hdr_y + hdr_h / 2, _wrap_hdr(comp, width=10),
                 ha="center", va="center", color=HDR_FG,
-                multialignment="center", **_fpkw(14, bold=True))
+                multialignment="center", **_fpkw(18, bold=True))
 
     # ── データ行（オブジェクト単位） ─────────────────────────────
     for ri, (obj_api, obj_label, _fields) in enumerate(obj_groups):
@@ -1896,7 +1898,7 @@ def generate_object_component_matrix(
         bg_row = "#F0F3F8" if ri % 2 == 0 else "#FAFBFC"
         _rect(margin, row_y, obj_col_w, obj_h, bg_row)
         ax.text(margin + 0.2, row_y + obj_h / 2, obj_label,
-                ha="left", va="center", **_fpkw(15))
+                ha="left", va="center", **_fpkw(22))
 
         # コンポーネント操作セル
         for ci, comp in enumerate(comp_names):
@@ -1908,7 +1910,7 @@ def generate_object_component_matrix(
                     op if op else "－",
                     ha="center", va="center",
                     color="#AAAAAA" if not op else "#000000",
-                    **_fpkw(14, bold=bool(op)))
+                    **_fpkw(20, bold=bool(op)))
 
     # ── 凡例 ─────────────────────────────────────────────────────
     legend_items = [
@@ -1920,9 +1922,9 @@ def generate_object_component_matrix(
     lx = margin
     ly = margin * 0.5
     for lbl, color in legend_items:
-        _rect(lx, ly, 0.6, 0.5, color, ec="#888888", lw=0.6)
-        ax.text(lx + 0.75, ly + 0.25, lbl, va="center", **_fpkw(13))
-        lx += 2.6
+        _rect(lx, ly, 0.8, 0.7, color, ec="#888888", lw=0.6)
+        ax.text(lx + 1.0, ly + 0.35, lbl, va="center", **_fpkw(17))
+        lx += 3.2
 
     plt.tight_layout(pad=0.1)
     plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")

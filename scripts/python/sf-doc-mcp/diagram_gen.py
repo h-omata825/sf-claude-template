@@ -361,7 +361,8 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
         "fontcolor": C_LANE_HDR,
     }
     if len(steps_in) > 5:
-        _sw_graph_attr["size"] = "10,14!"
+        # R-3: 画面に収まるサイズへ縮小（10,14! → 7,10!）。DPI 150 で 1050x1500px 程度
+        _sw_graph_attr["size"] = "7,10!"
         _sw_graph_attr["ratio"] = "compress"
 
     g = _gv.Digraph(
@@ -833,8 +834,9 @@ def render_component_diagram(
         "concentrate": "true",
     }
     # Q-3 (image4 縦長化): grid モード（≥20 コンポ）は size を A4 縦比で強制圧縮
+    # R-3: 画面に収まるサイズへ縮小（10,14! → 7,10!）
     if use_grid:
-        _comp_graph_attr["size"] = "10,14!"
+        _comp_graph_attr["size"] = "7,10!"
         _comp_graph_attr["ratio"] = "compress"
 
     g = _gv.Digraph(

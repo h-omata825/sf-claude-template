@@ -1975,6 +1975,23 @@ def _build_process_steps(data: dict) -> list[dict]:
             return len(_bf_order) + 1  # 未マッチは末尾
         comps = sorted(comps, key=_bf_sort_key)
 
+    # R-2 (コンポーネント列に拡張子付与): type → 拡張子マップ
+    _EXT_BY_TYPE: dict[str, str] = {
+        "Apex":                   ".cls",
+        "Apex Class":             ".cls",
+        "Apex Trigger":           ".trigger",
+        "Trigger":                ".trigger",
+        "Visualforce":            ".page",
+        "VF":                     ".page",
+        "VisualForce":            ".page",
+        "Visualforce Page":       ".page",
+        "LWC":                    ".js",
+        "Lightning Web Component":".js",
+        "Aura":                   ".cmp",
+        "Aura Component":         ".cmp",
+        "Flow":                   ".flow",
+    }
+
     steps = []
     n_comps = len(comps)
     for i, comp in enumerate(comps, 1):
@@ -1982,6 +1999,9 @@ def _build_process_steps(data: dict) -> list[dict]:
         comp_type = comp.get("type", "Apex")
         _raw_api = comp.get("api_name", "")
         comp_name = _re.sub(r'（[^）]+）$', '', _raw_api).strip() or _raw_api
+        # R-2: 拡張子を付けて Apex/VF/LWC の区別を明示
+        _ext = _EXT_BY_TYPE.get(comp_type, "")
+        comp_display = f"{comp_name}{_ext}" if _ext and not comp_name.endswith(_ext) else comp_name
 
         # 1) 標準 VF 辞書からの固定説明（最優先）
         desc_main = _STD_VF_DESCRIPTIONS.get(_raw_api, "")
@@ -2012,7 +2032,7 @@ def _build_process_steps(data: dict) -> list[dict]:
             "title": title,
             "description": desc_main,
             "box_label": box_label,
-            "component": comp_name,
+            "component": comp_display,
             "comp_api_name": _raw_api,
             "branch": None,
             "next": [{"to": i + 1}] if i < n_comps else [],
