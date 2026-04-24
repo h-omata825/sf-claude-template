@@ -67,21 +67,5 @@
       "Bash(sf org delete* --target-org *prod*)",
       "Bash(sf org delete* --target-org *production*)"
     ]
-  },
-  "__pending": {
-    "_note": "チーム利用開始・PR運用を開始するとき permissions.deny へ追加して有効化する",
-    "git_workflow": {
-      "_description": "Git操作の制限。main/develop への直接 push を禁止し、PR経由を強制する。feature/* / hotfix/* ブランチの commit・push は引き続き許可。",
-      "_activate_when": "2名以上で同一リポジトリを使い始めるとき",
-      "rules": [
-        "Bash(git push origin main*)",
-        "Bash(git push origin develop*)",
-        "Bash(git push --force*)",
-        "Bash(git reset --hard*)",
-        "Bash(git branch -D*)",
-        "Bash(git branch -d main*)",
-        "Bash(git branch -d develop*)"
-      ]
-    }
   }
 }
