@@ -24,7 +24,7 @@ except ImportError:
     print("[ERROR] openpyxl がインストールされていません。`pip install openpyxl` を実行してください。")
     sys.exit(1)
 
-WRAP = Alignment(wrap_text=True, vertical="center", horizontal="left")
+WRAP = Alignment(wrap_text=True, vertical="top")
 
 
 def find_next_empty_row(ws, col=1, start_row=1):
