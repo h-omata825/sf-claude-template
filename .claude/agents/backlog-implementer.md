@@ -54,6 +54,7 @@ focus_hints: []
 
 - 変更は最小限にとどめる（計画外のリファクタリング・コメント整理は行わない）
 - FLS / CRUD / `with sharing` / ガバナ制限 / バルク処理を意識する
+- **実装前に**: implementation-plan.md の API 名を `force-app/main/default/objects/{Object}/fields/*.field-meta.xml` で再照合し、一致することを確認してから使用する
 - APIフィールド名は実コードから確認した名前を使う（計画書に記載されているもの）
 - エラーハンドリングを含める
 - APIキー・パスワードをハードコードしない

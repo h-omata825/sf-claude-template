@@ -49,9 +49,16 @@ focus_hints: []
 sf apex run test --target-org <alias> --class-names <テストクラス名> --result-format human --code-coverage
 ```
 
-カバレッジ 90% 以上・全テストパスを確認する。
+変更コードを含むクラスのカバレッジ確認 + 組織全体カバレッジ 75% 以上・全テストパスを確認する。
 
 ### 4. テスト結果報告
+
+「確認方法・根拠」列の記入値は以下のいずれかを使用する:
+- `Apex Test`: 自動テストで確認済み
+- `画面手動確認`: 実際に画面を開いて操作・目視で確認済み
+- `CLI 確認`: sf data query / sf apex run 等のコマンドで確認済み
+
+**LWC 画面・画面フロー・帳票など UI を伴うシナリオは必ず「画面手動確認」を記録すること。** Apex Test PASS のみで確認済みにしない。
 
 ```
 ## テスト結果: {issueID}
