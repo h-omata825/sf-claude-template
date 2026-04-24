@@ -428,8 +428,8 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # X-4a: 幅律速 FG (アスペクト < 3) で過大にならないよう max_w を縮小
-        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=1200)
+        # Y: pre-Phase-X 値に戻す。FG-010 REF2 (2100x539) を完全再現
+        _embed_image(ws, png_path, img_anchor, max_w=2100, max_h=1400)
 
 
 def _estimate_row_height(text: str, chars_per_line: int = 34,
@@ -484,8 +484,8 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # X-4a: FG-001 のような横長 PNG で幅律速化するのを抑える
-        _embed_image(ws, png_path, img_anchor, max_w=1280, max_h=1100)
+        # Y: pre-Phase-X 値に戻す。FG-010 REF1 (1142x1200) / REF2 (1265x1200) を完全再現
+        _embed_image(ws, png_path, img_anchor, max_w=1600, max_h=1200)
 
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
@@ -522,8 +522,8 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # T-4: リファレンス xlsx の表示 cx=10820400, cy=6667500 EMU (1136×700 px@96dpi) に合わせる
-        _embed_image(ws, png_path, img_anchor, max_w=1140, max_h=700)
+        # Y: REF2 (545x700) を「少しだけ大きく」→ max_h 700→850 で 662x850 目標
+        _embed_image(ws, png_path, img_anchor, max_w=1140, max_h=850)
 
 
 
