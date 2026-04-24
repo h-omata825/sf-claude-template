@@ -1496,13 +1496,22 @@ def _infer_trigger_screen(data: dict) -> str:
 def _gentle_clean_role(text: str) -> str:
     """role 欄専用の軽量クリーニング: SF オブジェクト/フィールド/ジャーゴンを日本語化するが
     英語 API 識別子の除去はしない（_strip_tech_identifiers を通さない）。
-    API 名が残る場合は LLM 側の問題として許容し、壊れた日本語を作らない。
+    旧キャッシュ由来の典型的な断片アーティファクトのみピンポイント修復する。
     """
     if not text:
         return text
     text = _translate_sf_fields(text)
     text = _translate_sf_objects(text)
     text = _translate_jargon(text)
+    # 旧 _deep_clean_ja のキャッシュ残骸 — ピンポイント修復のみ
+    text = _re.sub(r'(?i)\s*(?:を|が|は|に|で|と)\s+(?:apex|vf|lwc|aura)\s*$', '', text)  # 「を apex」
+    text = _re.sub(r'ため動作不全[^。]*$', '', text)                                        # 「ため動作不全」
+    text = _re.sub(r'\s*=\s*で(?=[ぁ-んァ-ヶ一-龯]|$)', '', text)                             # 「=で〜」
+    text = _re.sub(r'[a-z]+(?:/[a-z]*)+\.?\s*', '', text)                                  # 「answers/.」「header/body/」等
+    text = _re.sub(r'(?:から|より)\s+(?:apex|vf)\b', '', text, flags=_re.IGNORECASE)        # 「から apex」
+    text = _re.sub(r'(?<=[。、])\s*[使呼]\w{0,3}(?:\s+\w+)*\s*$', '', text)               # 末尾の「使用」孤立動詞
+    # 末尾の単独助詞を除去
+    text = _re.sub(r'(?<=[ぁ-んァ-ヶ一-龯])\s+(?:を|が|は|に)\s*$', '', text)
     text = _re.sub(r'\s{2,}', ' ', text)
     return text.strip()
 
