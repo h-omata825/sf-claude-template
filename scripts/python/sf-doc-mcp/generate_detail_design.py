@@ -279,9 +279,10 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
     diagram_area(ws, diagram_start, "業務フロー図（自動生成）", section_no=2)
 
     # 図埋め込み（fit-in-box: 横長・縦長どちらでも枠内に収まる最大サイズ）
+    # Q-3 (image1): PNG が縦長化した場合に高さを活かせるよう max_h を拡大
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
+        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=1200)
 
 
 def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
@@ -415,7 +416,8 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
+        # Q-3 (image3 視認性向上): max_w/max_h を拡大してズームなしで読めるサイズに
+        _embed_image(ws, png_path, img_anchor, max_w=2100, max_h=1400)
 
 
 def _estimate_row_height(text: str, chars_per_line: int = 34,
@@ -508,7 +510,8 @@ def fill_related_components(ws, data: dict, changed_comp_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=700)
+        # Q-3 (image4): grid モードで PNG が縦長化した場合に高さを活かせるよう max_h を拡大
+        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=1200)
 
 
 

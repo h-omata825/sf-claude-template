@@ -342,25 +342,31 @@ def render_swimlane(flow: dict, out_path: str) -> tuple[int, int]:
     trans_in = flow.get("transitions", [])
     title    = flow.get("title", "業務フロー")
 
-    # ステップ数が多い場合は縦方向（TB）に切り替えて横スクロールを防ぐ
-    _sw_rankdir = "LR" if len(steps_in) <= 5 else "TB"
+    # Swimlane は常に LR（レーン＝横長の帯、ステップは左→右に流れる）
+    # rankdir=TB にするとクラスター（レーン）が横並びになり結果が横長になる
+    _sw_rankdir = "LR"
+
+    _sw_graph_attr = {
+        "bgcolor": "white",
+        "rankdir": _sw_rankdir,
+        "splines": "polyline",
+        "nodesep": "0.4",
+        "ranksep": "0.6",
+        "fontname": FONT_JP,
+        "pad": "0.3",
+        "dpi": str(DPI),
+        "label": title,
+        "labelloc": "t",
+        "fontsize": "14",
+        "fontcolor": C_LANE_HDR,
+    }
+    if len(steps_in) > 5:
+        _sw_graph_attr["size"] = "10,14!"
+        _sw_graph_attr["ratio"] = "compress"
 
     g = _gv.Digraph(
         "swimlane",
-        graph_attr={
-            "bgcolor": "white",
-            "rankdir": _sw_rankdir,
-            "splines": "polyline",
-            "nodesep": "0.4",
-            "ranksep": "0.6",
-            "fontname": FONT_JP,
-            "pad": "0.3",
-            "dpi": str(DPI),
-            "label": title,
-            "labelloc": "t",
-            "fontsize": "14",
-            "fontcolor": C_LANE_HDR,
-        },
+        graph_attr=_sw_graph_attr,
     )
 
     # レーンを lanes[].type に基づきグループ化して描画する。
@@ -806,7 +812,8 @@ def render_component_diagram(
     use_grid = (all_callees_empty and len(components) >= 10) or len(components) >= 20
 
     if use_grid:
-        _rankdir, _splines = "LR", "line"
+        # Q-3 (image4 縦長化): grid モードは rankdir=TB にして行 subgraph を縦方向に並べる
+        _rankdir, _splines = "TB", "line"
     elif num_nodes <= 6:
         _rankdir, _splines = "LR", "ortho"
     elif num_nodes <= 18:
@@ -814,19 +821,25 @@ def render_component_diagram(
     else:
         _rankdir, _splines = "TB", "polyline"
 
+    _comp_graph_attr = {
+        "bgcolor": "white",
+        "rankdir": _rankdir,
+        "splines": _splines,
+        "nodesep": "0.3" if use_grid or num_nodes > 18 else "0.5",
+        "ranksep": "0.5" if use_grid else ("0.6" if num_nodes > 18 else "1.0"),
+        "fontname": FONT_JP,
+        "pad": "0.4",
+        "dpi": "150",
+        "concentrate": "true",
+    }
+    # Q-3 (image4 縦長化): grid モード（≥20 コンポ）は size を A4 縦比で強制圧縮
+    if use_grid:
+        _comp_graph_attr["size"] = "10,14!"
+        _comp_graph_attr["ratio"] = "compress"
+
     g = _gv.Digraph(
         "components",
-        graph_attr={
-            "bgcolor": "white",
-            "rankdir": _rankdir,
-            "splines": _splines,
-            "nodesep": "0.3" if use_grid or num_nodes > 18 else "0.5",
-            "ranksep": "0.5" if use_grid else ("0.6" if num_nodes > 18 else "1.0"),
-            "fontname": FONT_JP,
-            "pad": "0.4",
-            "dpi": "150",
-            "concentrate": "true",
-        },
+        graph_attr=_comp_graph_attr,
     )
 
     # 起動元ノード
