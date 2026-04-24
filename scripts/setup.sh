@@ -5,8 +5,8 @@
 # 2モード:
 #   - 新規作成モード（$3なし）: sf-claude-template から SFDX プロジェクトを生成。
 #                              Git連携は手動（完了メッセージに案内あり）。
-#   - 参加モード（$3あり）   : 既存プロジェクトリポジトリをそのまま git clone。
-#                              テンプレ展開や git init は行わない。
+#   - 参加モード（$3あり）   : プロジェクトリポジトリからテンプレートを取得し SFDX プロジェクトを生成。
+#                              テンプレート取得先以外は新規作成モードと同じ手順。
 #
 # 使い方:
 #
@@ -14,7 +14,7 @@
 #   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project
 #   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project /c/workspace
 #
-#   # 既存プロジェクトに参加（プロジェクトリポジトリを clone）
+#   # 既存プロジェクトに参加（プロジェクトリポジトリからテンプレートを取得）
 #   curl -sSL https://raw.githubusercontent.com/h-omata825/sf-claude-template/main/scripts/setup.sh | bash -s my-project /c/workspace https://github.com/your-org/project-a.git
 #
 # または clone 後:
@@ -41,7 +41,7 @@ error() { echo -e "\033[1;31m[ERROR]\033[0m $*"; exit 1; }
 # --- 引数 ---
 PROJECT_NAME="${1:-}"
 TARGET_DIR="${2:-.}"
-PROJECT_REPO_URL="${3:-}"  # 指定時: 参加モード（プロジェクトリポジトリを clone）。省略時: 新規作成モード（大本テンプレートから生成）
+PROJECT_REPO_URL="${3:-}"  # 指定時: 参加モード（プロジェクトリポジトリからテンプレート取得）。省略時: 新規作成モード（大本テンプレートから生成）
 
 if [ -z "$PROJECT_NAME" ]; then
     read -p "プロジェクト名を入力してください（英語）: " PROJECT_NAME
@@ -52,54 +52,65 @@ PROJECT_PATH="$TARGET_DIR/$PROJECT_NAME"
 
 # --- 前提チェック ---
 command -v git >/dev/null 2>&1 || error "Git がインストールされていません"
+command -v sf >/dev/null 2>&1 || error "Salesforce CLI がインストールされていません。https://developer.salesforce.com/tools/salesforcecli からインストールしてください"
 
 if [ -d "$PROJECT_PATH" ]; then
     error "$PROJECT_PATH は既に存在します"
 fi
 
+# =============================================================================
+# SFDXプロジェクトを生成（新規作成・参加モード共通）
+# =============================================================================
+info "SFDXプロジェクトを作成中..."
+sf project generate -n "$PROJECT_NAME" -d "$TARGET_DIR" --manifest
+ok "SFDXプロジェクト作成完了: $PROJECT_PATH"
+
+# =============================================================================
+# テンプレートを取得（取得先のみモードで分岐）
+# =============================================================================
+TMP_DIR="$PROJECT_PATH/.claude-template-tmp"
+
 if [ -n "$PROJECT_REPO_URL" ]; then
-    # =============================================================
-    # 参加モード: 既存プロジェクトリポジトリをそのまま clone
-    # =============================================================
-    info "プロジェクトリポジトリから取得中... ($PROJECT_REPO_URL)"
-    if ! git clone "$PROJECT_REPO_URL" "$PROJECT_PATH" 2>/dev/null; then
+    # 参加モード: プロジェクトリポジトリからテンプレートを取得
+    info "プロジェクトリポジトリを取得中... ($PROJECT_REPO_URL)"
+    if ! git clone "$PROJECT_REPO_URL" "$TMP_DIR" 2>/dev/null; then
         error "プロジェクトリポジトリの取得に失敗しました。URL とアクセス権を確認してください"
     fi
-    ok "取得完了: $PROJECT_PATH"
 else
-    # =============================================================
-    # 新規作成モード: 大本テンプレートから SFDX プロジェクトを生成
-    # =============================================================
-    command -v sf >/dev/null 2>&1 || error "Salesforce CLI がインストールされていません。https://developer.salesforce.com/tools/salesforcecli からインストールしてください"
-
-    info "SFDXプロジェクトを作成中..."
-    sf project generate -n "$PROJECT_NAME" -d "$TARGET_DIR" --manifest
-    ok "SFDXプロジェクト作成完了: $PROJECT_PATH"
-
+    # 新規作成モード: 大本テンプレートからテンプレートを取得
     info "テンプレートを取得中..."
-    TMP_DIR="$PROJECT_PATH/.claude-template-tmp"
     if ! git clone --depth 1 --branch "$TEMPLATE_BRANCH" "$DEFAULT_TEMPLATE_URL" "$TMP_DIR" 2>/dev/null; then
         error "テンプレートの取得に失敗しました。ネットワーク接続を確認してください"
     fi
-
-    info "テンプレートを配置中..."
-    cp -r "$TMP_DIR/.claude" "$PROJECT_PATH/.claude"
-    cp "$TMP_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
-    cp "$TMP_DIR/README.md" "$PROJECT_PATH/README.md"
-    cp -r "$TMP_DIR/docs" "$PROJECT_PATH/docs"
-    if [ -d "$TMP_DIR/scripts" ]; then
-        mkdir -p "$PROJECT_PATH/scripts"
-        cp -r "$TMP_DIR/scripts/." "$PROJECT_PATH/scripts/"
-    fi
-
-    {
-        echo ""
-        echo "# Claude Code（トークン入り個人設定）"
-        echo ".mcp.json"
-    } >> "$PROJECT_PATH/.gitignore"
-
-    rm -rf "$TMP_DIR"
 fi
+
+# =============================================================================
+# テンプレートを配置（新規作成・参加モード共通）
+# =============================================================================
+info "テンプレートを配置中..."
+[ -d "$TMP_DIR/.claude" ] && cp -r "$TMP_DIR/.claude" "$PROJECT_PATH/.claude"
+[ -f "$TMP_DIR/CLAUDE.md" ] && cp "$TMP_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
+[ -f "$TMP_DIR/README.md" ] && cp "$TMP_DIR/README.md" "$PROJECT_PATH/README.md"
+[ -d "$TMP_DIR/docs" ] && cp -r "$TMP_DIR/docs" "$PROJECT_PATH/docs"
+if [ -d "$TMP_DIR/scripts" ]; then
+    mkdir -p "$PROJECT_PATH/scripts"
+    cp -r "$TMP_DIR/scripts/." "$PROJECT_PATH/scripts/"
+fi
+
+# 参加モードのみ: プロジェクトリポジトリの git 履歴を保持
+if [ -n "$PROJECT_REPO_URL" ]; then
+    rm -rf "$PROJECT_PATH/.git" 2>/dev/null || true
+    mv "$TMP_DIR/.git" "$PROJECT_PATH/.git"
+fi
+
+{
+    echo ""
+    echo "# Claude Code（トークン入り個人設定）"
+    echo ".mcp.json"
+} >> "$PROJECT_PATH/.gitignore"
+
+rm -rf "$TMP_DIR"
+ok "テンプレート配置完了"
 
 # --- 完了 ---
 echo ""
@@ -116,11 +127,11 @@ echo "  次のステップ:"
 
 if [ -n "$PROJECT_REPO_URL" ]; then
     # --- 参加モード ---
-    echo "    組織情報・設計書はプロジェクトリポジトリに含まれています。"
     echo ""
-    echo "    1. /sf-setup   — Sandbox組織を認証する"
-    echo "    2. CLAUDE.md   — 担当者名・Sandbox alias 等を記入する"
-    echo "    3. /setup-mcp  — 外部ツール連携を設定する（任意: Backlog・Notion・GitHub 等）"
+    echo "    1. /sf-setup    — Sandbox組織を認証する"
+    echo "    2. /sf-retrieve — メタデータを取得する（force-app/ に展開）"
+    echo "    3. CLAUDE.md    — 担当者名・Sandbox alias 等を記入する"
+    echo "    4. /setup-mcp   — 外部ツール連携を設定する（任意: Backlog・Notion・GitHub 等）"
 else
     # --- 新規作成モード ---
     echo "    0. GitHubでリポジトリを作成して連携する:"
