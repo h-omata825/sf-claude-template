@@ -858,10 +858,19 @@ def render_component_diagram(
         import math as _math
         # グリッド幅: コンポーネント数から妥当な列数を計算（4〜6列）
         row_width = min(6, max(4, int(_math.sqrt(len(components)) + 0.5)))
-        names_ordered = [c.get("api_name", "") for c in components]
+        type_lookup = {c.get("api_name", ""): c.get("type", "Apex") for c in components}
+        # 依存順でソート: UI (VF/LWC/Aura) → Apex → その他。
+        # これにより上段=操作される画面、下段=呼び出される Apex、と自然な流れになる
+        _type_rank = {"Visualforce": 0, "LWC": 0, "Aura": 0,
+                      "Apex": 1, "Trigger": 2, "Batch": 2,
+                      "Flow": 3}
+        names_ordered = sorted(
+            [c.get("api_name", "") for c in components],
+            key=lambda n: (_type_rank.get(type_lookup.get(n, ""), 9),
+                           step_order.get(n, 999), n)
+        )
         rows = [names_ordered[i:i + row_width]
                 for i in range(0, len(names_ordered), row_width)]
-        type_lookup = {c.get("api_name", ""): c.get("type", "Apex") for c in components}
         # 各行を subgraph(rank=same) に入れる
         for ri, row in enumerate(rows):
             with g.subgraph(name=f"cluster_row_{ri}") as sg:
@@ -879,10 +888,19 @@ def render_component_diagram(
         # 行間の順序保証（不可視エッジ）: 前行先頭 → 次行先頭
         for ri in range(len(rows) - 1):
             g.edge(rows[ri][0], rows[ri + 1][0], style="invis", weight="10")
-        # trigger_node → 各行の先頭ノードに dashed エッジ（左からグリッドが広がる形）
-        if trigger_node and rows:
-            for row in rows:
-                g.edge(trigger_node, row[0],
+        # U-1: trigger_node → 誰からも callees されていないトップレベル UI のみに fan-out
+        # 旧実装は行ごとの row[0] に dashed を引いていたが、依存関係と無関係な
+        # グルーピング矢印がノイズになり「操作者に矢印が返っている」ように見えていた
+        if trigger_node:
+            entry_types = {"Visualforce", "LWC", "Aura"}
+            entries = [
+                c.get("api_name", "") for c in components
+                if c.get("api_name", "") not in called_by
+                and c.get("type", "") in entry_types
+            ]
+            entries = sorted(entries, key=lambda n: (step_order.get(n, 999), n))
+            for name in entries:
+                g.edge(trigger_node, name,
                        color=C_EDGE, arrowsize="0.7", style="dashed")
         # K-D: callees の明示依存エッジ（grid モードでも描画）
         # VF→Apex 等のコントローラ呼び出しを solid 矢印で描く
@@ -901,18 +919,8 @@ def render_component_diagram(
                        color=C_EDGE, arrowsize="0.7",
                        style="solid", constraint="false")
                 drawn_grid_edges.add((src, callee))
-        # step_order から推論した隣接コンポーネント間を点線エッジで接続
-        comps_by_step = sorted(
-            [n for n in names_ordered if n in step_order],
-            key=lambda n: step_order[n],
-        )
-        for i in range(len(comps_by_step) - 1):
-            src_n, dst_n = comps_by_step[i], comps_by_step[i + 1]
-            if src_n != dst_n and (src_n, dst_n) not in drawn_grid_edges:
-                g.edge(src_n, dst_n,
-                       color=C_EDGE, arrowsize="0.5",
-                       style="dotted", constraint="false")
-                drawn_grid_edges.add((src_n, dst_n))
+        # U-1: step_order 点線は廃止（callees の solid 矢印だけで依存関係は伝わる。
+        # 隣接エッジを追加するとノイズになり、かつ 「矢印が消えた」印象を生む元だった）
     else:
         for comp in components:
             name  = comp.get("api_name", "")
