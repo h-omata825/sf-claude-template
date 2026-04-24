@@ -31,7 +31,7 @@
 | `/sf-design` コマンドの詳細設計ステップ（グループ選択 + sf-detail-design-writer 委譲） | `sf-design-step1` |
 | `/sf-design` コマンドのプログラム設計ステップ（sf-screen-writer + sf-design-writer 委譲） | `sf-design-step2` |
 | `/sf-design` コマンドの機能一覧ステップ（generate_feature_list.py 直接呼び出し） | `sf-design-step3` |
-| `sf-design-step2` から委譲（プログラム設計書・機能一覧 Excel生成） | `sf-design-writer` / `sf-screen-writer` |
+| `sf-design-step2` から委譲（プログラム設計書・機能一覧 Excel生成） | ① `sf-screen-writer`（画面系: LWC/画面フロー/Aura/VF）→ ② `sf-design-writer`（Apex系・機能一覧、①の結果を集約）の**順に両方**委譲 |
 | `/sf-design` コマンド全体から委譲（基本/詳細設計 Excel生成） | `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
