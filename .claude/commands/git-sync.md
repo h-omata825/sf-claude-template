@@ -9,6 +9,11 @@ description: "プロジェクトGitリポジトリとの同期コマンド。プ
 git rev-parse --abbrev-ref HEAD
 ```
 
+取得値が `HEAD` の場合は detached HEAD 状態。以下を報告して終了:
+```
+⚠️ detached HEAD 状態です。ブランチに切り替えてから再実行してください（例: `git checkout main`）
+```
+
 AskUserQuestion で操作を選択:
 
 **質問**: 「何をしますか？」
@@ -43,16 +48,14 @@ git pull origin {Step 0 で取得したブランチ名}
 
 ### 1. 対象ファイルの選択
 
-AskUserQuestion で選択（複数選択可）:
+AskUserQuestion で選択:
 
 **質問**: 「保存するファイルを選択してください」
 
-**選択肢**（multiSelect: true）:
+**選択肢**（multiSelect: false、排他選択）:
 - 全て（docs/ + CLAUDE.md）
 - docs/ のみ
 - CLAUDE.md のみ
-
-「全て」が選択された場合は残りの選択肢を無視して `docs/ CLAUDE.md` を対象とする。
 
 ### 2. 変更確認
 
@@ -66,7 +69,12 @@ git status --short {対象パス...}
 
 ### 3. コミット・push
 
-変更内容（git diff --stat の結果）からコミットメッセージを自動生成する。形式: `{主な変更内容を1行で}` （例: `docs: update catalog`, `chore: update requirements and usecases`）
+変更内容からコミットメッセージを自動生成する。形式は以下に固定:
+
+- **prefix**: 変更が `docs/` のみなら `docs:`、`CLAUDE.md` を含む場合は `chore:`
+- **suffix**: `git diff --stat` から取得した変更ファイル名を `,` 区切りで列挙（先頭ディレクトリは省略、拡張子は残す）
+- 例: `docs: update catalog.md,requirements.md` / `chore: update CLAUDE.md,usecases.md`
+- 60 文字を超える場合は `...` で末尾を短縮
 
 ```bash
 git add {対象パス...}
