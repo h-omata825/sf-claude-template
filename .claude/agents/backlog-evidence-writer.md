@@ -23,7 +23,7 @@ tools:
 `scripts/python/backlog-xlsx/` ディレクトリで以下を実行する:
 
 ```bash
-python create_evidence.py "<folder>" "<issue_id>"
+python create_evidence.py --folder "<folder>" --issue-id "<issue_id>"
 ```
 
 ## 成功基準
