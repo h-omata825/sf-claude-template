@@ -323,7 +323,8 @@ def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
     step_titles = []
     for acc in relevant:
         step_title = comp_to_step.get(acc.get("component", ""), "")
-        if step_title and step_title not in step_titles:
+        # M-5b: 機械付与「を行う」で終わる title は備考欄に混入させない
+        if step_title and step_title not in step_titles and not step_title.endswith('を行う'):
             step_titles.append(step_title)
     return "・".join(step_titles) if step_titles else ""
 
@@ -1492,10 +1493,90 @@ def _infer_trigger_screen(data: dict) -> str:
     return "Salesforce管理画面"
 
 
+def _gentle_clean_role(text: str) -> str:
+    """role 欄専用の軽量クリーニング: SF オブジェクト/フィールド/ジャーゴンを日本語化するが
+    英語 API 識別子の除去はしない（_strip_tech_identifiers を通さない）。
+    API 名が残る場合は LLM 側の問題として許容し、壊れた日本語を作らない。
+    """
+    if not text:
+        return text
+    text = _translate_sf_fields(text)
+    text = _translate_sf_objects(text)
+    text = _translate_jargon(text)
+    text = _re.sub(r'\s{2,}', ' ', text)
+    return text.strip()
+
+
+def _is_desc_fragment(text: str) -> bool:
+    """テキストが断片（主語欠落・助詞始まり・極端に短い）かどうか判定する。"""
+    if not text or len(text) < 6:
+        return True
+    # 助詞・接続詞の残骸で始まる
+    if _re.match(r'^(?:を|が|は|に|で|と|も|へ|の|から|より|ため|ので|により|によって|経由で|を通じて|ため動作)', text):
+        return True
+    # 明らかな記号混じりフラグメント
+    if _re.search(r'(?:→に|→を|／を|\/を|または遷移|および遷移|\s+遷移$)', text):
+        return True
+    return False
+
+
+def _title_from_desc(desc: str, max_len: int = 18) -> str:
+    """description の先頭節から short title を生成する。「を行う」の機械付与をしない。"""
+    if not desc:
+        return ""
+    # 先頭文（。か改行まで）を取る
+    first = _re.split(r'[。\n]', desc)[0].strip()
+    # 末尾の接続形・助詞を整える
+    first = _re.sub(r'(?:して|ており|ていて|たうえで)[^。\n]*$', '', first).strip()
+    first = _re.sub(r'(?:は|が|を|に|で|と|の|も|へ)$', '', first).strip()
+    if not first or len(first) < 3:
+        tokens = _re.findall(r'[ぁ-んァ-ヶ一-龯々ー]{3,}', desc)
+        if tokens:
+            return tokens[0][:max_len]
+        return desc[:max_len]
+    return first[:max_len]
+
+
+# 標準 VF/コンポーネント API 名 → 自然な日本語説明
+_STD_VF_DESCRIPTIONS: dict[str, str] = {
+    "SiteLogin":                      "ポータルログイン画面（Experience Cloud 標準テンプレート）。",
+    "ForgotPassword":                 "パスワードリセット申請画面（Experience Cloud 標準テンプレート）。",
+    "ForgotPasswordConfirm":          "パスワードリセット申請完了画面（Experience Cloud 標準テンプレート）。",
+    "ChangePassword":                 "パスワード変更画面（Experience Cloud 標準テンプレート）。",
+    "FileNotFound":                   "404 エラー画面（Experience Cloud 標準テンプレート）。",
+    "Exception":                      "システム例外エラー画面（Experience Cloud 標準テンプレート）。",
+    "Unauthorized":                   "アクセス権限エラー画面（Experience Cloud 標準テンプレート）。",
+    "InMaintenance":                  "メンテナンス中画面（Experience Cloud 標準テンプレート）。",
+    "BandwidthExceeded":              "帯域超過エラー画面（Experience Cloud 標準テンプレート）。",
+    "AnswersHome":                    "Answers ホーム（旧コミュニティ機能、廃止予定）。",
+    "SiteRegister":                   "ポータルユーザ登録画面（Experience Cloud 標準テンプレート）。",
+    "SiteRegisterConfirm":            "ポータルユーザ登録完了画面（Experience Cloud 標準テンプレート）。",
+    "CommunitiesLogin":               "コミュニティログイン画面（Experience Cloud 標準テンプレート）。",
+    "CommunitiesSelfReg":             "コミュニティ自己登録画面（Experience Cloud 標準テンプレート）。",
+    "CommunitiesSelfRegConfirm":      "コミュニティ自己登録完了画面（Experience Cloud 標準テンプレート）。",
+    "CommunitiesForgotPassword":      "コミュニティパスワードリセット申請画面（Experience Cloud 標準テンプレート）。",
+    "CommunitiesForgotPasswordConfirm": "コミュニティパスワードリセット申請完了画面（Experience Cloud 標準テンプレート）。",
+    "CommunitiesChangePassword":      "コミュニティパスワード変更画面（Experience Cloud 標準テンプレート）。",
+}
+
+# 標準 Apex クラス除外（Apex→Apex callees 解析で誤検知しないためのスキップセット）
+_STD_APEX_SKIP: frozenset[str] = frozenset({
+    "System", "Database", "Schema", "Test", "Math", "UserInfo",
+    "Json", "JSON", "DateTime", "Date", "Http", "HttpRequest", "HttpResponse",
+    "List", "Map", "Set", "Iterator", "PageReference", "ApexPages",
+    "Pattern", "Matcher", "Integer", "Long", "Double", "Decimal",
+    "Boolean", "Blob", "Id", "Time", "Type", "Exception",
+    "SObject", "Trigger", "Limits", "EncodingUtil", "URL",
+    "Crypto", "Auth", "Site", "Network", "UserManagement",
+    "ApexClass", "String", "Object", "Comparable", "Iterable",
+})
+
+
 def _augment_components_with_vf_controllers(data: dict) -> None:
     """VF コンポーネントの controller 属性から Apex クラスを特定し、
     components に未登録のものを自動追加して callees 関係を構築する（防御層）。
     エージェントが Apex を components に含め忘れたケースをカバーする。
+    M-5c: さらに既登録 Apex コンポーネント同士の呼び出し関係（new / static call）も補強する。
     """
     if not _CURRENT_SF_BASE_PATH:
         return
@@ -1560,6 +1641,28 @@ def _augment_components_with_vf_controllers(data: dict) -> None:
 
     data.setdefault("components", []).extend(new_comps)
 
+    # M-5c: Apex → Apex の callees 補強（new ClassName() / ClassName.staticMethod() を検出）
+    all_apis = {c.get("api_name", "") for c in data.get("components", [])}
+    for comp in data.get("components", []):
+        if comp.get("type") not in ("Apex", "ApexClass"):
+            continue
+        api = comp.get("api_name", "")
+        cls_file = classes_dir / f"{api}.cls"
+        if not cls_file.exists():
+            continue
+        try:
+            cls_content = cls_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        # new ClassName(/ static ClassName.method( パターンを拾う
+        new_calls = _re.findall(r'\bnew\s+([A-Z][A-Za-z0-9_]+)\s*[(<]', cls_content)
+        static_calls = _re.findall(r'\b([A-Z][A-Za-z0-9_]+)\.[a-z][A-Za-z0-9_]*\s*\(', cls_content)
+        called = (set(new_calls) | set(static_calls)) - _STD_APEX_SKIP
+        existing_callees = comp.setdefault("callees", [])
+        for cls_name in called:
+            if cls_name in all_apis and cls_name != api and cls_name not in existing_callees:
+                existing_callees.append(cls_name)
+
 
 def _infer_callees(data: dict) -> None:
     """data_flow_overview の「→」連鎖からコンポーネント間呼び出し関係を推論して callees に設定する。"""
@@ -1591,7 +1694,11 @@ def _infer_callees(data: dict) -> None:
     for comp in data.get("components", []):
         name = comp.get("api_name", "")
         if callees_map.get(name):
-            comp["callees"] = callees_map[name]
+            # M-5c: 上書きではなくマージ（_augment 済みの callees を保持）
+            existing = comp.setdefault("callees", [])
+            for callee in callees_map[name]:
+                if callee not in existing:
+                    existing.append(callee)
 
 
 def _build_business_flow(data: dict) -> list[dict]:
@@ -1728,39 +1835,58 @@ def _comp_type_label(comp: dict) -> str:
 
 def _build_process_steps(data: dict) -> list[dict]:
     """components の responsibility から日本語の処理概要 steps を生成する。
-    API名・クラス名・英語技術用語はすべて日本語に変換する。
-    コンポーネント列は種別ラベル（Apexクラス／フロー等）を表示し、クラス名は出さない。
+
+    M-5a: _deep_clean_ja（強い除去）を適用 → 断片なら _STD_VF_DESCRIPTIONS / 型別デフォルト にフォールバック。
+    title は description の先頭節から生成（「を行う」機械付与廃止）。
     """
+    # 型別デフォルト説明（責務が空または断片の場合のフォールバック）
+    _TYPE_DEFAULTS: dict[str, str] = {
+        "Visualforce": "Experience Cloud 標準画面（ポータル用テンプレート）。",
+        "VF": "Experience Cloud 標準画面（ポータル用テンプレート）。",
+        "VisualForce": "Experience Cloud 標準画面（ポータル用テンプレート）。",
+        "Visualforce Page": "Experience Cloud 標準画面（ポータル用テンプレート）。",
+        "Apex": "バックエンド処理を担当する。",
+        "Flow": "自動起動フローが処理を担当する。",
+        "LWC": "ユーザー操作画面を担当する。",
+        "Aura": "ユーザー操作画面を担当する。",
+    }
+
     steps = []
     n_comps = len(data.get("components", []))
     for i, comp in enumerate(data.get("components", []), 1):
         responsibility = comp.get("responsibility", "")
         comp_type = comp.get("type", "Apex")
-
-        # 責務を日本語化（SF オブジェクト名・フィールド名・ジャーゴン→日本語 → Apex用クリーン）
-        resp_j = _translate_sf_fields(_translate_jargon(_translate_sf_objects(responsibility)))
-        desc_main = _clean_tech(resp_j)
-        # トリガータイミング注釈（処理前（新規）/処理後（新規））等を除去
-        desc_main = _re.sub(
-            r'[（(](?:処理前|処理後)（[^）]+）(?:/(?:処理前|処理後)（[^）]+）)*[）)]', '', desc_main
-        ).strip()
-        desc_main = _re.sub(r'\s{2,}', ' ', desc_main)
-
-        title  = _short_title(responsibility) if responsibility else ""
-        branch = None  # 実際の条件内容が取れない場合は空にする
-
-        display_desc = desc_main or title
-
         _raw_api = comp.get("api_name", "")
         comp_name = _re.sub(r'（[^）]+）$', '', _raw_api).strip() or _raw_api
+
+        # 1) 標準 VF 辞書からの固定説明（最優先）
+        desc_main = _STD_VF_DESCRIPTIONS.get(_raw_api, "")
+
+        # 2) LLM responsibility を _deep_clean_ja で処理
+        if not desc_main and responsibility:
+            cleaned = _deep_clean_ja(responsibility)
+            # トリガータイミング注釈（処理前（新規）/処理後（新規））等を除去
+            cleaned = _re.sub(
+                r'[（(](?:処理前|処理後)[（(][^）)]+[）)](?:/(?:処理前|処理後)[（(][^）)]+[）)][）)]?', '', cleaned
+            ).strip()
+            cleaned = _re.sub(r'\s{2,}', ' ', cleaned)
+            if not _is_desc_fragment(cleaned):
+                desc_main = cleaned
+
+        # 3) フォールバック: 型別デフォルト
+        if not desc_main:
+            desc_main = _TYPE_DEFAULTS.get(comp_type, "処理を担当する。")
+
+        # M-5a: title は description の先頭節から生成（「を行う」機械付与廃止）
+        title = _title_from_desc(desc_main)
 
         steps.append({
             "step": i,
             "title": title,
-            "description": display_desc,
+            "description": desc_main,
             "component": comp_name,
             "comp_api_name": _raw_api,
-            "branch": branch,
+            "branch": None,
             "next": [{"to": i + 1}] if i < n_comps else [],
         })
 
@@ -2444,25 +2570,21 @@ def _normalize_schema(data: dict) -> dict:
     _augment_components_with_vf_controllers(data)
 
     # components: responsibility → role（日本語化）& callees 初期化
-    # G-extra: キャッシュ済 role も英語残留を一掃する（Class名・メソッド名・__c.field 等）
+    # M-5d: _gentle_clean_role（translate 系のみ、識別子削除しない）で role の破損を防ぐ
     for comp in data.get("components", []):
         if not comp.get("role"):
-            comp["role"] = _deep_clean_ja(comp.get("responsibility", ""))
+            comp["role"] = _gentle_clean_role(comp.get("responsibility", ""))
         else:
-            comp["role"] = _deep_clean_ja(comp["role"])
+            comp["role"] = _gentle_clean_role(comp["role"])
         if "callees" not in comp:
             comp["callees"] = []
 
-    # callees を data_flow_overview から推論
-    if not any(comp.get("callees") for comp in data.get("components", [])):
-        _infer_callees(data)
+    # M-5c: callees を data_flow_overview から補強（ガード撤去: 常に実行してマージ）
+    _infer_callees(data)
 
-    # process_steps: components から生成 or 既存をクリーニング
-    if not data.get("process_steps"):
-        data["process_steps"] = _build_process_steps(data)
-    else:
-        # 既存 process_steps は API 名・メソッド呼び出し等を除去して日本語化する
-        _normalize_process_steps(data["process_steps"])
+    # M-5a: process_steps は常に _build_process_steps で作り直す（キャッシュ破棄）
+    # キャッシュに Phase H 以前の断片が残留しているため、責務から再構築する
+    data["process_steps"] = _build_process_steps(data)
 
     # business_flow: 業務レベルフロー生成 or 既存をクリーニング
     _bf = data.get("business_flow") or []
