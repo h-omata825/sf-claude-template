@@ -97,17 +97,22 @@ if [ -d "$TMP_DIR/scripts" ]; then
     cp -r "$TMP_DIR/scripts/." "$PROJECT_PATH/scripts/"
 fi
 
-# 参加モードのみ: プロジェクトリポジトリの git 履歴を保持
+# 参加モードのみ: プロジェクトリポジトリの git 履歴を保持し、.gitignore を復元
 if [ -n "$PROJECT_REPO_URL" ]; then
     rm -rf "$PROJECT_PATH/.git" 2>/dev/null || true
     mv "$TMP_DIR/.git" "$PROJECT_PATH/.git"
+    # SFDXが生成した.gitignoreをプロジェクトリポジトリのものに戻す
+    git -C "$PROJECT_PATH" checkout -- .gitignore 2>/dev/null || true
 fi
 
-{
-    echo ""
-    echo "# Claude Code（トークン入り個人設定）"
-    echo ".mcp.json"
-} >> "$PROJECT_PATH/.gitignore"
+# .mcp.json が未登録なら追記
+if ! grep -qF ".mcp.json" "$PROJECT_PATH/.gitignore" 2>/dev/null; then
+    {
+        echo ""
+        echo "# Claude Code（トークン入り個人設定）"
+        echo ".mcp.json"
+    } >> "$PROJECT_PATH/.gitignore"
+fi
 
 rm -rf "$TMP_DIR"
 ok "テンプレート配置完了"
