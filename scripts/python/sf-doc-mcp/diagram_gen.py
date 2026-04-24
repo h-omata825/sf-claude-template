@@ -799,9 +799,12 @@ def render_component_diagram(
             trigger_type = "Trigger"
         elif type_counts.get("Batch", 0):
             trigger_type = "Batch"
-        elif (type_counts.get("Flow", 0) + type_counts.get("画面フロー", 0)) >= n_comp * 0.5:
+        elif (type_counts.get("Flow", 0) + type_counts.get("画面フロー", 0)) >= n_comp * 0.3:
             trigger_type = "Flow"
-        # else: 不明 → trigger_node 省略
+        elif n_comp > 0:
+            # X-4c fallback: UI もバッチも Trigger もないが components はある（Apex+Flow 混在 FG 等）
+            # "Entry" ラベルで「処理起点」として表示する
+            trigger_type = "Entry"
 
     _trigger_label: str = ""
     if trigger_type:
