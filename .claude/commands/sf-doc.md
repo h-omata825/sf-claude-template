@@ -81,10 +81,11 @@ except Exception:
 - label: "前回: {last_author}"、description: "前回と同じ作成者名を使用"
 - label: "スキップ"、description: "作成者名なし"
 
-**前回値がない場合:** AskUserQuestion で提示（1択+Other自動）:
-- label: "スキップ"、description: "作成者名なし"
-
-Other が選ばれた場合はチャットで入力してもらう。「スキップ」が選ばれた場合は空文字として扱う。結果を `{author}` として保持。
+**前回値がない場合:** チャットで直接聞く:
+```
+作成者名を入力してください（不要な場合は「スキップ」と返答）:
+```
+「スキップ」と返答された場合は空文字として扱う。結果を `{author}` として保持。
 
 確定後、直ちに以下を実行して値を保持する（後続でコンテキスト汚染が起きても正確な値が残るようにするため）:
 ```bash
@@ -93,10 +94,11 @@ python -c "import pathlib; p=pathlib.Path('docs/.sf'); p.mkdir(parents=True, exi
 
 ### 出力先フォルダ
 
-**前回値がある場合:** AskUserQuestion で提示（1択+Other自動）:
+**前回値がある場合:** AskUserQuestion で提示（2択+Other自動）:
 - label: "前回: {last_output_dir}"、description: "前回と同じフォルダを使用"
+- label: "別のフォルダを指定する"、description: "新しいパスをチャットで入力する"
 
-Other が選ばれた場合はチャットで入力してもらう。
+「別のフォルダを指定する」または Other が選ばれた場合はチャットで入力してもらう。
 
 **前回値がない場合:** チャットで直接聞く:
 ```

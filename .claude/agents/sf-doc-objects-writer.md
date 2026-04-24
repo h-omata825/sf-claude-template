@@ -104,9 +104,10 @@ if prof.exists():
 "
 ```
 
-**target-org が取得できた場合:** AskUserQuestion で提示（1択＋Other自動）:
+**target-org が取得できた場合:** AskUserQuestion で提示（2択＋Other自動）:
 - システム名が取得できた場合: label: "{alias}（{system_name}）"、description: "このプロジェクトのデフォルト組織（.sf/config.json）"
 - 取得できなかった場合: label: "{alias}（このプロジェクトのデフォルト組織）"
+- label: "別のエイリアスを使用"、description: "別の認証済みエイリアスをチャットで入力する"
 
 > **重要**: 選択結果を `SF_ALIAS` として使用する際は、`（` より前の alias 部分だけを取り出す。`（{system_name}）` はラベル表示用であり、SF_ALIAS に含めない。
 
@@ -156,11 +157,12 @@ if m:
 "
 ```
 
-AskUserQuestion で提示（1択＋Other自動）:
+AskUserQuestion で提示（2択＋Other自動）:
 - 取得/読込できた場合: label: "{値}（前回/自動取得）"、description: "そのまま使用する"
 - 取得できなかった場合: label: "スキップ"、description: "システム名称なし"
+- label: "別の値を入力する"、description: "新しいシステム名称をチャットで入力する"
 
-Other が選ばれた場合はチャットで入力してもらう。
+「別の値を入力する」または Other が選ばれた場合はチャットで入力してもらう。
 
 > **重要**: `システム名称` として保持する値は、label から `（前回/自動取得）` を除去した **元の値だけ**。ラベルの付記文字列は UI 表示用であり、資料（xlsx の表紙・_meta シート）には含めない。
 

@@ -56,7 +56,7 @@ else:
 
 ### AskUserQuestion で SF_ALIAS を確定
 
-**detected_alias がある場合** — AskUserQuestion で提示（1択＋Other自動）:
+**detected_alias がある場合** — AskUserQuestion で提示（2択＋Other自動）:
 - label: `{detected_alias}`、description: "config.json の target-org を使用"
 - label: "スキップ（認証済みエイリアスを直接入力）"
 

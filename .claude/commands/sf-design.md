@@ -93,10 +93,11 @@ except Exception:
 - label: "前回: {last_author}"、description: "前回と同じ作成者名を使用"
 - label: "スキップ"、description: "作成者名なし"
 
-**前回値がない場合:** AskUserQuestion で提示（1択+Other自動）:
-- label: "スキップ"、description: "作成者名なし"
-
-Other が選ばれた場合はチャットで入力してもらう。「スキップ」が選ばれた場合は空文字として扱う。
+**前回値がない場合:** チャットで直接聞く:
+```
+作成者名を入力してください（不要な場合は「スキップ」と返答）:
+```
+「スキップ」と返答された場合は空文字として扱う。
 
 確定後、直ちに以下を実行して値を保持する（後続でコンテキスト汚染が起きても正確な値が残るようにするため）:
 ```bash
@@ -105,15 +106,16 @@ python -c "import pathlib; p = pathlib.Path('docs/.sf'); p.mkdir(parents=True, e
 
 ### 出力先フォルダ
 
-**前回値がある場合:** AskUserQuestion で提示（1択+Other自動）:
+**前回値がある場合:** AskUserQuestion で提示（2択+Other自動）:
 - label: "前回: {last_output_dir}"、description: "前回と同じフォルダを使用"
+- label: "別のフォルダを指定する"、description: "新しいパスをチャットで入力する"
 
 **前回値がない場合:** チャットで直接聞く:
 ```
 資料の出力先フォルダのパスを入力してください（このフォルダ内に 02_詳細設計/ 03_プログラム設計/ が作成されます）:
 ```
 
-Other が選ばれた場合もチャットで入力してもらう。確定した値を `output_dir` として控える。
+「別のフォルダを指定する」または Other が選ばれた場合はチャットで入力してもらう。確定した値を `output_dir` として控える。
 
 確定後、直ちに以下を実行して値を保持する:
 ```bash
@@ -122,7 +124,7 @@ python -c "import pathlib; p = pathlib.Path('docs/.sf'); p.mkdir(parents=True, e
 
 ### バージョン種別
 
-AskUserQuestion で選択する（1択＋Other自動）:
+AskUserQuestion で選択する（3択＋Other自動）:
 - label: "minor"、description: "機能追加・仕様変更（デフォルト）"
 - label: "patch"、description: "軽微な修正・誤字脱字の修正"
 - label: "major"、description: "大規模な変更・後方互換性のない改訂"
