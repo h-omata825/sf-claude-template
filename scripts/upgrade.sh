@@ -123,6 +123,15 @@ if [ -d "$TMP_DIR/scripts" ]; then
     done < <(find "$TMP_DIR/scripts" -type f)
 fi
 
+# scripts/ の削除検出（プロジェクト側にあってテンプレートに無いファイル）
+if [ -d "scripts" ] && [ -d "$TMP_DIR/scripts" ]; then
+    while IFS= read -r f; do
+        if [ ! -f "$TMP_DIR/$f" ]; then
+            DELETIONS+=("$f（テンプレートから削除済み）")
+        fi
+    done < <(find "scripts" -type f)
+fi
+
 # --- 結果判定 ---
 TOTAL=$(( ${#CHANGES[@]} + ${#ADDITIONS[@]} + ${#DELETIONS[@]} ))
 
@@ -204,14 +213,25 @@ if [ -d "$TMP_DIR/scripts" ]; then
     done < <(find "$TMP_DIR/scripts" -type f)
 fi
 
-# --- 削除対象の処理（自動削除しない・警告のみ） ---
+# --- 削除対象の処理（テンプレートから削除されたファイルを自動削除） ---
 if [ ${#DELETIONS[@]} -gt 0 ]; then
     echo ""
-    warn "以下のファイルはテンプレートに存在しません（プロジェクト固有ファイルの可能性）:"
+    info "テンプレートから削除されたファイルをプロジェクトからも削除します:"
+    INSIDE_GIT=false
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        INSIDE_GIT=true
+    fi
     for item in "${DELETIONS[@]}"; do
-        echo "    - $item"
+        path="${item%（テンプレートから削除済み）}"
+        if [ -f "$path" ]; then
+            if [ "$INSIDE_GIT" = true ]; then
+                git rm -f "$path" >/dev/null 2>&1 || rm -f "$path"
+            else
+                rm -f "$path"
+            fi
+            ok "削除: $path"
+        fi
     done
-    warn "これらは自動削除されません。不要であれば手動で削除してください。"
 fi
 
 # upgrade.sh 自身を最後に上書き（実行完了後に安全に置き換え）
