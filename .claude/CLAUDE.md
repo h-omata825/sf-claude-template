@@ -27,6 +27,7 @@
 | `/sf-memory` カテゴリ4委譲（Apex・Flow・LWC・Batch等のコンポーネント設計書生成） | `sf-analyst-cat4` |
 | `/sf-memory` カテゴリ5委譲（業務機能グループ定義 feature_groups.yml の生成） | `sf-analyst-cat5` |
 | `/sf-memory` 全カテゴリ完了後の2周目横断補完（用語統一・矛盾解消・相互参照補完） | `sf-org-analyst` |
+| タスク開始前に docs/ から関連コンテキストを選択的に抽出（Phase 0 として各エージェントから委譲） | `sf-context-loader` |
 | `/sf-design` コマンドの詳細設計ステップ（グループ選択 + sf-detail-design-writer 委譲） | `sf-design-step1` |
 | `/sf-design` コマンドのプログラム設計ステップ（sf-screen-writer + sf-design-writer 委譲） | `sf-design-step2` |
 | `/sf-design` コマンドの機能一覧ステップ（generate_feature_list.py 直接呼び出し） | `sf-design-step3` |
@@ -340,6 +341,33 @@ sf-analyst-cat1〜cat5 が共通して守る原則。各カテゴリ固有の品
 SF_CLIENT_BIN="$(dirname "$(where sf | head -1)")/../client/bin"
 "$SF_CLIENT_BIN/node.exe" "$SF_CLIENT_BIN/run.js" <サブコマンド> <引数>
 ```
+
+---
+
+## コンテキスト読込パターン（sf-context-loader）
+
+新規エージェントを追加する際は、以下のパターンに従って **Phase 0** を冒頭に設ける。
+
+```markdown
+## Phase 0: SFコンテキスト読込（sf-context-loader 経由）
+
+タスク開始前に sf-context-loader を呼び出し、関連 docs の要約を取得する。
+
+\`\`\`
+task_description: 「{ユーザー指示 / タスク概要}」
+project_dir: {プロジェクトルートパス。不明な場合はカレントディレクトリ}
+focus_hints: []
+\`\`\`
+
+- **「該当コンテキストなし」が返った場合**: スキップして次フェーズへ（docs/ 未整備または SF 無関係）
+- **関連コンテキストが返った場合**: 関連オブジェクト・CMP・UC・注意点を以降の作業の判断材料として保持する
+
+---
+```
+
+**適用基準**: SFプロジェクトの状態（オブジェクト定義・設計書・要件・業務フロー）を知っていれば精度が上がるエージェントに設ける。汎用調査・ファイル生成のみのエージェントは不要。
+
+**SF 固有タスクとは限らないエージェント**（assistant 等）は、「SF 固有キーワードを含む場合のみ実行」と条件付きで記述する。
 
 ---
 
