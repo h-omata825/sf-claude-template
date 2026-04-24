@@ -98,40 +98,12 @@ if [[ ! "$retrieve" =~ ^[yY] ]]; then
     exit 0
 fi
 
-# --- APIバージョン取得 ---
-API_VERSION=$(sf org display -o "$ALIAS" --json 2>/dev/null | grep -o '"apiVersion":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "62.0")
-info "APIバージョン: $API_VERSION"
-
 # --- docs/logs フォルダの作成 ---
 mkdir -p docs/logs
 info "docs/logs/ フォルダを作成しました"
 
-# --- 標準セットの package.xml を生成 ---
-mkdir -p manifest
-cat > manifest/package.xml << XMLEOF
-<?xml version="1.0" encoding="UTF-8"?>
-<Package xmlns="http://soap.sforce.com/2006/04/metadata">
-    <types><members>*</members><name>ApexClass</name></types>
-    <types><members>*</members><name>ApexTrigger</name></types>
-    <types><members>*</members><name>ApexPage</name></types>
-    <types><members>*</members><name>Flow</name></types>
-    <types><members>*</members><name>CustomObject</name></types>
-    <types><members>*</members><name>CustomTab</name></types>
-    <types><members>*</members><name>CustomLabel</name></types>
-    <types><members>*</members><name>CustomMetadata</name></types>
-    <types><members>*</members><name>LightningComponentBundle</name></types>
-    <types><members>*</members><name>FlexiPage</name></types>
-    <types><members>*</members><name>Layout</name></types>
-    <types><members>*</members><name>PermissionSet</name></types>
-    <types><members>*</members><name>PermissionSetGroup</name></types>
-    <types><members>*</members><name>Profile</name></types>
-    <types><members>*</members><name>StaticResource</name></types>
-    <types><members>*</members><name>EmailTemplate</name></types>
-    <version>${API_VERSION}</version>
-</Package>
-XMLEOF
-
-info "package.xml を生成しました (manifest/package.xml)"
+# --- 標準セットの package.xml を生成（sf-retrieve.sh に委譲してリスト一元管理） ---
+bash scripts/sf-retrieve.sh generate-only standard
 
 # --- メタデータ取得 ---
 info "メタデータを取得中..."
@@ -149,5 +121,5 @@ echo ""
 echo "  次のステップ:"
 echo "    1. CLAUDE.md を編集してプロジェクト固有情報を記入"
 echo "    2. /setup-mcp でGitHub連携を設定"
-echo "    3. /sf-memory で組織を解析して資料を自動生成"
+echo "    3. /sf-memory で組織情報を docs/ に記録する（カテゴリを対話的に選択）"
 echo ""

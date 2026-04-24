@@ -43,6 +43,7 @@ bash scripts/sf-retrieve.sh all
 
 ```bash
 # 例: Apex クラス MyClass・フロー MyFlow・オブジェクト Account を指定した場合
+mkdir -p manifest
 cat > manifest/package.xml << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
@@ -76,6 +77,12 @@ sf project retrieve start --manifest manifest/package.xml
 | オブジェクト・項目 | `CustomObject` |
 | 権限セット | `PermissionSet` |
 | カスタムメタデータ型 | `CustomMetadata` |
+| 入力規則 | `ValidationRule` |
+| レイアウト | `Layout` |
+| Lightning ページ | `FlexiPage` |
+| 静的リソース | `StaticResource` |
+| メールテンプレート | `EmailTemplate` |
+| プロファイル | `Profile` |
 
 ---
 

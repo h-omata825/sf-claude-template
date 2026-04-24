@@ -104,6 +104,14 @@ generate_all() {
 retrieve() {
     [ -f "manifest/package.xml" ] || error "manifest/package.xml が見つかりません。先に生成してください"
 
+    # 接続中の組織を確認（意図しない組織からの取得を防ぐ）
+    local target_org
+    target_org=$(sf config get target-org --json 2>/dev/null | grep -oP '"value"\s*:\s*"\K[^"]+' | head -1 || echo "")
+    if [ -z "$target_org" ]; then
+        error "target-org が設定されていません。sf config set target-org <alias> で設定してください"
+    fi
+    info "接続中の組織: ${target_org}"
+
     # 未コミットの変更を確認
     if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         local changes
@@ -118,7 +126,7 @@ retrieve() {
     fi
 
     info "メタデータを取得中..."
-    sf project retrieve start --manifest manifest/package.xml
+    sf project retrieve start --manifest manifest/package.xml --target-org "$target_org"
     ok "メタデータ取得完了 → force-app/"
 }
 

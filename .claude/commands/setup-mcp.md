@@ -25,7 +25,7 @@ bash scripts/setup-mcp.sh <選択したMCP>
 - `backlog` 選択: `bash scripts/setup-mcp.sh backlog`
 - `show` 選択: `bash scripts/setup-mcp.sh show`
 
-スクリプトがドメイン・トークン等を対話形式で入力させる。
+show 以外の場合、スクリプトがドメイン・トークン等を対話形式で入力させる。show は現在の設定を表示して即時終了する。
 
 ## 完了後
 
