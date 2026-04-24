@@ -29,7 +29,7 @@ sf-design コマンドから委譲されて実行する。グループ確定 →
 | `output_dir` | 出力先フォルダ（基準。`{output_dir}/02_詳細設計/` に生成される） |
 | `author` | 作成者名 |
 | `project_name` | プロジェクト名 |
-| `version_increment` | `"minor"` / `"patch"` / `"major"` |
+| `version_increment` | `"minor"` / `"major"` |
 | `selected_steps` | 選択された種別リスト（例: `["詳細設計", "プログラム設計"]`） |
 
 ---

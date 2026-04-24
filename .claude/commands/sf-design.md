@@ -15,7 +15,7 @@ Salesforce プロジェクトの設計書を生成します。
 - Python インラインコード内、**および AskUserQuestion の label / description 内**の `{project_dir}` `{output_dir}` `{author}` `{last_author}` `{last_output_dir}` `{version_increment}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash / AskUserQuestion に渡す前に、値の種別に応じて以下の規則で置換する:
   - **パス値** (`{project_dir}` / `{output_dir}` 等): Windows パスの `\` はすべて `/` に置換し、末尾の `/` は除去する（例: `C:\work\` → `C:/work`）。raw string 末尾 `\` による SyntaxError を回避するため。`pathlib.Path` は Windows でも forward slash を正しく解釈する。
   - **任意文字列値** (`{author}` 等): シングルクォートで囲まれた箇所 (`'{author}'`) への埋め込み時は、値内の `'` を `\'` にエスケープする（例: `O'Brien` → `O\'Brien`）。
-  - **列挙値** (`{version_increment}`): `minor` / `patch` / `major` 以外が指定された場合は `minor` にフォールバックし、ユーザーに「未知の値のためminorに置換」と警告する。
+  - **列挙値** (`{version_increment}`): `minor` / `major` 以外が指定された場合は `minor` にフォールバックし、ユーザーに「未知の値のためminorに置換」と警告する。
 - 同じ規則は `.claude/agents/sf-design-step*.md` 等の連鎖エージェントでも適用される。委譲時に渡す値も上記規則で正規化済みの状態にすること。
 
 ---
@@ -124,9 +124,8 @@ python -c "import pathlib; p = pathlib.Path('docs/.sf'); p.mkdir(parents=True, e
 
 ### バージョン種別
 
-AskUserQuestion で選択する（3択＋Other自動）:
-- label: "minor"、description: "機能追加・仕様変更（デフォルト）"
-- label: "patch"、description: "軽微な修正・誤字脱字の修正"
+AskUserQuestion で選択する（2択＋Other自動）:
+- label: "minor"、description: "機能追加・仕様変更・軽微な修正（デフォルト）"
 - label: "major"、description: "大規模な変更・後方互換性のない改訂"
 
 選択値を **`version_increment`** として保持する。Other が選ばれた場合はチャットで入力してもらう。
