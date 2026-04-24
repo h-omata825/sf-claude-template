@@ -19,12 +19,14 @@ import sys
 
 try:
     import openpyxl
-    from openpyxl.styles import Alignment
+    from openpyxl.styles import Alignment, PatternFill
 except ImportError:
     print("[ERROR] openpyxl がインストールされていません。`pip install openpyxl` を実行してください。")
     sys.exit(1)
 
 WRAP = Alignment(wrap_text=True, vertical="top")
+STRIPE_A = PatternFill("solid", fgColor="FFFFFF")  # 奇数行
+STRIPE_B = PatternFill("solid", fgColor="F2F7FB")  # 偶数行（薄青）
 
 
 def find_next_empty_row(ws, col=1, start_row=1):
@@ -63,13 +65,12 @@ def cmd_timeline(args, wb):
     # No 列は現在の行数から算出
     no = next_row - data_start + 1
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    fill = STRIPE_A if (no % 2 == 1) else STRIPE_B
 
-    ws.cell(row=next_row, column=1, value=no).alignment = WRAP
-    ws.cell(row=next_row, column=2, value=now).alignment = WRAP
-    ws.cell(row=next_row, column=3, value=args.source).alignment = WRAP
-    ws.cell(row=next_row, column=4, value=args.phase).alignment = WRAP
-    ws.cell(row=next_row, column=5, value=args.content).alignment = WRAP
-    ws.cell(row=next_row, column=6, value=args.reason or "").alignment = WRAP
+    for col, value in enumerate([no, now, args.source, args.phase, args.content, args.reason or ""], start=1):
+        cell = ws.cell(row=next_row, column=col, value=value)
+        cell.alignment = WRAP
+        cell.fill = fill
 
     print(f"タイムライン追加: 行{next_row} / {now} / {args.phase} / {args.content[:30]}...")
 
