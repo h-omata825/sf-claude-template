@@ -983,7 +983,17 @@ def render_component_diagram(
             primaries_ordered = [n for n in primary_names if n in primaries_set]
             primaries_ordered = sorted(primaries_ordered,
                                        key=lambda n: (step_order.get(n, 999), n))
-            for name in primaries_ordered:
+            # X-4c: UI（VF/LWC/Aura）が一つも無い FG では Apex/Flow/Trigger を fan-out 対象にする
+            if not primaries_ordered:
+                fallback_types = {"Apex", "Flow", "Trigger", "Batch", "Schedulable",
+                                  "AutoLaunchedFlow", "ScheduledFlow"}
+                primaries_ordered = sorted(
+                    [c.get("api_name", "") for c in components
+                     if c.get("type", "") in fallback_types
+                     and c.get("api_name", "") not in standards_set],
+                    key=lambda n: (step_order.get(n, 999), n)
+                )[:6]  # 上位 6 件に限定してごちゃつきを防ぐ
+            for name in primaries_ordered[:6]:
                 g.edge(trigger_node, name,
                        color=C_EDGE, arrowsize="0.7", style="dashed")
             # 標準テンプレ群 → 1 本の dashed（cluster をヘッドに）

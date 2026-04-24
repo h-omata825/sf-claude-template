@@ -327,7 +327,19 @@ def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
         # M-5b: 機械付与「を行う」で終わる title は備考欄に混入させない
         if step_title and step_title not in step_titles and not step_title.endswith('を行う'):
             step_titles.append(step_title)
-    return "・".join(step_titles) if step_titles else ""
+    if step_titles:
+        return "・".join(step_titles)
+
+    # X-4e: process_steps に対応タイトルがない場合は object_access の操作種別から備考を構築
+    ops_ja_parts: list[str] = []
+    ops_seen: set[str] = set()
+    for acc in relevant:
+        op = acc.get("operation", "")
+        op_ja = _OP_JA.get(op, "")
+        if op_ja and op_ja not in ops_seen:
+            ops_seen.add(op_ja)
+            ops_ja_parts.append(op_ja)
+    return "・".join(ops_ja_parts) if ops_ja_parts else ""
 
 
 def fill_target_objects(ws, data: dict, changed_obj_keys: set,
@@ -416,8 +428,8 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # Q-3 (image3 視認性向上): max_w/max_h を拡大してズームなしで読めるサイズに
-        _embed_image(ws, png_path, img_anchor, max_w=2100, max_h=1400)
+        # X-4a: 幅律速 FG (アスペクト < 3) で過大にならないよう max_w を縮小
+        _embed_image(ws, png_path, img_anchor, max_w=1400, max_h=1200)
 
 
 def _estimate_row_height(text: str, chars_per_line: int = 34,
@@ -472,8 +484,8 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # O-3⑤: 処理フロー図は max_w/max_h を拡大して視認性向上
-        _embed_image(ws, png_path, img_anchor, max_w=1600, max_h=1200)
+        # X-4a: FG-001 のような横長 PNG で幅律速化するのを抑える
+        _embed_image(ws, png_path, img_anchor, max_w=1280, max_h=1100)
 
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
@@ -1738,6 +1750,69 @@ def _augment_components_with_vf_controllers(data: dict) -> None:
             if cls_name in all_apis and cls_name != api and cls_name not in existing_callees:
                 existing_callees.append(cls_name)
 
+    # X-4b: Flow → Apex/Flow の callees 補強（Flow XML の actionCalls / subflows を解析）
+    flows_dir = Path(_CURRENT_SF_BASE_PATH) / "force-app/main/default/flows"
+    all_apis_now = {c.get("api_name", "") for c in data.get("components", [])}
+    for comp in data.get("components", []):
+        comp_type = comp.get("type", "")
+        if comp_type not in ("Flow", "AutoLaunchedFlow", "ScheduledFlow", "RecordTriggeredFlow"):
+            continue
+        api = comp.get("api_name", "")
+        # .flow-meta.xml 検索（複数の命名パターンに対応）
+        flow_file = None
+        for candidate in [f"{api}.flow-meta.xml", f"{api}.flow"]:
+            p = flows_dir / candidate
+            if p.exists():
+                flow_file = p
+                break
+        if flow_file is None:
+            continue
+        try:
+            flow_content = flow_file.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        existing_callees = comp.setdefault("callees", [])
+        # <actionCalls> の Apex action
+        for m in _re.finditer(
+            r'<actionType>\s*apex\s*</actionType>.*?<actionName>\s*([A-Za-z][A-Za-z0-9_]*)\s*</actionName>',
+            flow_content, _re.DOTALL
+        ):
+            cls_name = m.group(1)
+            if cls_name in all_apis_now and cls_name != api and cls_name not in existing_callees:
+                existing_callees.append(cls_name)
+        # <subflows> の呼び出し先フロー
+        for m in _re.finditer(r'<flowName>\s*([A-Za-z][A-Za-z0-9_]*)\s*</flowName>', flow_content):
+            sub_name = m.group(1)
+            if sub_name in all_apis_now and sub_name != api and sub_name not in existing_callees:
+                existing_callees.append(sub_name)
+
+    # X-4b: Trigger → Apex の callees 補強（Trigger ファイルを読んで Apex 呼び出しを検出）
+    triggers_dir = Path(_CURRENT_SF_BASE_PATH) / "force-app/main/default/triggers"
+    if triggers_dir.exists():
+        all_apis_now = {c.get("api_name", "") for c in data.get("components", [])}
+        for comp in data.get("components", []):
+            comp_type = comp.get("type", "")
+            if comp_type not in ("Trigger", "ApexTrigger"):
+                continue
+            api = comp.get("api_name", "")
+            trig_file = triggers_dir / f"{api}.trigger"
+            if not trig_file.exists():
+                # type が Flow だが .trigger ファイルが実在するケース（type 誤判定の補正）
+                trig_file = triggers_dir / f"{api}.trigger"
+                if not trig_file.exists():
+                    continue
+            try:
+                trig_content = trig_file.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            new_calls = _re.findall(r'\bnew\s+([A-Z][A-Za-z0-9_]+)\s*[(<]', trig_content)
+            static_calls = _re.findall(r'\b([A-Z][A-Za-z0-9_]+)\.[a-z][A-Za-z0-9_]*\s*\(', trig_content)
+            called = (set(new_calls) | set(static_calls)) - _STD_APEX_SKIP
+            existing_callees = comp.setdefault("callees", [])
+            for cls_name in called:
+                if cls_name in all_apis_now and cls_name != api and cls_name not in existing_callees:
+                    existing_callees.append(cls_name)
+
 
 def _infer_callees(data: dict) -> None:
     """data_flow_overview の「→」連鎖からコンポーネント間呼び出し関係を推論して callees に設定する。"""
@@ -2629,10 +2704,18 @@ def _enrich_related_object_fields(data: dict) -> None:
                 fields.append({"api_name": fapi, "label": label, "access": op_key, "note": ""})
 
         if not fields:
-            # メタデータからも取れなければ代表ラベルで1行入れる
-            label = "（レコード新規登録）" if flags.get("INSERT") and not flags.get("R") \
-                    else "（対象項目は別途設計書を参照）"
-            fields = [{"api_name": "—", "label": label, "access": op_key, "note": ""}]
+            # X-4d: プレースホルダ注入を廃止。std fallback → label dict → 空配列の順に試す
+            std_fields = _STD_OBJ_FIELDS_FALLBACK.get(obj_api)
+            if std_fields:
+                fields = [dict(f, access=op_key) for f in std_fields]
+            else:
+                labels = _SF_FIELD_LABELS.get(obj_api, {})
+                if labels:
+                    picks = [(k, v) for k, v in labels.items()
+                             if k == "Name" or k.endswith("__c")][:8]
+                    fields = [{"api_name": k, "label": v, "access": op_key, "note": ""}
+                              for k, v in picks]
+                # labels も空なら fields=[] のまま（xlsx 側が行スキップ）
 
         obj["fields"] = fields
         if op_ja and not obj.get("access_ja"):
