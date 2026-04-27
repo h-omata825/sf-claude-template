@@ -75,51 +75,7 @@ focus_hints: []
 
 ## Apexテストクラス品質基準
 
-```apex
-@isTest
-private class AccountServiceTest {
-
-    @TestSetup
-    static void setup() {
-        // テストデータは @TestSetup で一元管理
-        insert new Account(Name = 'Test Account', Industry = 'Technology');
-    }
-
-    @isTest
-    static void testNormalCase() {
-        Account acc = [SELECT Id FROM Account LIMIT 1];
-        Test.startTest();
-        AccountService.activate(acc.Id);
-        Test.stopTest();
-        Account result = [SELECT Status__c FROM Account WHERE Id = :acc.Id];
-        System.assertEquals('Active', result.Status__c, '正常ケース: ステータスがActiveになること');
-    }
-
-    @isTest
-    static void testBulkCase() {
-        // バルクテスト: 200件以上で検証
-        List<Account> bulk = new List<Account>();
-        for (Integer i = 0; i < 200; i++) {
-            bulk.add(new Account(Name = 'Bulk ' + i));
-        }
-        insert bulk;
-        Test.startTest();
-        AccountService.activateBulk(bulk);
-        Test.stopTest();
-        System.assertEquals(200, [SELECT COUNT() FROM Account WHERE Status__c = 'Active' AND Name LIKE 'Bulk%']);
-    }
-
-    @isTest
-    static void testErrorCase() {
-        try {
-            AccountService.activate(null);
-            System.assert(false, '例外が発生するはずが発生しなかった');
-        } catch (AccountService.ServiceException e) {
-            System.assert(e.getMessage().contains('必須'), '期待するエラーメッセージであること');
-        }
-    }
-}
-```
+サンプル（@TestSetup・正常系・バルク・異常系の網羅例）: [.claude/templates/qa/apex-test-class.md](../templates/qa/apex-test-class.md)
 
 **チェックリスト:**
 - [ ] `@TestSetup` でテストデータを作成している
@@ -133,33 +89,7 @@ private class AccountServiceTest {
 
 ## バグ報告書形式
 
-```markdown
-## バグ報告書
-
-**バグID**: BUG-001
-**報告日**: YYYY-MM-DD
-**報告者**:
-**緊急度**: Critical / High / Medium / Low
-**環境**: 本番 / ステージング / 開発
-
-### 概要
-（一文で説明）
-
-### 再現手順
-1.
-2.
-3.
-
-### 期待結果
-
-### 実際の結果
-
-### 影響範囲
-（影響するユーザー・機能・データ）
-
-### 添付
-（スクリーンショット・ログ・エラーメッセージ）
-```
+テンプレート: [.claude/templates/qa/bug-report.md](../templates/qa/bug-report.md) — `docs/test/bugs/BUG-XXX.md` にコピーして記入する
 
 ---
 
@@ -271,96 +201,17 @@ docs/test/
     └── BUG-XXX.md       # バグ報告書（バグごと）
 ```
 
-### テスト計画書テンプレート（test-plan.md）
+### テスト計画書テンプレート
 
-```markdown
-# テスト計画書
+テンプレート: [.claude/templates/qa/test-plan.md](../templates/qa/test-plan.md) — `docs/test/test-plan.md` にコピーして記入する
 
-**バージョン**: v1.0 | **作成日**: YYYY-MM-DD | **対象リリース**:
+### 回帰テスト結果テンプレート
 
-## テストスコープ
-- **対象機能**: （実装された機能一覧）
-- **対象外**: （テストしない機能・理由）
+テンプレート: [.claude/templates/qa/regression.md](../templates/qa/regression.md) — `docs/test/regression/YYYY-MM-DD.md` にコピーして記入する
 
-## テスト戦略
-| テスト種別 | 担当 | 環境 | 完了基準 |
-|---|---|---|---|
-| 単体テスト（Apex） | 開発者 | Developer Sandbox | カバレッジ90%以上・全テストパス |
-| 結合テスト | 開発者/QA | Full Sandbox | 全テストケース合格 |
-| 回帰テスト | 開発者 | Full Sandbox | RunLocalTests 100%パス |
-| UAT | ユーザー | Full Sandbox | 合格基準シートの全項目OK |
+### UATシナリオテンプレート
 
-## テストデータ方針
-- テストデータは本番データを使用しない
-- データ作成手順: （Data Loaderでインポート / 手動作成 / 匿名Apexで生成）
-
-## リスクと対策
-| リスク | 影響 | 対策 |
-|---|---|---|
-| | | |
-
-## スケジュール
-| フェーズ | 開始 | 終了 | 担当 |
-|---|---|---|---|
-| 単体テスト | | | |
-| 結合テスト | | | |
-| UAT | | | |
-```
-
-### 回帰テスト結果テンプレート（regression/YYYY-MM-DD.md）
-
-```markdown
-# 回帰テスト結果 YYYY-MM-DD
-
-**対象リリース**: **実施者**: **環境**:
-
-## Apexテスト結果
-- 実行テスト数:
-- パス:  / フェイル:
-- カバレッジ: %
-- 実行コマンド: `sf apex run test --test-level RunLocalTests ...`
-
-## フェイルしたテスト
-| テストクラス | メソッド | エラー内容 | 対応 |
-|---|---|---|---|
-
-## スモークテスト結果
-| 確認項目 | 結果 | 備考 |
-|---|---|---|
-| レコード作成・保存 | OK / NG | |
-| 変更機能の正常系 | OK / NG | |
-| エラーログ確認 | OK / NG | |
-
-## 総合判定
-- [ ] リリース可（全テストパス・スモークテスト合格）
-- [ ] 要修正（フェイルあり）
-```
-
-### UATシナリオテンプレート（uat/YYYY-MM-DD.md）
-
-```markdown
-# UAT実施結果 YYYY-MM-DD
-
-**対象機能**: **実施者（ユーザー）**: **環境**:
-
-## シナリオ一覧
-
-### シナリオ1: [業務フロー名]
-
-**前提条件**: （ログイン済み・特定のデータが存在する等）
-
-| # | 手順 | 期待結果 | 実際の結果 | OK/NG |
-|---|---|---|---|---|
-| 1 | | | | |
-| 2 | | | | |
-
-**備考（気になった点・改善提案）**:
-
-## 総合判定
-- [ ] 合格（全シナリオOK）
-- [ ] 条件付き合格（軽微なNG・次リリースで対応）
-- [ ] 不合格（重大なNG・リリース不可）
-```
+テンプレート: [.claude/templates/qa/uat.md](../templates/qa/uat.md) — `docs/test/uat/YYYY-MM-DD.md` にコピーして記入する
 
 ---
 

@@ -111,6 +111,25 @@ for f in .claude/commands/*.md; do
     fi
 done
 
+# テンプレート（エージェント参照用の独立 MD ファイル群、サブディレクトリ含む再帰チェック）
+if [ -d "$TMP_DIR/.claude/templates" ]; then
+    while IFS= read -r f; do
+        rel="${f#$TMP_DIR/}"
+        if [ ! -f "$rel" ]; then
+            ADDITIONS+=("$rel（新規テンプレート）")
+        elif ! diff -q "$rel" "$f" >/dev/null 2>&1; then
+            CHANGES+=("$rel")
+        fi
+    done < <(find "$TMP_DIR/.claude/templates" -type f -name "*.md")
+fi
+if [ -d ".claude/templates" ] && [ -d "$TMP_DIR/.claude/templates" ]; then
+    while IFS= read -r f; do
+        if [ ! -f "$TMP_DIR/$f" ]; then
+            DELETIONS+=("$f（テンプレートから削除済み）")
+        fi
+    done < <(find ".claude/templates" -type f -name "*.md")
+fi
+
 # スクリプト（サブディレクトリ含む再帰チェック）
 if [ -d "$TMP_DIR/scripts" ]; then
     while IFS= read -r f; do
@@ -201,6 +220,15 @@ for f in "$TMP_DIR"/.claude/commands/*.md; do
     [ -f "$f" ] || continue
     cp "$f" .claude/commands/
 done
+
+# テンプレート（サブディレクトリ含む再帰コピー）
+if [ -d "$TMP_DIR/.claude/templates" ]; then
+    while IFS= read -r f; do
+        rel="${f#$TMP_DIR/}"
+        mkdir -p "$(dirname "$rel")"
+        cp "$f" "$rel"
+    done < <(find "$TMP_DIR/.claude/templates" -type f -name "*.md")
+fi
 
 # スクリプト（サブディレクトリ含む再帰コピー、upgrade.sh 自身は最後に上書き）
 if [ -d "$TMP_DIR/scripts" ]; then
