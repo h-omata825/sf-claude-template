@@ -8,15 +8,13 @@ tools:
   - Glob
   - Grep
   - Bash
-  - AskUserQuestion
-  - TodoWrite
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。
 
 > **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python scripts/...` の相対パスは使わず `python {project_dir}/scripts/...` 形式を使用する。
 
-> **LWC・画面フロー・Aura は担当しない**。このエージェントは Apex / Batch / Flow（非画面）/ Integration のみを処理する。LWC・画面フローは **sf-design-step2 エージェント** が **sf-screen-writer** を別途呼び出して処理する設計になっている。このエージェントは sf-screen-writer を呼び出す必要はなく、LWC/画面フロー分の feature を「スキップして完了報告に記載」するだけでよい。
+> **LWC・画面フロー・Visualforce・Aura は担当しない**。このエージェントは Apex / Batch / Flow（非画面）/ Integration のみを処理する。LWC・画面フロー・Visualforce・Aura は **sf-design-step2 エージェント** が **sf-screen-writer** を別途呼び出して処理する設計になっている。このエージェントは sf-screen-writer を呼び出す必要はなく、LWC/画面フロー/Visualforce/Aura 分の feature を「スキップして完了報告に記載」するだけでよい。
 
 # sf-design-writer エージェント
 
@@ -184,6 +182,8 @@ for p in sorted(detail_dir.glob('*_detail.json')) if detail_dir.exists() else []
 
 ## Phase 0.5: Apex スケルトン事前生成（Apex / Batch / Integration が対象に含まれる場合のみ）
 
+> **実行順序**: このフェーズは **Phase 0.7（ハッシュチェック）の後** に実行する。Phase 0.7 を先に完了させてスキップリストを確定してから、スキップリストに含まれないコンポーネントのみを対象にこのフェーズを実行すること。
+
 feature_list に Apex 系（Apex / Apex_Batch / Apex_AuraEnabled / Integration 等）が含まれる場合、JSON 生成前に**スケルトン抽出スクリプトを実行する**。
 これにより `calls` / `object_ref` / `branch` / `node_type` が機械的に確定し、エージェントによる書き漏れ・誤記を防ぐ。
 
@@ -265,6 +265,8 @@ python "{project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py" \
 ## Phase 1: コンポーネントのソース読み込みと JSON 生成
 
 > Phase 0 で読み込んだ `design-writer-reference.md` の内容を参照しながら進める（再読み不要）。
+
+> **必須メタデータ**: 生成する design JSON には `"author": "{author}"` を必ず含める。`generate_feature_design.py` は JSON 内の `author` フィールドを設計書の作成者欄に転記する（コマンドライン引数 `--author` は存在しない）。
 
 **バッチサイズ: 5〜8件ずつ処理する**（コンテキスト管理のため）。
 > 根拠: Apex クラス1件あたり平均 200〜500行のソース + 生成 JSON で約 2,000〜5,000 token を消費。5〜8件で 10,000〜40,000 token 相当となり、コンテキスト圧迫前にファイル保存・解放する適切な粒度。大規模クラス（1,000行超）は1件/バッチに落とす。
@@ -371,9 +373,9 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_design.py" \
 出力先フォルダとファイル名:
 | 種別 | 出力先サブフォルダ | ファイル名 |
 |---|---|---|
-| Apex / Batch | `{output_dir}/apex/` | `【F-XXX】{name}.xlsx` |
-| Flow（非画面）| `{output_dir}/flow/` | `【F-XXX】{name}.xlsx` |
-| Integration | `{output_dir}/integration/` | `【F-XXX】{name}.xlsx` |
+| Apex / Batch | `{output_dir}/apex/` | `【{feature_id}】{name}.xlsx` |
+| Flow（非画面）| `{output_dir}/flow/` | `【{feature_id}】{name}.xlsx` |
+| Integration | `{output_dir}/integration/` | `【{feature_id}】{name}.xlsx` |
 
 > 出力先とファイル名はスクリプトが自動決定する（type フィールドに基づく）。エージェントが手動で制御する必要はない。
 
@@ -381,7 +383,7 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_design.py" \
 
 ## Phase 3: 機能一覧 Excel の生成（必ず実行・スキップ禁止）
 
-> **このエージェントが機能一覧を担当する**。`/sf-design` コマンドが sf-screen-writer と sf-design-writer に**同じ `{tmp_dir}` を渡す設計**になっており、sf-screen-writer が先に実行された場合はその design JSON も `{tmp_dir}` に残っている。ない場合（sf-screen-writer が未実行・LWC/画面フロー対象なし）は sf-design-writer 分の JSON のみで機能一覧を生成する。
+> **このエージェントが機能一覧を担当する**。`sf-design-step2` が sf-screen-writer と sf-design-writer に**同じ `{tmp_dir}` を渡す設計**になっており、sf-screen-writer が先に実行された場合はその design JSON も `{tmp_dir}` に残っている。ない場合（sf-screen-writer が未実行・LWC/画面フロー対象なし）は sf-design-writer 分の JSON のみで機能一覧を生成する。
 
 まず `{tmp_dir}` 内の `*_design.json` 件数を確認する（sf-design-writer 分 + sf-screen-writer 分の合計）:
 
@@ -393,7 +395,7 @@ if not jsons:
     print('ERROR: *_design.json が 0 件です。Phase 1/2 でエラーが発生した可能性があります。')
     sys.exit(1)
 # sf-screen-writer 分（LWC/Aura/VF/画面フロー）が含まれているかをJSONのtypeフィールドで判定
-screen_types = {'LWC', 'Aura', 'Visualforce', 'ScreenFlow'}
+screen_types = {'LWC', 'Aura', 'Visualforce', '画面フロー'}
 screen_jsons = []
 for j in jsons:
     try:
