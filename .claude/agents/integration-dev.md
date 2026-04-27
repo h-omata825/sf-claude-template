@@ -106,6 +106,25 @@ global class ExternalApiMock implements HttpCalloutMock {
         return res;
     }
 }
+
+// 異常系 Mock の例（4xx/5xx 用）
+@isTest
+global class ExternalApiErrorMock implements HttpCalloutMock {
+    global HttpResponse respond(HttpRequest req) {
+        HttpResponse res = new HttpResponse();
+        res.setStatusCode(500);
+        res.setBody('Server Error');
+        return res;
+    }
+}
+@isTest
+static void testCalloutError() {
+    Test.setMock(HttpCalloutMock.class, new ExternalApiErrorMock());
+    Test.startTest();
+    try { ExternalApiService.callApi('{}'); System.assert(false, '例外必須'); }
+    catch (CalloutException e) { System.assert(e.getMessage().contains('500')); }
+    Test.stopTest();
+}
 ```
 
 ### セキュリティ
@@ -128,7 +147,7 @@ global class ExternalApiMock implements HttpCalloutMock {
 | コールアウト数/トランザクション | 100回 |
 | タイムアウト最大値 | 120秒 |
 | 同期Apexでのコールアウト | DML後は不可（@future / Queueable 使用） |
-| Platform Events 発行/購読 | 250,000件/24時間（Developer Edition: 1,000件） |
+| Platform Events 発行/購読 | Edition により異なる（Enterprise 基本枠で 250,000件/24時間程度。最新値は Salesforce Developer Limits ドキュメントを確認） |
 
 ---
 
