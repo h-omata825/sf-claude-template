@@ -14,8 +14,11 @@ $ARGUMENTS
 
 引数がある場合はそれを「指定する」として解釈し、Step 2 の「指定する」の処理へ進む。
 
-引数がない場合、AskUserQuestion ツールを使いクリック選択式で提示する:
+引数がない場合、AskUserQuestion ツールを以下の内容で呼び出す。
 
+**質問**: 「メタデータの取得対象を選択してください。」
+
+**選択肢**:
 - `standard` — 標準セット（Apex・フロー・オブジェクト・LWC等、開発でよく使うもの）
 - `all` — 全メタデータ（時間がかかる）
 - `select` — 取得するメタデータ名を個別に指定する
@@ -38,13 +41,16 @@ bash scripts/sf-retrieve.sh all
 
 ### 「select」の場合
 
-取得したいメタデータ名（クラス名・フロー名・オブジェクト名等）をユーザーに確認する。
+取得したいメタデータ名（クラス名・フロー名・オブジェクト名等）をチャットで確認する（カンマ区切りで複数指定可。例:「MyClass, MyFlow, Account」）。
+取得前に `git status force-app/` で未コミットの変更を確認し、変更がある場合はユーザーに通知してから進む。
 指定された名前からメタデータタイプを判定し `manifest/package.xml` を生成して取得する:
 
 ```bash
 # 例: Apex クラス MyClass・フロー MyFlow・オブジェクト Account を指定した場合
+API_VER=$(python3 -c "import json; d=json.load(open('sfdx-project.json')); print(d.get('sourceApiVersion', '62.0'))" 2>/dev/null || echo "62.0")
+TARGET_ORG=$(sf config get target-org --json 2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['value'] if r else '')" 2>/dev/null || echo "")
 mkdir -p manifest
-cat > manifest/package.xml << 'EOF'
+cat > manifest/package.xml << XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <types>
@@ -59,11 +65,11 @@ cat > manifest/package.xml << 'EOF'
         <members>Account</members>
         <name>CustomObject</name>
     </types>
-    <version>59.0</version>
+    <version>${API_VER}</version>
 </Package>
-EOF
+XMLEOF
 
-sf project retrieve start --manifest manifest/package.xml
+sf project retrieve start --manifest manifest/package.xml ${TARGET_ORG:+--target-org "$TARGET_ORG"}
 ```
 
 メタデータタイプの対応表（主要なもの）:
@@ -72,16 +78,26 @@ sf project retrieve start --manifest manifest/package.xml
 |---|---|
 | Apex クラス | `ApexClass` |
 | Apex トリガー | `ApexTrigger` |
+| Visualforce ページ | `ApexPage` |
 | フロー | `Flow` |
 | LWC コンポーネント | `LightningComponentBundle` |
 | オブジェクト・項目 | `CustomObject` |
-| 権限セット | `PermissionSet` |
+| カスタム表示ラベル | `CustomLabel` |
 | カスタムメタデータ型 | `CustomMetadata` |
+| カスタム設定 | `CustomSetting` |
+| カスタムタブ | `CustomTab` |
+| 権限セット | `PermissionSet` |
+| 権限セットグループ | `PermissionSetGroup` |
 | 入力規則 | `ValidationRule` |
 | レイアウト | `Layout` |
 | Lightning ページ | `FlexiPage` |
 | 静的リソース | `StaticResource` |
 | メールテンプレート | `EmailTemplate` |
+| レポートタイプ | `ReportType` |
+| レポート | `Report` |
+| ダッシュボード | `Dashboard` |
+| 名前付き資格情報 | `NamedCredential` |
+| リモートサイト設定 | `RemoteSiteSetting` |
 | プロファイル | `Profile` |
 
 ---
@@ -99,7 +115,6 @@ AskUserQuestion で以下を表示する:
 **選択肢**:
 - `組織情報を収集する（/sf-memory）` — 推奨。組織情報を docs/ に記録する（初回はここまでやっておく）
 - `外部ツール連携を先に設定する（/setup-mcp）` — Backlog・Notion・Slack 等と連携する場合
-- `あとで` — ここで終了する
 
 `組織情報を収集する` を選択した場合: /sf-memory を実行する
 `外部ツール連携を先に設定する` を選択した場合: /setup-mcp を実行する（完了後に /sf-memory の実行を案内する）
@@ -141,7 +156,6 @@ git diff --name-only HEAD force-app/
 ■ /sf-design / /sf-doc（成果物の再生成）
   □ 機能一覧.xlsx        — 新規コンポーネント追加・削除時（cat4完了後）
   □ オブジェクト定義書.xlsx — オブジェクト/項目変更時（cat2完了後）  対象: {オブジェクト名}
-  □ 基本設計.xlsx        — FG構成変更・仕様変更時（cat5完了後）  対象FG: {FG名}
   □ 詳細設計.xlsx        — コード・オブジェクト・仕様いずれかの変更時（cat4完了後）  対象FG: {FG名}
   □ プログラム設計書.xlsx  — コード変更時（cat4完了後）  対象: {コンポーネント名}
 ```
