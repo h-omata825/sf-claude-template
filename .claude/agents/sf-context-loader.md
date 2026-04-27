@@ -46,9 +46,14 @@ backlog-implementer / backlog-tester / backlog-releaser / reviewer / qa-engineer
 | `\w+__c`（項目API名） | Status__c, ApplicantId__c | `docs/catalog/_index.md` → `docs/catalog/custom/{object}.md` |
 | オブジェクト名（日本語・英語） | VisaApplication, 申請管理 | `docs/catalog/_index.md` → `docs/catalog/custom/{object}.md` |
 | キーワード（自動化系） | トリガ, バッチ, フロー, 自動化 | `docs/data/automation.md` |
+| キーワード（業務フロー系） | 業務フロー, 申請フロー, 画面フロー, ユースケース | `docs/flow/usecases.md` |
 | キーワード（通知系） | 通知, メール, テンプレート | `docs/data/email-templates.md` |
 | キーワード（連携系） | API, 連携, 外部, callout | `docs/architecture/system.json` |
 | キーワード（要件系） | スコープ, 要件, `BR-\d+`, ビジネスルール | `docs/requirements/requirements.md` |
+| キーワード（マスタ系） | マスタ, ピックリスト, 選択リスト, 商品 | `docs/data/master-data.md` |
+| キーワード（権限系） | 権限, プロファイル, 権限セット, FLS, FieldSecurity | `docs/overview/org-profile.md` |
+
+`{project_dir}/docs/overview/org-profile.md` が存在する場合は、マッチ件数に関わらず常に読込対象に追加する（用語集・命名規則の共通参照として）。
 
 **マッチが全くない場合**: 「該当コンテキストなし（タスクにSFプロジェクト固有の参照対象が見当たらない）」を返して終了。
 
@@ -63,9 +68,11 @@ backlog-implementer / backlog-tester / backlog-releaser / reviewer / qa-engineer
 - `docs/catalog/_index.md` — オブジェクト名一覧（存在する場合）
 - `docs/.sf/feature_list.json` — CMP-xxx・api_name のマッチングに Grep を使う（存在する場合）
 
+インデックスの Read または JSON パースが失敗した場合は「該当コンテキストなし（docs/ 不整合）」を返して終了する。
+
 ### ステップ3-2: 詳細ファイルを必要な分だけ Read
 
-抽出したマッチに基づき詳細ファイルを Read する（**読込上限: 合計5ファイル**）。上限超過時は CMP/オブジェクト優先:
+抽出したマッチに基づき詳細ファイルを Read する（**読込上限: 合計5ファイル**）。上限超過時は CMP/オブジェクト優先（同優先度内は CMP 番号昇順、オブジェクトは `_index.md` 出現順で打ち切り）:
 
 | マッチ種別 | 読むファイル |
 |---|---|
@@ -76,6 +83,8 @@ backlog-implementer / backlog-tester / backlog-releaser / reviewer / qa-engineer
 | 通知キーワード | `docs/data/email-templates.md` |
 | 連携キーワード | `docs/architecture/system.json` |
 | 要件キーワード | `docs/requirements/requirements.md`（先頭100行程度） |
+
+各ファイルの Read が失敗した場合はそのファイルをスキップし、残りの成功したファイルで要約を生成する。
 
 ---
 
