@@ -29,10 +29,10 @@
 | `/sf-design` コマンドのプログラム設計ステップ（sf-screen-writer + sf-design-writer 委譲） | `sf-design-step2` |
 | `/sf-design` コマンドの機能一覧ステップ（generate_feature_list.py 直接呼び出し） | `sf-design-step3` |
 | `sf-design-step2` から委譲（プログラム設計書・機能一覧 Excel生成） | ① `sf-screen-writer`（画面系: LWC/画面フロー/Aura/VF）→ ② `sf-design-writer`（Apex系・機能一覧、①の結果を集約）の**順に両方**委譲 |
-| `/sf-design` コマンド全体から委譲（基本/詳細設計 Excel生成） | `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
+| `/sf-design` コマンド全体から委譲（詳細設計 Excel生成） | `sf-detail-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
-> コマンド専用エージェント（ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる）: `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` / `sf-doc-overview-writer` / `sf-doc-objects-writer` / `backlog-investigator` / `backlog-planner` / `backlog-implementer` / `backlog-tester` / `backlog-releaser` / `backlog-validator`
+> コマンド専用エージェント（ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる）: `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` / `sf-screen-writer` / `sf-detail-design-writer` / `sf-doc-overview-writer` / `sf-doc-objects-writer` / `backlog-investigator` / `backlog-planner` / `backlog-implementer` / `backlog-tester` / `backlog-releaser` / `backlog-validator`
 
 ---
 
