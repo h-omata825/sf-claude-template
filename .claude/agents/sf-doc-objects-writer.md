@@ -15,10 +15,7 @@ tools:
 
 > **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python "{project_dir}/scripts/..."` 形式を使用する。
 
-> **テンプレート置換ルール（厳守）**: Python インラインコード内の `{project_dir}` `{output_dir}` `{author}` `{SF_ALIAS}` `{システム名称}` `{latest_obj_file}` 等の `{...}` は、Bash 実行前に Claude が実値でテキスト置換する。値の種別ごとに以下で正規化する:
-> - **パス値** (`{project_dir}` / `{output_dir}` / `{latest_obj_file}`): Windows パスの `\` はすべて `/` に置換し末尾 `/` は除去
-> - **任意文字列値** (`{author}` / `{システム名称}` 等): シングルクォート包囲部への埋め込み時は値内の `'` を `\'` にエスケープ、改行は空白に置換。シェル引数への埋め込み時は `"` を `\"` にエスケープ
-> - **列挙値** (`{version_increment}`): `minor` / `major` 以外なら `minor` にフォールバック
+> **テンプレート置換ルール（厳守）**: [共通ルール参照](.claude/CLAUDE.md#テンプレート置換ルール厳守) — 適用プレースホルダー: `{project_dir}` `{output_dir}` `{author}` `{SF_ALIAS}` `{システム名称}` `{latest_obj_file}` — **列挙値** (`{version_increment}`): `minor` / `major` 以外なら `minor` にフォールバック
 
 # sf-doc-objects-writer: オブジェクト定義書ステップ
 

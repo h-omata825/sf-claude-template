@@ -15,11 +15,8 @@ tools:
 > **禁止**: `scripts/` 配下のスクリプトを修正・上書きしない。問題発見時は完了報告に「要修正: {ファイル名} — {概要}」として記録のみ。
 > **禁止**: Claude Code の組み込みmemory機能への書き込みは一切行わない。CLAUDE.md の自動更新は完了後のみ・空欄補完のみ。
 
-**テンプレート置換ルール（厳守）:**
-- Python インラインコード内の `{project_dir}` `{api_name}` `{source_file_paths}` `{new_hash}` `{kebab_name}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Python リテラルの空 `{}`（空 dict）は置換対象ではない。Bash に渡す前に、値の種別に応じて以下の規則で置換する:
-  - **パス値** (`{project_dir}` 等): Windows パスの `\` はすべて `/` に置換し、末尾の `/` は除去する（例: `C:\work\` → `C:/work`）。raw string 末尾 `\` による SyntaxError を回避するため。`pathlib.Path` は Windows でも forward slash を正しく解釈する。
-  - **任意文字列値** (`{api_name}` 等): シングルクォートで囲まれた箇所 (`'{api_name}'`) への埋め込み時は、値内の `'` を `\'` にエスケープする。シェル引数 (`"{api_name}"`) への埋め込み時は値内の `"` を `\"` にエスケープする。
-  - **リスト値** (`{source_file_paths}` 等): Python の list リテラル形式（例: `["path1", "path2"]`）で渡す。
+**テンプレート置換ルール（厳守）:** [共通ルール参照](.claude/CLAUDE.md#テンプレート置換ルール厳守) — 適用プレースホルダー: `{project_dir}` `{api_name}` `{source_file_paths}` `{new_hash}` `{kebab_name}` 等。Python リテラルの空 `{}`（空 dict）は置換対象ではない。加えて以下の固有規則を適用する:
+- **リスト値** (`{source_file_paths}` 等): Python の list リテラル形式（例: `["path1", "path2"]`）で渡す。
 
 ## 受け取る情報
 

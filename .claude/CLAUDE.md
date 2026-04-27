@@ -51,6 +51,24 @@
 
 ---
 
+## コマンド・エージェント共通ルール
+
+### AskUserQuestion ルール（厳守）
+
+- **1質問1回答**: 複数の質問を1つの AskUserQuestion にまとめない。必ず1問ずつ順番に聞く
+- **選択肢はデフォルト/スキップ値のみ**（**テキスト入力代替の single select でのみ適用**。multiSelect で資料/項目種別を列挙する場合は対象外）: AskUserQuestion には自動で「Other（自由入力）」が付く。choices に「Other」「自由入力」「手動入力」等の**そのままの語**を**絶対に含めない**。「スキップ」「デフォルト値を使う」等のみ記載する。**ただし schema 制約 ≥2 のため、前回値・自動取得値の対比として「別のフォルダを指定する」「別のエイリアスを使用」等の**コンテキスト具体ラベル**は許容**（Other 等価ではなく UX 上推奨。文言は対比対象を具体化すること）
+- 選択肢がある場合（前回値・固定候補）は AskUserQuestion で提示する。テキスト自由入力が必要な場合（初回パス等）はチャットで直接聞く
+
+### テンプレート置換ルール（厳守）
+
+Python インラインコード内、**および AskUserQuestion の label / description 内**の `{project_dir}` `{output_dir}` `{author}` 等の `{...}` は f-string ではなく **Claude が実行前に実値でテキスト置換する** プレースホルダー。Bash / AskUserQuestion に渡す前に、値の種別に応じて以下の規則で置換する:
+
+- **パス値** (`{project_dir}` / `{output_dir}` 等): Windows パスの `\` はすべて `/` に置換し、末尾の `/` は除去する（例: `C:\work\` → `C:/work`）。raw string 末尾 `\` による SyntaxError を回避するため。`pathlib.Path` は Windows でも forward slash を正しく解釈する。
+- **任意文字列値** (`{author}` 等): シングルクォートで囲まれた箇所 (`'{author}'`) への埋め込み時は、値内の `'` を `\'` にエスケープし、改行 (`\n` `\r`) は空白に置換する（例: `O'Brien` → `O\'Brien`）。シェル引数 (`"{author}"`) への埋め込み時は値内の `"` を `\"` にエスケープする。
+- 同じ規則は `.claude/agents/*.md` 等の連鎖エージェントでも適用される。委譲時に渡す値も上記規則で正規化済みの状態にすること。
+
+---
+
 ## Security & Permissions
 
 ### settings.json による技術的ブロック（全員に適用）

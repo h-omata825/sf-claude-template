@@ -2,6 +2,12 @@
 description: "カテゴリ1〜4の専用エージェント（sf-analyst-cat1〜cat4）と sf-org-analyst に委譲して Salesforce 組織情報を docs/ に保存するコマンド。組織概要・オブジェクト構成・マスタデータ・設計/機能グループ定義の4カテゴリを会話形式で選択して実行する。4選択肢・4カテゴリ実行式。cat4は内部でsf-analyst-cat5に委譲してfeature_groups.ymlを生成する（ユーザーからは4カテゴリに見える5エージェント構成）。"
 ---
 
+**AskUserQuestion のルール（厳守）:** [共通ルール参照](.claude/CLAUDE.md#askuserquestion-ルール厳守)
+
+**テンプレート置換ルール（厳守）:** [共通ルール参照](.claude/CLAUDE.md#テンプレート置換ルール厳守)
+
+---
+
 > **注意**: このコマンドはClaude Codeの組み込みmemory機能・CLAUDE.mdへの書き込みは一切行わない。
 > 全ての出力は `docs/` 配下のMarkdownファイル/JSONファイルへの保存のみで行う。
 
