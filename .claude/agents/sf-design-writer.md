@@ -14,7 +14,7 @@ tools:
 
 > **スクリプト呼び出しはフルパスで行うこと**。エージェント実行時は CWD が不定のため、`python scripts/...` の相対パスは使わず `python {project_dir}/scripts/...` 形式を使用する。
 
-> **LWC・画面フロー・Visualforce・Aura は担当しない**。このエージェントは Apex / Batch / Flow（非画面）/ Integration のみを処理する。LWC・画面フロー・Visualforce・Aura は **sf-design-step2 エージェント** が **sf-screen-writer** を別途呼び出して処理する設計になっている。このエージェントは sf-screen-writer を呼び出す必要はなく、LWC/画面フロー/Visualforce/Aura 分の feature を「スキップして完了報告に記載」するだけでよい。
+> **LWC・画面フロー・Aura・Visualforce は担当しない**。このエージェントは Apex / Batch / Flow（非画面）/ Integration のみを処理する。LWC・画面フロー・Aura・Visualforce は **sf-design-step2 エージェント** が **sf-screen-writer** を別途呼び出して処理する設計になっている。このエージェントは sf-screen-writer を呼び出す必要はなく、LWC/画面フロー/Aura/Visualforce 分の feature を「スキップして完了報告に記載」するだけでよい。
 
 # sf-design-writer エージェント
 
@@ -373,9 +373,9 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_design.py" \
 出力先フォルダとファイル名:
 | 種別 | 出力先サブフォルダ | ファイル名 |
 |---|---|---|
-| Apex / Batch | `{output_dir}/apex/` | `【{feature_id}】{name}.xlsx` |
-| Flow（非画面）| `{output_dir}/flow/` | `【{feature_id}】{name}.xlsx` |
-| Integration | `{output_dir}/integration/` | `【{feature_id}】{name}.xlsx` |
+| Apex / Batch | `{output_dir}/apex/` | `【{feat_id}】{name}.xlsx` |
+| Flow（非画面）| `{output_dir}/flow/` | `【{feat_id}】{name}.xlsx` |
+| Integration | `{output_dir}/integration/` | `【{feat_id}】{name}.xlsx` |
 
 > 出力先とファイル名はスクリプトが自動決定する（type フィールドに基づく）。エージェントが手動で制御する必要はない。
 
