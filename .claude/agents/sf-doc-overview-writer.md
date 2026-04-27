@@ -78,8 +78,8 @@ for k, p in paths.items():
 "
 ```
 
-- `profile` / `req` が両方ない場合:「先に `/sf-memory` カテゴリ1 を実行してください。」と伝えて終了。
-- その他が存在しない場合: 「{ファイル名} が見つかりません。該当シートはスキップ/空欄になります。」と表示して続行。
+- `profile` または `req` のいずれかが False（欠落）の場合: 欠落しているファイル名を明示して「先に `/sf-memory` カテゴリ1 を実行してください。」と伝えて終了。
+- その他（`system` / `model` / `swimlanes`）が存在しない場合: 「{ファイル名} が見つかりません。該当シートはスキップ/空欄になります。」と表示して続行。
 
 ---
 
@@ -95,6 +95,19 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_basic_doc.py" \
   --docs-dir "{project_dir}/docs" \
   --output "{output_dir}/01_基本設計/プロジェクト概要書.xlsx" \
   --author "{author}"
+```
+
+完了後、xlsx の存在を確認してからこのエージェントを終了する:
+
+```bash
+python -c "
+import pathlib, sys
+p = pathlib.Path(r'{output_dir}/01_基本設計/プロジェクト概要書.xlsx')
+if not p.exists():
+    print(f'ERROR: {p} が生成されませんでした', file=sys.stderr)
+    sys.exit(1)
+print(f'OK: {p}')
+"
 ```
 
 ---
