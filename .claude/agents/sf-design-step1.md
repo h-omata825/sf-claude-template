@@ -8,6 +8,7 @@ tools:
   - Grep
   - Bash
   - AskUserQuestion
+  - Task
   - TodoWrite
 ---
 
@@ -137,7 +138,12 @@ for e in errors:
 "
 ```
 
-`error:` がある場合はユーザーに確認する。「全グループ」を選択した場合は `target_group_ids = ""`（空文字）と設定する。
+`error:` がある場合は AskUserQuestion で以下の3択を提示する:
+- 入力を修正して再試行 — Phase 2 の入力選択に戻る
+- エラー分を除外して続行 — resolved に含まれる FG のみを target_group_ids に設定して Phase 3 に進む
+- 中止 — エラー内容をユーザーに伝えて終了する
+
+「全グループ」を選択した場合は `target_group_ids = []`（空リスト）と設定する。
 
 ---
 
@@ -178,7 +184,7 @@ detail_design_tmp: {output_dir}/02_詳細設計/.tmp
 
 > `selected_steps` に "機能一覧" が含まれる場合も sf-design-step2 が機能一覧を生成する。sf-design-step3 は呼ばない。
 
-### "機能一覧" のみ含まれる（"プログラム設計" は選択なし）場合 → sf-design-step3 を呼び出す
+### "機能一覧" が含まれるが "プログラム設計" は選択なし → sf-design-step3 を呼び出す
 
 ```
 project_dir:       {project_dir}
@@ -191,3 +197,12 @@ version_increment: {version_increment}
 ### どちらも選択なし（詳細設計のみ）
 
 後続エージェントなし。そのまま完了する。
+
+---
+
+## Phase 最終: クリーンアップ
+[共通ルール参照](.claude/CLAUDE.md#一時ファイルの後片付け全エージェント共通)
+
+```bash
+python -c "import shutil; shutil.rmtree(r'{output_dir}/02_詳細設計/.tmp', ignore_errors=True)"
+```

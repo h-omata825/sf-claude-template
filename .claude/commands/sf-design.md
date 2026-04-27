@@ -205,12 +205,12 @@ output_dir: {output_dir}
 author: {author}
 project_name: {project_name}
 version_increment: {version_increment}
-target_group_ids: ""
+target_group_ids: []
 step0_3_done: false
 ```
 
 > **パラメータ補足**:
-> - `target_group_ids`: 対象グループIDリスト（カンマ区切り文字列）。空文字の場合 step2 内で AskUserQuestion により選択する。
+> - `target_group_ids`: 対象グループIDリスト（list[str]）。空リストの場合 step2 内で AskUserQuestion により選択する。
 > - `step0_3_done`: `true` なら step1 からの連鎖呼び出し（グループ→機能ID変換済み）、`false` なら単独実行（step2 内で Phase 0 から実施）。
 
 ### 機能一覧のみ選択された場合 → sf-design-step3 エージェント
