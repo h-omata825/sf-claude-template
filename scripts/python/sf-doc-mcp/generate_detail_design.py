@@ -1684,6 +1684,28 @@ def _apex_role_from_api_name(api_name: str) -> str:
     return ""
 
 
+# AA-2i: 標準コミュニティ／サイトコントローラの処理フロー図用一言ラベル
+_API_TO_FLOW_LABEL_HEURISTIC: dict[str, str] = {
+    "CommunitiesLandingController":        "コミュニティ表示",
+    "CommunitiesLoginController":          "ログイン認証",
+    "CommunitiesSelfRegController":        "セルフ登録受付",
+    "CommunitiesSelfRegConfirmController": "登録完了確認",
+    "ForgotPasswordController":            "パスワード忘れ",
+    "MicrobatchSelfRegController":         "非同期登録補助",
+    "SiteRegisterController":              "サイト登録処理",
+    "SiteLoginController":                 "サイトログイン",
+    "ChangePasswordController":            "パスワード変更",
+}
+
+
+def _flow_label_from_api_name(api_name: str) -> str:
+    """API 名から処理フロー図用の短ラベル（6〜10字）を生成する（augmented Apex 用）。"""
+    if api_name in _API_TO_FLOW_LABEL_HEURISTIC:
+        return _API_TO_FLOW_LABEL_HEURISTIC[api_name]
+    base = _re.sub(r'(?:Controller|Extension|Handler|Service|Helper|Manager|Batch|Trigger)$', '', api_name)
+    return base[:10] if base else api_name[:10]
+
+
 def _title_from_desc(desc: str, max_len: int = 18) -> str:
     """description の先頭節から short title を生成する。「を行う」の機械付与をしない。"""
     if not desc:
@@ -1796,12 +1818,22 @@ def _augment_components_with_vf_controllers(data: dict) -> None:
             obj_names = [o for o in comp_fields if o not in ("__any__", "Id")]
             if obj_names:
                 role = f"{' / '.join(obj_names[:2])} を操作するコントローラ"
+        # AA-2i: responsibility を空にしない。VF の STD 説明を借用するか suffix 推論を使う
+        std_desc = _STD_VF_DESCRIPTIONS.get(api, "")
+        if std_desc:
+            aug_resp = std_desc
+        elif role:
+            aug_resp = role
+        else:
+            aug_resp = _apex_role_from_api_name(ctrl_name) or ""
+        aug_flow = _flow_label_from_api_name(ctrl_name)
         new_comps.append({
             "api_name": ctrl_name,
             "type": "Apex",
-            "role": role or "ポータル画面コントローラ",
+            "role": role or aug_resp[:40] or "ポータル画面コントローラ",
             "callees": [],
-            "responsibility": "",
+            "responsibility": aug_resp,
+            "flow_label": aug_flow,
         })
         existing_apis.add(ctrl_name)
 
@@ -2105,7 +2137,7 @@ def _build_process_steps(data: dict) -> list[dict]:
         "VF": "ポータル画面で標準的な処理を行う。",
         "VisualForce": "ポータル画面で標準的な処理を行う。",
         "Visualforce Page": "ポータル画面で標準的な処理を行う。",
-        "Apex": "バックエンド処理を担当する。",
+        "Apex": "Apex クラスとして処理を担当する。",
         "Flow": "自動起動フローが処理を担当する。",
         "LWC": "ユーザー操作画面でインタラクションを担当する。",
         "Aura": "ユーザー操作画面でインタラクションを担当する。",
@@ -2171,9 +2203,13 @@ def _build_process_steps(data: dict) -> list[dict]:
             if not _is_desc_fragment(cleaned):
                 desc_main = cleaned
 
-        # 3) フォールバック: 型別デフォルト
+        # 3) フォールバック: Apex は API 名の suffix 推論を優先（AA-2i）、それ以外は型別デフォルト
         if not desc_main:
-            desc_main = _TYPE_DEFAULTS.get(comp_type, "処理を担当する。")
+            if comp_type in ("Apex", "ApexClass", "ApexTrigger", "Apex Class", "Apex Trigger"):
+                suffix_role = _apex_role_from_api_name(_raw_api)
+                desc_main = suffix_role or _TYPE_DEFAULTS.get(comp_type, "処理を担当する。")
+            else:
+                desc_main = _TYPE_DEFAULTS.get(comp_type, "処理を担当する。")
 
         # M-5a: title は description の先頭節から生成（「を行う」機械付与廃止）
         title = _title_from_desc(desc_main)
