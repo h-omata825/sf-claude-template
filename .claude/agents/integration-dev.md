@@ -117,7 +117,7 @@ global class ExternalApiMock implements HttpCalloutMock {
 - `CalloutException` のキャッチ必須
 - リトライ設計（Queueable Chain パターン）
 - タイムアウト設定必須（`req.setTimeout(ms)`）
-- デッドレター / 失敗通知の設計
+- デッドレター / 失敗通知の設計（退避先候補: (1) カスタムオブジェクトへの失敗ログ INSERT (2) Platform Event で再処理キューへ退避 (3) 管理者メール通知。要件・SLA に応じて選択）
 
 ---
 
@@ -156,3 +156,4 @@ global class ExternalApiMock implements HttpCalloutMock {
    - コールアウト制限（100回/トランザクション）の累積を確認
    - 既存のPlatform Events / Change Data Captureとの干渉を確認
 6. 本番とSandboxで異なるエンドポイントが必要な場合はカスタムメタデータで管理する
+7. **`.claude/CLAUDE.md` の Quality Gate に従い、実装完了後に reviewer を起動して外部 API 連携の品質チェックを実行する**
