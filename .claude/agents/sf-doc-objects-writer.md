@@ -1,12 +1,13 @@
 ---
 name: sf-doc-objects-writer
-description: "sf-doc コマンドから委譲されるオブジェクト定義書生成エージェント。Salesforce組織に直接接続してフィールドメタデータを取得し、オブジェクト項目定義書_v*.xlsx を生成する。「オブジェクト定義書のみ」または「両方」選択時に sf-doc コマンドから起動される。両方選択時はこのエージェントが sf-doc-overview-writer を連鎖呼び出しする。"
+description: "sf-doc コマンドから委譲されてオブジェクト項目定義書を生成する。Salesforce組織に直接接続して xlsx を 01_基本設計/ に出力し、両方選択時は sf-doc-overview-writer を連鎖呼び出しする。"
 tools:
   - Read
   - Glob
   - Grep
   - Bash
   - AskUserQuestion
+  - Task
 ---
 
 > **禁止事項**: `scripts/` 配下の Python スクリプトを修正・上書きしてはならない。エラーや不具合を発見した場合は修正せず、完了報告に「要修正: {ファイル名} — {問題の概要}」として報告するにとどめること。
@@ -86,7 +87,6 @@ for k, p in paths.items():
 ```bash
 python -c "
 import json, re, pathlib, sys
-sys.stdout.reconfigure(encoding='utf-8')
 cfg = pathlib.Path(r'{project_dir}/.sf/config.json')
 target_org = ''
 if cfg.exists():
@@ -206,8 +206,9 @@ print('COUNT:', len(standard + custom))
 
 AskUserQuestion で提示（Other は自動表示。`{n}` は直前のスクリプトが出力した `COUNT:` の値で置換）:
 - label: "_index.md の全オブジェクト（{n}件）"、description: "最終 /sf-memory 時点の使用中オブジェクト（標準→カスタム順）"
+- label: "対象を絞る（テキストで指定）"、description: "対象オブジェクトをチャットで入力する"
 
-Other が選ばれた場合はテキストで入力してもらう:
+「対象を絞る」または Other が選ばれた場合はテキストで入力してもらう:
 ```
 対象オブジェクトを入力してください（API名またはラベル名、複数可。区切り文字はスペース・カンマ・全角スペース等なんでもOK）:
 ```
@@ -291,6 +292,24 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate.py" \
 - **新規作成の場合**: `{source_file_arg}` は空文字（`--source-file` 自体を渡さない）。`{version_increment}` は `minor`
 - **更新の場合**: `{source_file_arg}` は `--source-file "{latest_obj_file}"`
 
+完了後、xlsx の存在を確認する:
+```bash
+python -c "
+import pathlib, glob, os, sys, datetime
+files = sorted(glob.glob(r'{output_dir}/01_基本設計/オブジェクト項目定義書_v*.xlsx'), key=os.path.getmtime, reverse=True)
+if not files:
+    print('ERROR: オブジェクト項目定義書_v*.xlsx が生成されませんでした', file=sys.stderr)
+    sys.exit(1)
+latest = files[0]
+mtime = datetime.datetime.fromtimestamp(os.path.getmtime(latest))
+today = datetime.date.today()
+if mtime.date() != today or os.path.getsize(latest) == 0:
+    print(f'ERROR: 生成失敗の疑い: {latest} (mtime={mtime}, size={os.path.getsize(latest)})', file=sys.stderr)
+    sys.exit(1)
+print(f'OK: {latest} (size={os.path.getsize(latest)} bytes)')
+"
+```
+
 ### 7-3. alias cleanup（SF_ALIAS=_doc-tmp の場合）
 
 > **ブラウザログインを使用した場合（Phase 2 で `SF_ALIAS=_doc-tmp` を設定した場合）**: スクリプト完了・エラー・キャンセルのどれでも必ず以下を実行する。エラー終了時は先に logout してから状況を報告すること。
@@ -320,4 +339,14 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate.py" \
   - オブジェクト項目定義書_v{version}.xlsx
 
 ⚠️ 要確認: ...
+```
+
+失敗時:
+```
+❌ 資料生成失敗
+
+【失敗フェーズ】{Phase X-Y: 接続 / メタデータ取得 / xlsx 書き込み 等}
+【理由】{エラー概要}
+
+> SF_ALIAS=_doc-tmp の場合は logout 実行後に終了済み。
 ```
