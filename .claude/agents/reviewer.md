@@ -26,7 +26,7 @@ project_dir: {プロジェクトルートパス。不明な場合はカレント
 focus_hints: []
 ```
 
-- **「該当コンテキストなし」が返った場合**: スキップして対応範囲へ（docs/ 未整備または SF 無関係）
+- **「該当コンテキストなし」が返った場合**: コンテキストなしとして次のレビュー作業へ進む（docs/ 未整備または SF 無関係。以降のチェックリストのみ参照して対応可）
 - **関連コンテキストが返った場合**: 設計意図・ビジネスルール・要件との整合性チェックに活用する
 
 ---
@@ -71,9 +71,9 @@ focus_hints: []
 - ✓ セキュリティ対応
 
 ### 総評
-カバレッジ: XX%
+カバレッジ: XX%（コードレビュー時のみ。ドキュメントレビュー時は省略）
 Critical X件 / Warning X件
-マージ可否: [OK / 要修正]
+マージ可否: [OK / 要修正]（基準: Critical 1件以上 → 要修正 / Critical 0かつWarning 2件以下 → OK / それ以外 → ユーザー判断）
 ```
 
 ---
@@ -150,9 +150,17 @@ String query = 'SELECT Id FROM Account WHERE Name = :userInput';
 List<Account> results = Database.query(query);
 ```
 
+### パターン4: ハードコードID・URL（Warning）
+```bash
+# Salesforce レコードID（15/18桁）の検出
+grep -rn "\b00[a-zA-Z0-9]\{13,15\}\b" force-app/
+# Salesforce ドメインURL のハードコード検出
+grep -rn "https://[^'\"[:space:]]*\.salesforce\.com" force-app/
+```
+
 ---
 
-## ドキュメント・資料レビュー（sf-architect 成果物）
+## ドキュメント・資料レビュー（sf-architect / data-manager / integration-dev 成果物）
 
 ### 共通チェック（全ドキュメント）
 - [ ] 依頼の目的・対象読者に合った内容か
