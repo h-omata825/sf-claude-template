@@ -579,12 +579,13 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
 
     # I-2a: ROW_SIZE をステップ数から動的決定
     # Phase X: ≤6 ステップは ROW_SIZE=ceil(n/2) で 2 行に分割。
-    #          7+ ステップは平方根ベース（4〜6 の範囲）
+    # AA-2: 7+ ステップは ROW_SIZE=4 に固定。全 FG の自然 PNG 幅が揃い zoom 表示サイズが統一できる。
+    #       以前は平方根ベースで最大 6 列だったが、列数が増えると自然幅が FG 間で最大 1.77× 差になっていた。
     _step_n = len(steps)
     if _step_n <= 6 and _step_n >= 2:
         ROW_SIZE = max(2, math.ceil(_step_n / 2))  # 4steps→2行, 6steps→3行
     else:
-        ROW_SIZE = max(4, min(6, math.ceil(math.sqrt(_step_n)))) if steps else 5
+        ROW_SIZE = 4 if steps else 4
     need_wrap = _step_n > ROW_SIZE
 
     g = _gv.Digraph(
@@ -593,42 +594,94 @@ def render_flowchart(steps: list[dict], out_path: str) -> tuple[int, int]:
             "bgcolor": "white",
             "rankdir": "TB",
             "splines": "ortho",
-            "nodesep": "0.5",
+            "nodesep": "0.3",
             "ranksep": "0.83",
             "fontname": _FC_FONT,
             "pad": "0.4",
             "dpi": "150",
-            # AA: size/ratio 強制スケーリング撤廃 → FG 間でノード密度が揃う
+            # AA-2e: size 指定なし（graphviz 全体縮小を止める）。
+            # ノード width=1.5 × 4 列 + nodesep で自然幅 ~1155px に収まり Excel 表示 1120 とほぼ等倍。
+            # fontsize=14pt がそのまま出るため文字が潰れない。
         },
     )
 
+    # AA-2g: プラットフォームプレフィックス除去パターン
+    _PLAT_PREFIX = _re.compile(
+        r'^(?:Experience\s*Cloud(?:の)?|コミュニティ(?:の)?|ポータル(?:の)?)'
+    )
+
+    def _short_flow_label(desc: str) -> str:
+        """一言まとめラベルを抽出する（6〜10 字の名詞句）。"""
+        if not desc:
+            return ""
+        # 括弧注記・英字 API 名注釈を除去
+        s = _re.sub(r'[（(][^）)]{1,50}[）)]', '', desc).strip()
+        s = _re.sub(r'[。\s]+$', '', s).strip()
+
+        # 「〜画面で〜」パターン → 画面名（「画面」を除く）が最良の一言
+        m_scr = _re.match(r'^(.{2,20}画面)で', s)
+        if m_scr:
+            scr = _PLAT_PREFIX.sub('', m_scr.group(1)).strip()
+            scr = _re.sub(r'画面$', '', scr).strip()
+            return scr[:10] if scr else m_scr.group(1)[:10]
+
+        # 末尾の冗長な動詞句を除去
+        s = _re.sub(
+            r'(?:処理を担当する|を担当する|の処理を行う|を行う|を担う'
+            r'|する処理を担う|処理する|処理を行う|します)$',
+            '', s
+        ).strip()
+
+        # 「Xが〜」「Xは〜」構造 → 述語部分だけ取る
+        m_subj = _re.match(r'^.{1,8}(?:が|は)(.{3,})$', s)
+        if m_subj:
+            sub = m_subj.group(1).strip()
+            sub = _re.sub(
+                r'(?:処理を担当する|を担当する|を行う|をする|する)$', '', sub
+            ).strip()
+            if 2 < len(sub) <= 12:
+                s = sub
+
+        # 読点/句点で分割し、最初の意味節を使用
+        s = _re.split(r'[、。,]', s)[0].strip()
+        return s[:10]
+
     def _draw_step_node(parent, step):
-        sid       = str(step.get("step", ""))
-        n         = int(step.get("step", 0))
-        badge     = _badge(n)
-        branch    = step.get("branch", "")
-        # O-3⑤: box_label 優先（2 行体裁）、なければ title/description から生成
-        box_label = step.get("box_label", "")
-        if not box_label:
-            raw_title = step.get("title", "") or step.get("description", "")
-            raw_title = _re.sub(r'[（(][^）)]*[a-zA-Z/_][^）)]*[）)]', '', raw_title).strip()
-            box_label = _wrap_jp(raw_title, 10)   # O-3⑤: wrap 幅 8 → 10
-        label = badge + "\\n" + box_label
-        # Z-4e: ラベル行数に応じた動的ノード高さ（文字が切れず、余白も最小化）
-        _line_count = label.count("\\n") + 1
-        _dyn_h = str(max(1.0, min(2.5, 0.6 + _line_count * 0.4)))
+        sid    = str(step.get("step", ""))
+        n      = int(step.get("step", 0))
+        badge  = _badge(n)
+        branch = step.get("branch", "")
+
+        # AA-2h: LLM 生成の flow_label が最優先。空なら heuristic フォールバック。
+        short = step.get("flow_label", "").strip()
+        if not short:
+            raw = step.get("description", "") or step.get("title", "") or step.get("box_label", "")
+            short = _short_flow_label(raw)
+        if not short:
+            short = (step.get("description", "") or "")[:10]
+
+        # 5 字/行で折り返し（fixedsize ノードに収める）
+        wrapped = _wrap_jp(short, 5)
+        # 最大 2 行に制限
+        lines = wrapped.split("\\n")
+        if len(lines) > 2:
+            wrapped = "\\n".join(lines[:2])
+
+        label = badge + "\\n" + wrapped
+
+        # AA-2g: 全 FG で同一固定サイズ（FG-010 baseline）
+        common = dict(
+            label=label, fontname=_FC_FONT, fontsize="14",
+            width="1.5", height="0.85",
+            margin="0.12,0.10",
+            fixedsize="true",
+        )
         if branch:
-            parent.node(sid, label=label,
-                        shape="diamond", style="filled",
-                        fillcolor="#FFF2CC", fontcolor="#7F6000",
-                        fontname=_FC_FONT, fontsize="14",
-                        width="2.4", height=_dyn_h, margin="0.22,0.18")
+            parent.node(sid, shape="diamond", style="filled",
+                        fillcolor="#FFF2CC", fontcolor="#7F6000", **common)
         else:
-            parent.node(sid, label=label,
-                        shape="box", style="filled,rounded",
-                        fillcolor=C_STEP_BG, fontcolor="white",
-                        fontname=_FC_FONT, fontsize="14",
-                        width="2.4", height=_dyn_h, margin="0.22,0.18")
+            parent.node(sid, shape="box", style="filled,rounded",
+                        fillcolor=C_STEP_BG, fontcolor="white", **common)
 
     def _draw_comp_label(step):
         sid       = str(step.get("step", ""))

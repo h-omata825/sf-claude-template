@@ -183,10 +183,11 @@ def MW(ws, row, cs, ce, value="", border=None, bg=None, **kwargs):
 
 
 # ── PNG埋め込み ────────────────────────────────────────────────────
-def _pad_png_to_aspect(png_path: str, target_w_h: float) -> str:
+def _pad_png_to_aspect(png_path: str, target_w_h: float, align: str = "center") -> str:
     """PNG を target_w_h（幅/高さ）のアスペクトに白背景で padding して返す。
     FG ごとに異なる graphviz 出力アスペクトを正規化し、全 FG で同一表示サイズを保証する。
     元ファイルは保持し、padding 済みファイルを隣接 .pad.png として返す。
+    align="left" にすると画像を左寄せで貼り付け（右端に白帯）。デフォルトは中央。
     """
     try:
         from PIL import Image as _PILImage
@@ -202,7 +203,9 @@ def _pad_png_to_aspect(png_path: str, target_w_h: float) -> str:
             new_w = w
             new_h = int(w / target_w_h)
         canvas = _PILImage.new("RGBA", (new_w, new_h), (255, 255, 255, 255))
-        canvas.paste(img, ((new_w - w) // 2, (new_h - h) // 2))
+        paste_x = 0 if align == "left" else (new_w - w) // 2
+        paste_y = (new_h - h) // 2
+        canvas.paste(img, (paste_x, paste_y))
         out = png_path[:-4] + ".pad.png"
         canvas.convert("RGB").save(out, "PNG")
         return out
@@ -235,23 +238,29 @@ def _embed_image(ws, png_path: str, anchor: str,
                  max_h: int | None = None,
                  max_w: int | None = None,
                  target_aspect_wh: float | None = None,
-                 target_width: int | None = None):
+                 target_width: int | None = None,
+                 zoom: float | None = None,
+                 align: str = "center",
+                 display_width: int | None = None):
     """PNGをExcelシートに埋め込む。
 
     動作モード（優先順）:
-      0. target_aspect_wh が指定されていれば _pad_png_to_aspect で正規化（FG 間サイズ均一化）
+      0. target_aspect_wh が指定されていれば _pad_png_to_aspect で正規化（align で左寄せも可）
+         target_width が指定されていれば _resize_png_to_width でリサイズ（後方互換）
       1. img_h が指定されていれば固定サイズ（img_w × img_h・アスペクト比無視）
-      2. max_w と max_h が両方指定 → fit-in-box:
-         アスペクト比を維持したまま max_w × max_h の枠に収まる最大サイズに
-         フィット（横長・縦長どちらでもバランス良く表示）
-      3. それ以外は従来互換: 幅を img_w に合わせて高さをアスペクト比で決める。
-         max_h 指定時は高さ上限を適用（幅も比例して縮小）
+      2. display_width: PNG を物理リサイズせず Excel 表示幅のみ固定。高解像度 PNG を
+         Excel 側でレンダリングさせることで PIL 縮小によるぼやけを回避する
+      3. zoom が指定されていれば自然サイズに zoom を掛けた表示サイズ:
+         全 FG で同一 zoom をかけることでノード絶対サイズを統一できる
+      4. max_w と max_h が両方指定 → fit-in-box:
+         アスペクト比を維持したまま max_w × max_h の枠に収まる最大サイズ
+      5. それ以外は従来互換: 幅を img_w に合わせて高さをアスペクト比で決める
     """
     try:
         if not Path(png_path).exists():
             return
         if target_aspect_wh is not None:
-            png_path = _pad_png_to_aspect(png_path, target_aspect_wh)
+            png_path = _pad_png_to_aspect(png_path, target_aspect_wh, align=align)
         if target_width is not None:
             png_path = _resize_png_to_width(png_path, target_width)
         img = XLImage(png_path)
@@ -259,6 +268,17 @@ def _embed_image(ws, png_path: str, anchor: str,
         if img_h is not None:
             img.width = img_w
             img.height = img_h
+        elif display_width is not None:
+            orig_w = float(img.width or 1)
+            orig_h = float(img.height or 1)
+            ratio = orig_h / orig_w if orig_w else 1.0
+            img.width = display_width
+            img.height = max(1, int(display_width * ratio))
+        elif zoom is not None:
+            orig_w = float(img.width or 1)
+            orig_h = float(img.height or 1)
+            img.width = max(1, int(orig_w * zoom))
+            img.height = max(1, int(orig_h * zoom))
         elif max_w is not None and max_h is not None:
             orig_w = float(img.width or 1)
             orig_h = float(img.height or 1)
@@ -266,8 +286,10 @@ def _embed_image(ws, png_path: str, anchor: str,
             img.width = int(orig_w * scale)
             img.height = int(orig_h * scale)
         else:
+            # target_width が指定されていれば PNG リサイズ後の幅を表示幅にも使う
+            _display_w = target_width if target_width is not None else img_w
             ratio = img.height / img.width if img.width else 1.0
-            w, h = img_w, int(img_w * ratio)
+            w, h = _display_w, int(_display_w * ratio)
             if max_h and h > max_h:
                 h = max_h
                 w = int(h / ratio)
@@ -336,8 +358,8 @@ def fill_business_flow(ws, data: dict, changed_step_nos: set,
     # Z-4b: target_aspect_wh=0.60 でアスペクト正規化（FG-010 REF1/REF2 の中央値）→ 全 FG で 500×800 枠に統一
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # AA: 幅固定・縦伸長。target_width で FG 間のノード密度を揃える（graphviz size 強制廃止の代替）
-        _embed_image(ws, png_path, img_anchor, target_width=900, max_w=500, max_h=9999)
+        # AA-2: zoom 方式。graphviz 自然 PNG に同一倍率をかけてノード絶対サイズを FG 間で統一
+        _embed_image(ws, png_path, img_anchor, zoom=0.50)
 
 
 def _compute_obj_note(obj_api: str, field_access: str, data: dict) -> str:
@@ -483,8 +505,8 @@ def fill_target_objects(ws, data: dict, changed_obj_keys: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # Z-4b: target_aspect_wh=5.0 でアスペクト正規化 → max_h=300 で全 FG 統一（ユーザー「大きすぎ」解消）
-        _embed_image(ws, png_path, img_anchor, target_aspect_wh=5.0, max_w=1400, max_h=300)
+        # Z-4b: target_aspect_wh=5.0 でアスペクト正規化 → AA-2: align="left" で左寄せ（FG-001 の左白帯解消）
+        _embed_image(ws, png_path, img_anchor, target_aspect_wh=5.0, align="left", max_w=1400, max_h=300)
 
 
 def _estimate_row_height(text: str, chars_per_line: int = 34,
@@ -539,8 +561,10 @@ def fill_process_overview(ws, data: dict, changed_step_nos: set,
 
     img_anchor = f"B{diagram_start + 1}"
     if png_path:
-        # AA: 幅固定・縦伸長。処理フロー図は幅 2100px に固定し高さは内容量で伸長
-        _embed_image(ws, png_path, img_anchor, target_width=2100, max_w=1265, max_h=9999)
+        # AA-2c: Excel 表示幅のみ 1120px 固定（PIL 物理リサイズなし）。
+        # graphviz 高解像度 PNG をそのまま埋め込み Excel 側レンダリングに任せる → 文字のぼやけ回避。
+        # graphviz 自然レイアウトが既に左寄せのため「図形は左寄り」は自動で成立。
+        _embed_image(ws, png_path, img_anchor, display_width=1120)
 
 
 def fill_related_components(ws, data: dict, changed_comp_keys: set,
@@ -2162,6 +2186,7 @@ def _build_process_steps(data: dict) -> list[dict]:
             "title": title,
             "description": desc_main,
             "box_label": box_label,
+            "flow_label": (comp.get("flow_label") or "").strip(),
             "component": comp_display,
             "comp_api_name": _raw_api,
             "branch": None,
