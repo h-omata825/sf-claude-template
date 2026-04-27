@@ -1,3 +1,7 @@
+---
+description: "Salesforceプロジェクトの基本設計資料（プロジェクト概要書・オブジェクト定義書）を会話形式で作成する。機能一覧・詳細設計・プログラム設計は /sf-design を使用。"
+---
+
 Salesforceプロジェクトの**基本設計資料（プロジェクト概要書・オブジェクト定義書）のみ**を会話形式で作成します。機能一覧・詳細設計・プログラム設計は `/sf-design` を使用してください。
 スクリプトは `scripts/python/sf-doc-mcp/`（プロジェクトルートからの相対パス）にあります。
 
@@ -46,7 +50,7 @@ AskUserQuestion で作成する資料を **multiSelect: true** で選択（**上
 
 まずカレントディレクトリを `project_dir` として確定する（以降の全スクリプト呼び出し・エージェント委譲で使用）:
 ```bash
-python -c "import os, sys; sys.stdout.reconfigure(encoding='utf-8'); print(os.getcwd())"
+python -c "import os; print(os.getcwd())"
 ```
 出力されたパスを `{project_dir}` として保持する。
 
@@ -56,7 +60,7 @@ python -c "import os, sys; sys.stdout.reconfigure(encoding='utf-8'); print(os.ge
 
 ```bash
 python -c "
-import pathlib
+import pathlib, sys
 try:
     import yaml
     p = pathlib.Path('docs/.sf/sf_doc_config.yml')
@@ -67,9 +71,10 @@ try:
     else:
         print('author:')
         print('output_dir:')
-except Exception:
+except Exception as e:
     print('author:')
     print('output_dir:')
+    print('warning: 前回設定の読み込みに失敗しました:', e, file=sys.stderr)
 "
 ```
 
@@ -182,4 +187,8 @@ selected_steps: ["プロジェクト概要書", "オブジェクト定義書"]
 
 ## 完了報告
 
-各エージェントの完了報告をまとめて表示する（両方選択時は sf-doc-objects-writer が概要書含む完了報告を行う）。
+各エージェントの完了報告をそのまま出力する（コマンド側から追加のまとめ出力は行わない）。
+
+- プロジェクト概要書のみ → sf-doc-overview-writer の完了報告を出力
+- オブジェクト定義書のみ → sf-doc-objects-writer の完了報告を出力
+- 両方選択 → sf-doc-objects-writer が概要書含む完了報告を行う（内部で sf-doc-overview-writer を連鎖呼び出し済み）
