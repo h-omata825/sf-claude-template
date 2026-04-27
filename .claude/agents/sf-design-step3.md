@@ -1,6 +1,6 @@
 ---
 name: sf-design-step3
-description: "sf-design コマンドから委譲される機能一覧ステップ専用エージェント。feature_list.json を検証し、generate_feature_list.py を直接呼び出して機能一覧.xlsx を生成する。「機能一覧のみ」または「詳細設計+機能一覧」選択時のみ呼ばれる。プログラム設計と同時選択時は sf-design-step2 が機能一覧を生成するため、このエージェントは呼ばれない。"
+description: "sf-design コマンドから委譲される機能一覧ステップ。generate_feature_list.py を直接呼び出して機能一覧.xlsx を生成する。"
 tools:
   - Read
   - Glob
@@ -62,13 +62,36 @@ for t, n in sorted(cnt.items()): print(f'  {t}: {n}件')
 
 ## Phase 3: 機能一覧.xlsx 生成
 
+既存の機能一覧.xlsx が存在する場合は `--source-file` を渡す（差分検出・改版履歴の引き継ぎ）:
+
 ```bash
-python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
-  --input "{project_dir}/docs/.sf/feature_list.json" \
-  --output-dir "{output_dir}/01_基本設計" \
-  --author "{author}" \
-  --project-name "{project_name}" \
-  --version-increment {version_increment}
+if [ -f "{output_dir}/01_基本設計/機能一覧.xlsx" ]; then
+  python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
+    --input "{project_dir}/docs/.sf/feature_list.json" \
+    --output-dir "{output_dir}/01_基本設計" \
+    --author "{author}" \
+    --project-name "{project_name}" \
+    --version-increment {version_increment} \
+    --source-file "{output_dir}/01_基本設計/機能一覧.xlsx"
+else
+  python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
+    --input "{project_dir}/docs/.sf/feature_list.json" \
+    --output-dir "{output_dir}/01_基本設計" \
+    --author "{author}" \
+    --project-name "{project_name}" \
+    --version-increment {version_increment}
+fi
 ```
 
-完了後、`{output_dir}/01_基本設計/機能一覧.xlsx` の存在を確認してからこのエージェントを終了する。
+完了後、xlsx の存在を確認してからこのエージェントを終了する:
+
+```bash
+python -c "
+import pathlib, sys
+p = pathlib.Path(r'{output_dir}/01_基本設計/機能一覧.xlsx')
+if not p.exists():
+    print(f'ERROR: {p} が生成されませんでした', file=sys.stderr)
+    sys.exit(1)
+print(f'OK: {p}')
+"
+```
