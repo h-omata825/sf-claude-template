@@ -206,3 +206,31 @@ version_increment: {version_increment}
 ```bash
 python -c "import shutil; shutil.rmtree(r'{output_dir}/02_詳細設計/.tmp', ignore_errors=True)"
 ```
+
+---
+
+## 完了報告
+
+以下の形式で全体完了を報告する（sf-design.md の完了報告フォーマットに準拠）:
+
+```
+✅ 設計書生成完了
+
+【機能一覧】（selected_steps に "機能一覧" を含み生成した場合）
+  生成先: {output_dir}/01_基本設計/機能一覧.xlsx
+
+【詳細設計】
+  生成先: {output_dir}/02_詳細設計/
+  生成数: {n} グループ
+
+【プログラム設計】（selected_steps に "プログラム設計" を含み生成した場合）
+  生成先: {output_dir}/03_プログラム設計/
+  生成数: {n} 件
+
+⚠️ 要確認:
+- {FG-XXX}: 生成失敗の概要（例: 関連オブジェクトが特定できなかった）
+- 未分類コンポーネント {n} 件
+（要確認事項がない場合はこのセクションごと省略）
+```
+
+> 後続の連鎖呼び出し（step2/step3）から返された完了情報をまとめて本報告に統合すること。sf-design.md コマンドはこの完了報告をそのまま転記する。
