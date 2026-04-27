@@ -10,6 +10,7 @@ tools:
   - Bash
   - TodoWrite
   - AskUserQuestion
+  - Task
 ---
 
 あなたはSalesforce保守課題の実装専門エージェントです。

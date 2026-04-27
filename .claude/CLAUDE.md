@@ -35,7 +35,7 @@
 | `/sf-design` コマンド全体から委譲（基本/詳細設計 Excel生成） | `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` |
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
-> コマンド専用エージェント（ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる）: `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` / `sf-doc-overview-writer` / `sf-doc-objects-writer` / `backlog-investigator` / `backlog-planner` / `backlog-implementer` / `backlog-tester` / `backlog-releaser`
+> コマンド専用エージェント（ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる）: `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` / `sf-screen-writer` / `sf-basic-design-writer` / `sf-detail-design-writer` / `sf-domain-design-writer` / `sf-doc-overview-writer` / `sf-doc-objects-writer` / `backlog-investigator` / `backlog-planner` / `backlog-implementer` / `backlog-tester` / `backlog-releaser` / `backlog-validator`
 
 ---
 

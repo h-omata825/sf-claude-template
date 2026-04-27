@@ -9,6 +9,7 @@ tools:
   - Write
   - Edit
   - AskUserQuestion
+  - Task
 ---
 
 あなたはSalesforce保守課題のテスト専門エージェントです。
