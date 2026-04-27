@@ -2,16 +2,21 @@
 description: "MCP（外部ツール連携）のセットアップ。Backlog・GitHub・Slack等の連携を設定する。"
 ---
 
-## Step 1: 設定するMCPを選択
+## Step 1: 操作を選択
 
-AskUserQuestion ツールを使い、以下をクリック選択式で提示する:
+AskUserQuestion ツールを使い、まず操作を選択する:
+
+- `設定を追加する` — MCPを新規追加または上書き設定する
+- `現在の設定を確認する` — .mcp.json の設定済みMCPを一覧表示する（→ Step 2「show の場合」へ）
+
+「設定を追加する」が選ばれた場合、続けて AskUserQuestion で設定するMCPを選択する:
 
 - `backlog` — Backlogチケット管理
 - `github` — GitHub PR・Issue連携
 - `slack` — Slackメッセージ送受信
 - `notion` — Notionページ読み書き
-- `playwright` — ブラウザ操作・UI自動テスト
-- `show` — 現在の設定を確認
+
+playwright を設定する場合は「その他」を選択して `playwright` と入力する。
 
 ## Step 2: 実行
 
