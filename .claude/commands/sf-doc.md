@@ -63,7 +63,7 @@ python -c "
 import pathlib, sys
 try:
     import yaml
-    p = pathlib.Path('docs/.sf/sf_doc_config.yml')
+    p = pathlib.Path(r'{project_dir}/docs/.sf/sf_doc_config.yml')
     if p.exists():
         d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
         print('author:' + str(d.get('author', '')))
@@ -94,7 +94,7 @@ except Exception as e:
 
 確定後、直ちに以下を実行して値を保持する（後続でコンテキスト汚染が起きても正確な値が残るようにするため）:
 ```bash
-python -c "import pathlib; p=pathlib.Path('docs/.sf'); p.mkdir(parents=True, exist_ok=True); (p / '.author_tmp').write_text('{author}', encoding='utf-8')"
+python -c "import pathlib; p=pathlib.Path(r'{project_dir}/docs/.sf'); p.mkdir(parents=True, exist_ok=True); (p / '.author_tmp').write_text('{author}', encoding='utf-8')"
 ```
 
 ### 出力先フォルダ
@@ -114,7 +114,7 @@ python -c "import pathlib; p=pathlib.Path('docs/.sf'); p.mkdir(parents=True, exi
 
 確定後、直ちに以下を実行して値を保持する:
 ```bash
-python -c "import pathlib; p=pathlib.Path('docs/.sf'); p.mkdir(parents=True, exist_ok=True); (p / '.output_dir_tmp').write_text(r'{output_dir}', encoding='utf-8')"
+python -c "import pathlib; p=pathlib.Path(r'{project_dir}/docs/.sf'); p.mkdir(parents=True, exist_ok=True); (p / '.output_dir_tmp').write_text(r'{output_dir}', encoding='utf-8')"
 ```
 
 ### 設定の保存
@@ -123,13 +123,13 @@ python -c "import pathlib; p=pathlib.Path('docs/.sf'); p.mkdir(parents=True, exi
 ```bash
 python -c "
 import pathlib, sys
-author_f = pathlib.Path('docs/.sf/.author_tmp')
-outdir_f = pathlib.Path('docs/.sf/.output_dir_tmp')
+author_f = pathlib.Path(r'{project_dir}/docs/.sf/.author_tmp')
+outdir_f = pathlib.Path(r'{project_dir}/docs/.sf/.output_dir_tmp')
 try:
     import yaml
     author = author_f.read_text(encoding='utf-8').strip() if author_f.exists() else ''
     output_dir = outdir_f.read_text(encoding='utf-8').strip() if outdir_f.exists() else ''
-    p = pathlib.Path('docs/.sf/sf_doc_config.yml')
+    p = pathlib.Path(r'{project_dir}/docs/.sf/sf_doc_config.yml')
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(yaml.dump({'author': author, 'output_dir': output_dir}, allow_unicode=True, default_flow_style=False), encoding='utf-8')
 except Exception as e:
@@ -158,11 +158,31 @@ Step 0-2 完了後、`selected_steps` に応じて以下のエージェントを
 
 ### プロジェクト概要書のみ → sf-doc-overview-writer
 
+既存ファイルの有無を確認してバージョン種別を決定する:
+```bash
+python -c "
+import pathlib
+p = pathlib.Path(r'{output_dir}/01_基本設計/プロジェクト概要書.xlsx')
+print('EXISTS:', p.exists())
+print('PATH:', str(p))
+"
 ```
-project_dir:    {project_dir}
-output_dir:     {output_dir}
-author:         {author}
-pre_confirmed:  false
+
+**既存ファイルがある場合:** ファイル名を表示したあと、AskUserQuestion でバージョン種別を選択:
+- label: "マイナー更新（vX.Y → vX.Y+1）"、description: "変更箇所を赤字表示"
+- label: "メジャー更新（vX.Y → vX+1.0）"、description: "赤字をリセットして黒字化"
+
+選択結果を `version_increment`（`"minor"` / `"major"`）として保持。`source_file = {output_dir}/01_基本設計/プロジェクト概要書.xlsx`。
+
+**既存ファイルがない場合:** `version_increment = "minor"`、`source_file = ""`（新規モード）として続行。
+
+```
+project_dir:       {project_dir}
+output_dir:        {output_dir}
+author:            {author}
+pre_confirmed:     false
+version_increment: {version_increment}
+source_file:       {source_file}
 ```
 
 ### オブジェクト定義書のみ → sf-doc-objects-writer
