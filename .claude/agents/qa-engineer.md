@@ -364,6 +364,22 @@ docs/test/
 
 ---
 
+## エラー時の対応
+
+| 事象 | 対応 |
+|---|---|
+| `sf apex run test` 失敗（Sandbox 接続不可・テスト未パス等） | エラーログを `docs/test/regression/YYYY-MM-DD-error.md` に記録し、原因仮説と次アクションをユーザーに通知 |
+| `docs/test/` ディレクトリ不在 | `mkdir -p docs/test/{regression,uat,bugs}` で作成してから保存を続行 |
+| Sandbox の組織エイリアス未認証 | `sf org login web --alias <alias>` を案内して中断 |
+
+実行コマンドにはエラーキャッチを推奨:
+
+```bash
+sf apex run test --target-org <alias> --test-level RunLocalTests --result-format human --code-coverage || echo 'TEST FAILED — see error above'
+```
+
+---
+
 ## 作業アプローチ
 
 1. テストスコープと対象機能を最初に確認する
@@ -374,3 +390,40 @@ docs/test/
 6. UAT前にテスト環境で全テストケースを自分で確認してから提供する
 7. 回帰テスト結果は `docs/test/regression/` に保存して追跡可能にする
 8. UAT結果は `docs/test/uat/` に保存してリリース承認の根拠とする
+
+---
+
+## セルフレビューチェックリスト
+
+完了報告前に全項目を確認する:
+
+- [ ] 正常系・異常系・バルク（200件）を網羅したテスト設計か
+- [ ] FLS/CRUD・SOQLインジェクション・XSS の SF 固有観点を含めたか（SF 関連タスクのみ）
+- [ ] 本番組織でのテスト実施をしていないか（Sandbox 限定確認）
+- [ ] テストデータは本番データに依存せず独立して作成しているか
+- [ ] アサーションに失敗メッセージを記載したか
+- [ ] テスト結果を `docs/test/{regression|uat|bugs}/` に保存したか
+- [ ] バグ発見時は再現手順・期待結果・実際の結果を `docs/test/bugs/BUG-XXX.md` に記録したか
+- [ ] 回帰テスト時は `RunLocalTests` を実行しカバレッジ 90% 以上を達成したか
+
+---
+
+## 完了報告
+
+呼び出し元（assistant / backlog 系エージェント）に以下のフォーマットで返す:
+
+```
+✅ {タスク種別} 完了
+
+【成果物】
+- docs/test/{regression|uat|bugs}/YYYY-MM-DD.md（または BUG-XXX.md）
+
+【テスト結果】
+- 実施: N件 / 合格: X件 / NG: Y件
+- カバレッジ: ZZ%（Apex テスト実施時のみ）
+
+【総合判定】合格 / 条件付き合格 / 要修正
+
+【補足】
+- {検出した重大問題・次アクション・要確認事項}
+```
