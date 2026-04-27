@@ -42,6 +42,8 @@ from openpyxl.utils import get_column_letter
 
 import diagram_gen as dg
 from tmp_utils import get_project_tmp_dir, set_project_tmp_dir
+from meta_store import read_meta, write_meta, compute_source_hash
+from version_manager import increment_version
 
 # ── デザインシステム（build_basic_doc_template.py と統一）────────
 C_TITLE_DARK = "1F3864"
@@ -512,7 +514,8 @@ def _pick_flows(swimlanes: dict) -> tuple[dict | None, dict | None]:
 
 
 # ── シート 1: 表紙 ─────────────────────────────────────────────
-def _build_cover(ws, org: dict, req: dict, author: str):
+def _build_cover(ws, org: dict, req: dict, author: str,
+                 history: list | None = None):
     _setup_grid(ws)
     r = 2  # row 1 は余白
     _set_h(ws, 1, 8)
@@ -566,8 +569,19 @@ def _build_cover(ws, org: dict, req: dict, author: str):
     r = _section_row(ws, r, "改版履歴")
     r = _hdr_row(ws, r, [(2,3,"版"),(4,7,"改版日"),(8,12,"改版者"),(13,31,"改版内容")])
     today = date.today().strftime("%Y-%m-%d")
-    r = _data_row(ws, r, [(2,3,"1.0"),(4,7,today),(8,12,author),(13,31,"初版作成")])
-    r = _empty_rows(ws, r, 9, [(2,3),(4,7),(8,12),(13,31)])
+    if not history:
+        history = [{"version": "1.0", "date": today, "author": author,
+                    "content": "初版作成"}]
+    for entry in history:
+        r = _data_row(ws, r, [
+            (2, 3,  entry.get("version", "")),
+            (4, 7,  entry.get("date", "")),
+            (8, 12, entry.get("author", "")),
+            (13, 31, entry.get("content", "")),
+        ])
+    remaining = max(0, 10 - len(history))
+    if remaining:
+        r = _empty_rows(ws, r, remaining, [(2,3),(4,7),(8,12),(13,31)])
 
 
 # ── シート 2: システム概要 ────────────────────────────────────────
@@ -711,13 +725,69 @@ def _build_glossary_sheet(ws, glossary: list):
 
 
 # ── メイン ──────────────────────────────────────────────────────
-def generate(docs_dir: Path, output: Path, author: str, project_name: str):
+def generate(docs_dir: Path, output: Path, author: str, project_name: str,
+             source_file: str = "", version_increment: str = "minor"):
     org      = parse_org(docs_dir / "overview" / "org-profile.md")
     req      = parse_requirements(docs_dir / "requirements" / "requirements.md")
     system   = parse_system_json(docs_dir / "architecture" / "system.json")
     swim     = parse_swimlanes(docs_dir / "flow" / "swimlanes.json")
     objects  = parse_catalog_index(docs_dir / "catalog" / "_index.md")
     relations = parse_data_model(docs_dir / "catalog" / "_data-model.md")
+
+    # ── 改版履歴: source-file から prev_meta を読み込み、source_hash 比較で差分判定 ──
+    today = date.today().strftime("%Y-%m-%d")
+    src_paths = [
+        docs_dir / "overview"     / "org-profile.md",
+        docs_dir / "requirements" / "requirements.md",
+        docs_dir / "architecture" / "system.json",
+        docs_dir / "catalog"      / "_index.md",
+        docs_dir / "catalog"      / "_data-model.md",
+        docs_dir / "flow"         / "swimlanes.json",
+    ]
+    new_hash = compute_source_hash([str(p) for p in src_paths])
+    prev_meta = read_meta(source_file) if source_file else None
+
+    if prev_meta:
+        prev_history = list(prev_meta.get("history", []))
+        prev_version = prev_meta.get("version", "1.0")
+        prev_hash    = prev_meta.get("source_hash", "")
+
+        if prev_hash == new_hash and version_increment == "minor":
+            current_version = prev_version
+            history         = prev_history
+            print(f"  [INFO] 差分なし（source_hash 一致）: v{prev_version} 据え置き")
+        else:
+            # 改版履歴 20 行制限: 既存履歴が 20 以上なら minor 指定でも major 強制昇格
+            forced_major = False
+            if len(prev_history) >= 20 and version_increment == "minor":
+                print(f"  [WARN] 改版履歴が {len(prev_history)} 件に達しているため "
+                      f"minor → major に強制昇格し履歴をリセットします")
+                version_increment = "major"
+                forced_major = True
+            is_major = (version_increment == "major")
+            current_version = increment_version(prev_version, version_increment)
+            history = [] if is_major else prev_history
+            next_no = (max((h.get("no", 0) for h in history), default=0) + 1)
+            content = ("メジャーバージョンアップ（履歴リセット）"
+                       if is_major else "概要情報更新")
+            history.append({
+                "no":      next_no,
+                "version": current_version,
+                "date":    today,
+                "sheet":   "全シート",
+                "content": content,
+                "author":  author,
+            })
+            print(f"  [INFO] 更新: v{prev_version} → v{current_version}"
+                  + ("（メジャー昇格・履歴リセット）" if forced_major else
+                     "（メジャー）" if is_major else ""))
+    else:
+        current_version = "1.0"
+        history = [{
+            "no": 1, "version": "1.0", "date": today,
+            "sheet": "全シート", "content": "新規作成", "author": author,
+        }]
+        print("  [INFO] 新規作成モード: v1.0")
 
     if project_name:
         org["project_name"] = project_name
@@ -776,11 +846,17 @@ def generate(docs_dir: Path, output: Path, author: str, project_name: str):
         ws4 = wb.create_sheet("ER図")
         ws5 = wb.create_sheet("用語集")
 
-        _build_cover(ws1, org, req, author)
+        _build_cover(ws1, org, req, author, history=history)
         _build_system_overview(ws2, req, system, sys_img)
         _build_flow_sheet(ws3, asis_flow, tobe_flow, asis_img, tobe_img)
         _build_er_sheet(ws4, objects, relations, er_img)
         _build_glossary_sheet(ws5, org.get("glossary", []))
+
+        write_meta(wb, {
+            "version":     current_version,
+            "history":     history,
+            "source_hash": new_hash,
+        })
 
         output.parent.mkdir(parents=True, exist_ok=True)
         wb.save(str(output))
@@ -794,9 +870,15 @@ def main():
     ap.add_argument("--output",       required=True)
     ap.add_argument("--author",       default="")
     ap.add_argument("--project-name", default="")
+    ap.add_argument("--source-file",  default="",
+                    help="更新時: 既存のプロジェクト概要書.xlsx のパス（_meta から履歴引き継ぎ）")
+    ap.add_argument("--version-increment", default="minor",
+                    choices=["minor", "major"],
+                    help="minor: x.y+1 / major: x+1.0（履歴リセット）")
     args = ap.parse_args()
     generate(Path(args.docs_dir), Path(args.output),
-             args.author, args.project_name)
+             args.author, args.project_name,
+             args.source_file, args.version_increment)
 
 
 if __name__ == "__main__":
