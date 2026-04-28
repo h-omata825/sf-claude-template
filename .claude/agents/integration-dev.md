@@ -9,6 +9,7 @@ tools:
   - Grep
   - Bash
   - TodoWrite
+  - Task
 ---
 
 > **Bash ツールの用途**: SF CLI による Named Credential・External Services の確認・デプロイ、および外部 API への疎通確認（`curl` 等）のために使用する。
@@ -22,11 +23,12 @@ tools:
 ```
 task_description: 「{ユーザー指示 / 連携の概要}」
 project_dir: {プロジェクトルートパス。不明な場合はカレントディレクトリ}
-focus_hints: []
+focus_hints: [callout, named_credential, platform_event, api]
 ```
 
 - **「該当コンテキストなし」が返った場合**: スキップして対応範囲へ
 - **関連コンテキストが返った場合**: 連携先システム情報・対象オブジェクト構成・既存連携設計を実装判断の材料として保持する
+- **エラー / タイムアウトが発生した場合**: スキップして対応範囲へ進む（Phase 0 は必須ではないため中断しない）
 
 ---
 
@@ -77,7 +79,7 @@ public class ExternalApiService {
 
         HttpResponse res = new Http().send(req);
 
-        if (res.getStatusCode() != 200) {
+        if (res.getStatusCode() < 200 || res.getStatusCode() >= 300) {
             throw new CalloutException('API error: ' + res.getStatusCode() + ' ' + res.getBody());
         }
         return (ResponseWrapper) JSON.deserialize(res.getBody(), ResponseWrapper.class);
@@ -147,7 +149,7 @@ static void testCalloutError() {
 | コールアウト数/トランザクション | 100回 |
 | タイムアウト最大値 | 120秒 |
 | 同期Apexでのコールアウト | DML後は不可（@future / Queueable 使用） |
-| Platform Events 発行/購読 | Edition により異なる（Enterprise 基本枠で 250,000件/24時間程度。最新値は Salesforce Developer Limits ドキュメントを確認） |
+| Platform Events 発行/購読 | Edition により異なる（Enterprise 基本枠で 250,000件/24時間。最新値は Salesforce Developer Limits ドキュメントを確認） |
 
 ---
 
@@ -165,10 +167,10 @@ static void testCalloutError() {
 
 ## 作業アプローチ
 
-1. 外部システムのAPI仕様（エンドポイント・認証方式・レスポンス形式）を確認する
+1. 外部システムのAPI仕様（エンドポイント・認証方式・レスポンス形式）を確認する。仕様書が得られない場合はユーザーに確認を求める
 2. Named Credentialsの設定手順を実装コードとセットで提示する
 3. テスト用MockクラスをApex実装とセットで提供する
-4. トリガー/同期Apexからのコールアウトか確認し、非同期化の必要性を判断する
+4. トリガー/同期Apexからのコールアウトか確認し、非同期化の必要性を判断する（DML後コールアウト・外部レスポンスタイムが長い（目安: 5秒超）・ガバナ制限累積リスクがある場合は @future / Queueable に移行）
 5. **既存連携・自動化との影響確認**:
    - Named Credentials・接続アプリケーションの既存設定を確認
    - 同一オブジェクトへのDML操作がある場合、トリガー・フローとの競合を確認（`force-app/main/default/triggers/`, `force-app/main/default/flows/` を検索）
