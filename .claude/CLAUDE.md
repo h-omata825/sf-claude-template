@@ -33,7 +33,7 @@
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
 > コマンド専用エージェント（ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる）: `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` / `sf-screen-writer` / `sf-detail-design-writer` / `sf-doc-overview-writer` / `sf-doc-objects-writer` / `backlog-investigator` / `backlog-planner` / `backlog-implementer` / `backlog-tester` / `backlog-releaser` / `backlog-validator`
-> blind subagent（Task ツール経由でのみ起動・親の情報を受け取らない）: `backlog-blind-second-opinion` / `backlog-blind-final-verifier` / `backlog-blind-validator`
+> blind subagent（Task ツール経由でのみ起動・direct 呼び出し禁止・親の情報を受け取らない）: `backlog-blind-second-opinion` / `backlog-blind-final-verifier` / `backlog-blind-validator`
 
 ---
 
@@ -188,7 +188,7 @@ Git操作・ファイル破壊・本番デプロイは上記 Security & Permissi
    - 「品質チェック通過」と表示して完了
 ```
 
-チェック基準の詳細は `reviewer.md`（コード・ドキュメント）および `qa-engineer.md`（テスト）を参照。
+チェック基準の詳細は `reviewer`（コード・ドキュメント）および `qa-engineer`（テスト）を参照。
 
 ### ゲートの例外
 
