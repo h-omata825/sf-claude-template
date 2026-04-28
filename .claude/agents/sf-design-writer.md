@@ -90,7 +90,7 @@ for name in ['プログラム設計書テンプレート.xlsx', 'プログラム
         missing.append(name)
 if missing:
     for m in missing:
-        print(f'ERROR: {m} が見つかりません。')
+        print('ERROR:', m, 'が見つかりません。')
     print('  /upgrade を実行してテンプレートを取得してください。')
     sys.exit(1)
 print('テンプレート確認OK: プログラム設計書テンプレート.xlsx / プログラム設計書（画面）テンプレート.xlsx')
@@ -132,13 +132,19 @@ for p in sorted(detail_dir.glob('*_detail.json')) if detail_dir.exists() else []
 
 > **注意**: 上位設計 JSON がない場合はこの手順をスキップし、ソースコードのみから生成する。
 
-> 一時ファイルルール: [.claude/templates/common/tmp-file-rules.md](../templates/common/tmp-file-rules.md)
+> 一時ファイルルール: [.claude/templates/common/tmp-file-rules.md]({project_dir}/.claude/templates/common/tmp-file-rules.md)
+
+---
+
+## Phase 0.7: ハッシュチェック（全コンポーネント一括）
+
+> 共通手順: [.claude/templates/common/phase07-hash-check-by-feature.md]({project_dir}/.claude/templates/common/phase07-hash-check-by-feature.md)
 
 ---
 
 ## Phase 0.5: Apex スケルトン事前生成（Apex / Batch / Integration が対象に含まれる場合のみ）
 
-> **実行順序**: このフェーズは **Phase 0.7（ハッシュチェック）の後** に実行する。Phase 0.7 を先に完了させてスキップリストを確定してから、スキップリストに含まれないコンポーネントのみを対象にこのフェーズを実行すること。
+> Phase 0.7 でスキップ判定されたコンポーネントはこのフェーズの対象外とする。スキップリストを確定してから対象コンポーネントに対して実行すること。
 
 feature_list に Apex 系（Apex / Apex_Batch / Apex_AuraEnabled / Integration 等）が含まれる場合、JSON 生成前に**スケルトン抽出スクリプトを実行する**。
 これにより `calls` / `object_ref` / `branch` / `node_type` が機械的に確定し、エージェントによる書き漏れ・誤記を防ぐ。
@@ -151,7 +157,7 @@ python "{project_dir}/scripts/python/sf-doc-mcp/extract_apex_skeleton.py" \
   --output "{tmp_dir}/{api_name}_skeleton.json"
 ```
 
-スケルトン JSON が生成されたら `_parser_meta` で external calls / SOQL / DML を把握する。適用ルール（禁止フィールド・補完手順）は `design-writer-quality-guidelines.md` のスケルトンモード章を参照する。スケルトンが生成できなかった場合は Phase 1 で通常通り生成する。
+スケルトン JSON が生成されたら `_parser_meta` で external calls / SOQL / DML を把握する。適用ルール（禁止フィールド・補完手順）は `design-writer-quality-guidelines.md` のスケルトンモード章を参照する。スケルトンが生成できなかった場合は Phase 1 で通常通り生成する。スケルトン生成に失敗したコンポーネントは完了報告に「スケルトン生成失敗: {api_name}」として記録する。
 
 ---
 
@@ -161,20 +167,17 @@ python "{project_dir}/scripts/python/sf-doc-mcp/extract_apex_skeleton.py" \
 
 ---
 
-## Phase 0.7: ハッシュチェック（全コンポーネント一括）
-
-> 共通手順: [.claude/templates/common/phase07-hash-check-by-feature.md](../templates/common/phase07-hash-check-by-feature.md)
-
----
-
 ## Phase 1: コンポーネントのソース読み込みと JSON 生成
 
 > Phase 0 で読み込んだ `design-writer-reference.md` の内容を参照しながら進める（再読み不要）。
 
 > **必須メタデータ**: 生成する design JSON には `"author": "{author}"` を必ず含める。`generate_feature_design.py` は JSON 内の `author` フィールドを設計書の作成者欄に転記する（コマンドライン引数 `--author` は存在しない）。
 
+> **target_ids によるフィルタ**: `target_ids` が全件でない場合は、Phase 1 開始前に `feature_list` を `target_ids` でフィルタしてから処理を開始する。`target_ids` が空・未指定・または全件リストの場合は全件処理する。
+
 **バッチサイズ: 5〜8件ずつ処理する**（コンテキスト管理のため）。
 > 根拠: Apex クラス1件あたり平均 200〜500行のソース + 生成 JSON で約 2,000〜5,000 token を消費。5〜8件で 10,000〜40,000 token 相当となり、コンテキスト圧迫前にファイル保存・解放する適切な粒度。大規模クラス（1,000行超）は1件/バッチに落とす。
+> バッチ組み立て前に各コンポーネントのソースファイル行数を確認する。1,000行超のコンポーネントが含まれる場合はそのコンポーネントを含むバッチを1〜2件に減らす（`wc -l` または Read で行数確認）。
 JSON を `tmp_dir` に書き出してからメモリを解放して次のバッチへ進む。
 
 > **全件完了前に Phase 1.5 へ進まないこと**。担当コンポーネントを全て処理し終えてから Phase 1.5 のセルフレビューへ進む。途中で完了報告しない。
@@ -251,6 +254,7 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_design.py" \
 ```
 
 > `{source_hash}` は Phase 0.7 で source_hash_checker.py が出力した `hash:XXXX` の値。新規作成・ハッシュなしの場合は空文字で渡す（`--source-hash ""`）。
+> **既存ファイルがある場合（更新時）**: `--source-file "{output_dir}/{subfolder}/【{feat_id}】{name}.xlsx"` を追加する（バージョン管理・差分検出に使用）。`{subfolder}` は type による（`apex` / `flow` / `integration`）。初回生成時は省略可（スクリプトが `default=""` で処理）。
 
 出力先フォルダとファイル名:
 | 種別 | 出力先サブフォルダ | ファイル名 |
@@ -277,7 +281,7 @@ if not jsons:
     print('ERROR: *_design.json が 0 件です。Phase 1/2 でエラーが発生した可能性があります。')
     sys.exit(1)
 # sf-screen-writer 分（LWC/Aura/VF/画面フロー）が含まれているかをJSONのtypeフィールドで判定
-screen_types = {'LWC', 'Aura', 'Visualforce', '画面フロー'}
+screen_types = {'LWC', 'Aura', 'Visualforce', 'VF', '画面フロー'}
 screen_jsons = []
 for j in jsons:
     try:
@@ -293,7 +297,7 @@ else:
 "
 ```
 
-- 0 件の場合: 「設計 JSON が生成されていません。Phase 1/2 のエラーを確認してください。」と報告して終了する。Phase 4（クリーンアップ）は実行する。
+- 0 件の場合: 「設計 JSON が生成されていません。Phase 1/2 のエラーを確認してください。」と報告する。**Phase 3 はスキップして Phase 4（クリーンアップ）へ進む**。
 - 1 件以上の場合: 以下の feature_list.json 組み立てへ進む。
 
 > **バッチ単位の進捗確認**: JSON が 10 件を超える場合、10 件ごとに「x/y 件処理中」と中間報告を出力する。処理が途中で止まった場合は残件数を報告して続行可否を確認する。
@@ -320,6 +324,11 @@ else:
 
 既存の機能一覧.xlsx が `{feature_list_dir}/機能一覧.xlsx` に存在する場合は `--source-file` で渡す（差分検出・バージョン管理に使用）:
 
+> **オプション引数の使い分け**:
+> - `--system-name "..."`: 機能一覧のシステム名欄に表示される（省略時は空欄）
+> - `--template "..."`: テンプレートファイルを明示指定。省略時はスクリプトのデフォルトテンプレートを使用
+> - `--force`: 既存ファイルがあっても強制上書きする（バージョンチェックをスキップ）
+
 ```bash
 # 既存ファイルあり（更新）
 python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
@@ -343,7 +352,7 @@ python "{project_dir}/scripts/python/sf-doc-mcp/generate_feature_list.py" \
 
 ## Phase 4: 後処理・完了報告（必ず実行・スキップ禁止）
 
-[共通ルール参照](.claude/CLAUDE.md#一時ファイルの後片付け全エージェント共通)
+[共通ルール参照]({project_dir}/.claude/CLAUDE.md#一時ファイルの後片付け全エージェント共通)
 
 tmp_dir を削除し、output_dir およびプロジェクトルート（CWD）に残った一時ファイルも合わせてクリーンアップする:
 ```bash
@@ -359,7 +368,7 @@ python "{project_dir}/scripts/python/sf-doc-mcp/cleanup_design_workspace.py" \
 
 ```
 ✅ 機能一覧.xlsx — 1ファイル（{機能数}件）
-✅ 機能設計書.xlsx — {機能数}ファイル
+✅ 【{feat_id}】{name}.xlsx — {機能数}ファイル（apex / flow / integration 各サブフォルダ）
 出力先: {output_dir}
 ```
 
