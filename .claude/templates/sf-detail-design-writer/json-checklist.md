@@ -2,6 +2,7 @@
 
 - [ ] `feature_id` が `FG-XXX` 形式でセットされているか（グループID）
 - [ ] `processing_purpose` に具体的なオブジェクト名・処理名が含まれているか
+- [ ] `processing_purpose` に API 名・Apex クラス名・メソッド名が含まれていないか（quality-rules.md の API 名禁止規則準拠）
 - [ ] `data_flow_overview` が矢印で流れを示し、責務分離の意図が読み取れるか
 - [ ] `business_flow[]` に **技術用語が混入していないか**（`action` に「画面フロー」「Apex」「Flow」「Controller」等があれば NG）
 - [ ] `business_flow[]` のアクターが業務上の登場人物（お客様・GF社担当者・自動フロー等）か（コンポーネント名は NG）

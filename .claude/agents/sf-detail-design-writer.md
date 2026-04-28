@@ -68,6 +68,8 @@ print(f'テンプレート確認OK: {tpl}')
 "
 ```
 
+> テンプレートが見つからない場合（終了コード 1）は処理を中断し、「`詳細設計書テンプレート.xlsx` が見つかりません。`{project_dir}/scripts/python/sf-doc-mcp/` に配置してから再実行してください。」とユーザーに報告して終了すること。
+
 feature_groups.yml を読む:
 ```bash
 python -c "
@@ -111,13 +113,13 @@ else:
 
 ```bash
 python -c "
-import pathlib
+import pathlib, json
 root = pathlib.Path(r'{output_dir}').parent
 
 # 基本設計 JSON（グループ単位）
-# {target_group_ids} は必ず Python list[str] 形式で展開すること（例: ["FG-001", "FG-002"]）
+# {target_group_ids} は JSON 配列文字列で渡すこと（例: '[\"FG-001\", \"FG-002\"]'）
 basic_dir = root / '01_基本設計' / '.tmp'
-for group_id in {target_group_ids}:  # type: list[str]
+for group_id in json.loads(r'{target_group_ids}'):
     p = basic_dir / f'{group_id}_basic.json'
     if p.exists():
         print(f'basic_json:{group_id}:{p}')
@@ -148,8 +150,9 @@ if prog_dir.exists():
 各グループの処理前に以下を実行する。
 
 ```bash
-# グループのソースファイル一覧を取得
-python -c "
+# グループのソースファイル一覧を取得し、source_paths 変数に格納する
+# {group_id} には処理対象グループの ID（例: FG-001）を代入してから実行すること
+source_paths=$(python -c "
 import yaml, pathlib, sys
 proj = pathlib.Path(r'{project_dir}')
 with open(proj / 'docs' / '.sf' / 'feature_groups.yml', encoding='utf-8') as f:
@@ -183,17 +186,18 @@ for fid in group.get('feature_ids', []):
     if p.exists():
         paths.append(str(p))
 print(','.join(paths))
-"
+")
 ```
 
 ```bash
-# 既存 Excel の自動検出（feature_id ベース）
-python -c "
+# 既存 Excel の自動検出し、detected_excel_or_empty 変数に格納する
+# {group_id} には処理対象グループの ID（例: FG-001）を代入してから実行すること
+detected_excel_or_empty=$(python -c "
 import pathlib
 p = pathlib.Path(r'{output_dir}')
 matches = list(p.glob('【{group_id}】*.xlsx'))
 print(matches[0] if matches else '')
-"
+")
 ```
 
 ```bash
@@ -206,6 +210,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
 |---|---|---|
 | `status:MATCH` | 0 | このグループをスキップ（Phase 1〜Phase 4 全てスキップ） |
 | `status:CHANGED` / `NEW` / `NO_HASH` | 1 | 通常どおり処理する。`hash:XXXX` の値を `{source_hash}` として記録する |
+
+> **新規作成（既存 Excel なし）の場合も `status:CHANGED` として扱われる**。`detected_excel_or_empty` が空でも処理を継続し、Phase 4 で新規ファイルとして生成する（`--source-hash ""` で渡す）。
 
 ---
 
@@ -247,6 +253,8 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_detail_design.py \
 
 出力先: `{output_dir}/【{feature_id}】{name_ja}_詳細設計.xlsx`（他設計書と命名規約を統一）
 
+> `{feature_id}` と `{name_ja}` は generate_detail_design.py が JSON の `group_id` / `name_ja` フィールドから自動設定する。エージェントが個別に展開する必要はない。
+
 **差分管理の動作**:
 1. 既存ファイル `【{feature_id}】*.xlsx` を feature_id で検索（機能名が変わっても一意に特定可能）
 2. 見つかれば `_meta.source_hash` と `--source-hash` を照合 → 一致なら終了コード0でスキップ
@@ -263,7 +271,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/generate_detail_design.py \
 |---|---|---|
 | FG-001 | 見積依頼 | 【FG-001】見積依頼.xlsx |
 
-生成先: {output_dir}/【{feature_id}】{name_ja}_詳細設計.xlsx
+生成先: {output_dir}/【{group_id}】{name_ja}_詳細設計.xlsx
 
 ⚠️ 要確認:
 - FG-003: 画面コンポーネントのソースが見つからなかったため screens は空
