@@ -33,6 +33,7 @@
 
 > エージェント定義: `.claude/agents/` 配下の各 `.md` ファイル（`sf-dev.md`・`reviewer.md`・`sf-architect.md` 等）
 > コマンド専用エージェント（ユーザーからの直接指示ではなく、コマンドの内部処理として呼ばれる）: `sf-org-analyst` / `sf-design-step1〜3` / `sf-design-writer` / `sf-screen-writer` / `sf-detail-design-writer` / `sf-doc-overview-writer` / `sf-doc-objects-writer` / `backlog-investigator` / `backlog-planner` / `backlog-implementer` / `backlog-tester` / `backlog-releaser` / `backlog-validator`
+> blind subagent（Task ツール経由でのみ起動・親の情報を受け取らない）: `backlog-blind-second-opinion` / `backlog-blind-final-verifier` / `backlog-blind-validator`
 
 ---
 
@@ -381,6 +382,31 @@ focus_hints: []
 **適用基準**: SFプロジェクトの状態（オブジェクト定義・設計書・要件・業務フロー）を知っていれば精度が上がるエージェントに設ける。汎用調査・ファイル生成のみのエージェントは不要。
 
 **SF 固有タスクとは限らないエージェント**（assistant 等）は、「SF 固有キーワードを含む場合のみ実行」と条件付きで記述する。
+
+---
+
+## À la carte オプション判定パターン（backlog 系エージェント共通）
+
+`/backlog` コマンドの全エージェントは、処理開始時に **Step 0b** でオプション判定を行う。
+
+```markdown
+### Step 0b: 関連オプションの判定
+
+> 共通手順: [.claude/templates/backlog/_README.md](../templates/backlog/_README.md) §Step 0 を参照
+> 本 agent の Phase: {N}（_index-phase{N}.md と _index-cross.md を Read して判定）
+```
+
+**判定 3 分岐**:
+
+| 判定 | 条件 | 挙動 |
+|---|---|---|
+| 実行 | `auto-execute-when` マッチ / グレー | 黙って実行 |
+| スキップ確認 | `auto-skip-when` 明確マッチ | `ask-user-prompt` で自然な日本語確認 |
+| 実行（不明） | 評価不能 | 実行に倒す |
+
+**オプション定義**: `.claude/templates/backlog/` 配下の `_index-phase{N}.md`（Phase 別判定情報）+ `options/option-*.md`（実行手順）の 2 層構造。詳細は [_README.md](.claude/templates/backlog/_README.md) を参照。
+
+**適用範囲**: backlog-investigator / backlog-planner / backlog-validator / backlog-implementer / backlog-tester / backlog-releaser の全 6 エージェント（Step 0b は全エージェント必須）。
 
 ---
 
