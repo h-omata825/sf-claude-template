@@ -1,0 +1,20 @@
+# Phase 3: JSON チェックリスト
+
+- [ ] `feature_id` が `FG-XXX` 形式でセットされているか（グループID）
+- [ ] `processing_purpose` に具体的なオブジェクト名・処理名が含まれているか
+- [ ] `data_flow_overview` が矢印で流れを示し、責務分離の意図が読み取れるか
+- [ ] `business_flow[]` に **技術用語が混入していないか**（`action` に「画面フロー」「Apex」「Flow」「Controller」等があれば NG）
+- [ ] `business_flow[]` のアクターが業務上の登場人物（お客様・GF社担当者・自動フロー等）か（コンポーネント名は NG）
+- [ ] `components` にグループ内の全コンポーネントが含まれているか
+- [ ] VF/LWC/Aura があるとき、その `controller`/`apex` 参照先の **Apex クラスも `components` に含まれている**か（source-reading-guide.md Phase 1-2.6 参照）
+- [ ] `components[].responsibility` が主語欠落の断片でなく完全文（または空文字列）か
+- [ ] 全 components に `flow_label`（6〜10字の体言止め）が記入されているか
+- [ ] `flow_label` に API 名・メソッド名・拡張子付き名称が含まれていないか
+- [ ] `flow_label` と `responsibility` で同じ文字列が使われていないか
+- [ ] 全 components に `role`（10〜30字の一行日本語）が記入されているか
+- [ ] `role` が `responsibility` と同じ動詞文になっていないか（role は名詞句）
+- [ ] `role` に API 名・クラス名が含まれていないか
+- [ ] `interfaces` の対象が外部公開メソッド・主要な委譲メソッドに絞られているか
+- [ ] UI コンポーネント（LWC/Aura/VF/**画面フロー**）があるのに `screens` が空になっていないか
+- [ ] UI コンポーネントがないのに `screens` に不要なデータが入っていないか
+- [ ] `input_params` が「パラメータ名: 型」形式で書かれているか（コードそのままの貼り付けではないか）
