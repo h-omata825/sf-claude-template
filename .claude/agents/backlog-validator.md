@@ -15,7 +15,7 @@ tools:
 
 ## ミッション
 
-backlog-implementer が安全・確実に実装できるよう、**実装前の検証を5ステップで徹底し、未検出のリスクを全て可視化する**。
+backlog-implementer が安全・確実に実装できるよう、**5オプション（soql-dryrun / existing-test-baseline / impact-rescan / cross-review / evidence-check）をオーケストレーションし、未検出のリスクを全て可視化する**。
 
 ---
 
@@ -34,6 +34,13 @@ focus_hints: []
 
 ---
 
+### Step 0b: 関連オプションの判定
+
+> 共通手順: [.claude/templates/backlog/_README.md](../templates/backlog/_README.md) §Step 0 を参照
+> 本 agent の Phase: 3.5（_index-phase3-5.md と _index-cross.md を Read して判定）
+
+---
+
 ## 事前準備
 
 `docs/logs/{issueID}/implementation-plan.md` と `docs/logs/{issueID}/investigation.md` を読む。
@@ -46,109 +53,41 @@ focus_hints: []
 
 ## Step 1: ドライラン・SOQL 確認
 
-implementation-plan.md に記載された想定 SOQL（記載がない場合は変更対象コードから組み立てた想定 SOQL）を Sandbox で実際に実行し、想定通りの結果が返るかを確認する。想定 SOQL の出所（plan 記載 / コードから組立）を validation-report.md の備考欄に併記する。
+> option: [option-soql-dryrun](../templates/backlog/options/option-soql-dryrun.md)
 
-```bash
-sf data query \
-  --query "SELECT ..." \
-  --target-org <sandbox-alias> \
-  --result-format json
-```
-
-確認する項目:
-- 結果件数（想定と一致するか、0件でないか、上限に引っかかっていないか）
-- 参照エラー・フィールド名エラーの有無
-- 想定外のレコードが含まれていないか（STATUS 条件・権限条件が効いているか）
-- 複数件返る SOQL で LIMIT 指定がないケースはないか（ガバナ制限リスク）
-
-sandbox alias をユーザーが明示していない場合は「Sandbox の alias を教えてください」とテキストで確認してから実行する。
+実行手順は option-soql-dryrun を参照。結果を validation-report.md の Step 1 セクションに記録する。
 
 ---
 
 ## Step 2: 既存テスト実行（変更前グリーン状態の記録）
 
-実装前に対象クラス・関連クラスの Apex テストを走らせ、現状の正常状態を記録する。
+> option: [option-existing-test-baseline](../templates/backlog/options/option-existing-test-baseline.md)
 
-```bash
-sf apex run test \
-  --target-org <sandbox-alias> \
-  --class-names <変更対象クラスのテストクラス名> \
-  --result-format human \
-  --code-coverage
-```
-
-記録する項目:
-- 各テストクラスのカバレッジ（実装後比較のベースライン）
-- PASS / FAIL 状況（既存バグが既にないかの確認）
-- 実行時間（異常に遅いテストがないかの確認）
-
-**現時点で FAIL があれば実装を止めてユーザに報告する**（実装後にテストが落ちても起因の切り分けができなくなるため）。
+実行手順は option-existing-test-baseline を参照。結果を validation-report.md の Step 2 セクションに記録する。
 
 ---
 
 ## Step 3: 影響範囲の再走査
 
-implementation-plan.md の変更対象（API名・メソッド名・フィールド名・オブジェクト名）を逆参照 grep し、investigator が Phase 1 で拾えていない参照箇所がないかを再確認する。
+> option: [option-impact-rescan](../templates/backlog/options/option-impact-rescan.md)
 
-```bash
-# 例: フィールド名の逆参照
-grep -r "TargetField__c" force-app/ --include="*.{cls,trigger,js,html,xml,flow}"
-
-# 入力規則の確認
-grep -r "TargetField__c" force-app/ --include="*.validationRule-meta.xml"
-
-# 承認プロセス・割り当てルールの確認
-grep -r "TargetField__c" force-app/ --include="*.approvalProcess-meta.xml" --include="*.assignmentRules-meta.xml"
-```
-
-確認する対象:
-- Apex クラス・トリガー・LWC (js/html) での参照
-- Flow メタデータでの参照（`*.flow-meta.xml`）
-- 入力規則 formula での参照（`*.validationRule-meta.xml`）
-- 承認プロセス・割り当てルール・カスタムメタデータでの参照
-
-investigator より後に追加された参照があれば、その影響を assessment して記録する。
+実行手順は option-impact-rescan を参照。investigator より後の新規参照を発見した場合、影響を assessment して Step 3 セクションに記録する。
 
 ---
 
 ## Step 4: クロスレビュー（権限・FLS・副作用・類似実装整合）
 
-旧 `backlog-report` の Step 6 相当。実装方針の死角を多角的に検証する。
+> option: [option-cross-review](../templates/backlog/options/option-cross-review.md)
 
-### 権限・FLS チェック
-- 変更対象フィールド・オブジェクトへの CRUD/FLS が、全対象プロファイル/権限セットで適切か
-- `with sharing` / `without sharing` の選択が業務要件と一致しているか
-- ポータルユーザー・ゲストユーザーへの影響はないか
-
-### 副作用チェック
-
-（実装前のため、変更対象メソッド・フィールドの呼び出し元/参照元を grep で列挙し、コード読みで連鎖を追跡する）
-
-- 変更対象メソッドを呼ぶと何が連鎖するか: トリガー → Flow → 通知 → メール → ポータルユーザー作成
-- 意図せず発火する副作用はないか
-- 副作用を意図的に発生させる場合、implementation-plan.md にその旨が明記されているか
-
-### 類似実装整合チェック
-- investigation.md に記載された「類似する既存実装」と今回の実装方針が整合しているか
-- 意図的に異なる実装にする場合、approach-plan.md にその理由が明記されているか
-- 類似実装と異なるパターンを採用した場合、将来のメンテで混乱しないか
-
-問題が見つかった場合は、議論モードで Phase 3（実装方針）への戻りを提案する。
+実行手順は option-cross-review を参照。問題が見つかった場合は Phase 3（実装方針）への戻りを提案する。結果を validation-report.md の Step 4 セクションに記録する。
 
 ---
 
 ## Step 5: ユーザ事前エビデンス確認
 
-Phase 1（backlog-investigator）で案内した実装前エビデンスが取得済みかを確認する。
+> option: [option-evidence-check](../templates/backlog/options/option-evidence-check.md)
 
-確認先:
-- xlsx エビデンスシートの「実装前エビデンス」欄
-- `docs/logs/{issueID}/evidence/before/` 配下のファイル
-
-**バグの場合**: スクリーンショット・コンソールログ・対象レコード値が取得済みかを確認
-**追加要望の場合**: 変更前の現状画面・データが記録されているかを確認
-
-エビデンスが未取得の場合は取得を依頼し、取得後に Step 5 を再実施する。Phase 移行はコマンド側の承認ゲート（backlog.md Phase 3.5 末尾）が判定する。
+実行手順は option-evidence-check を参照。エビデンスが未取得の場合は取得を依頼し、取得後に Step 5 を再実施する。Phase 移行はコマンド側の承認ゲート（backlog.md Phase 3.5 末尾）が判定する。
 
 ---
 
