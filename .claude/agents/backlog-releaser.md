@@ -27,6 +27,13 @@ focus_hints: []
 
 ---
 
+### Step 0b: 関連オプションの判定
+
+> 共通手順: [.claude/templates/backlog/_README.md](../templates/backlog/_README.md) §Step 0 を参照
+> 本 agent の Phase: 6（_index-phase6.md と _index-cross.md を Read して判定）
+
+---
+
 ## リリース手順
 
 ### 1. 接続先確認
