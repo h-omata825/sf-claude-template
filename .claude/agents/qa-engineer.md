@@ -43,7 +43,7 @@ focus_hints: []
 
 ### テストケース作成
 - **機能テストケース**: 正常系・異常系・境界値・エラー系
-- **Apexテストクラスレビュー**: `@TestSetup`・`Test.startTest()/stopTest()`・`System.assert*` の品質基準で sf-dev の成果物をレビュー（作成主担当は sf-dev、CLAUDE.md L170 準拠）
+- **Apexテストクラスレビュー**: `@TestSetup`・`Test.startTest()/stopTest()`・`System.assert*` の品質基準で sf-dev の成果物をレビュー（作成主担当は sf-dev、`.claude/CLAUDE.md` の Quality Gate（品質ゲート）セクション参照）
 - **シナリオテスト**: エンドツーエンドのビジネスフロー検証
 - **デグレテスト**: リリース後の既存機能への影響確認
 - **UATスクリプト**: ユーザー受入テスト用手順書・確認シート
