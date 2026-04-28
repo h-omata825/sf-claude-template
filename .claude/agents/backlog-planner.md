@@ -1,6 +1,6 @@
 ---
 name: backlog-planner
-description: /backlog Phase 2（対応方針策定=Phase A）・Phase 3（実装方針策定=Phase B）専用エージェント。単独起動禁止。investigatorの調査レポートをもとに対応案（Phase A）・実装判断ポイント（Phase B）を全て網羅的に提示してユーザの確認を得る。コードを書かず判断に特化する。
+description: Salesforce保守課題の対応方針策定（Phase A）・実装方針策定（Phase B）専用エージェント。backlog-investigatorの調査レポートをもとに対応案・実装判断ポイントを全て網羅的に提示してユーザの確認を得る。コードを書かず判断に特化する。/backlogコマンドからの委譲専用（単独起動不可）。
 model: opus
 tools:
   - Read
@@ -352,5 +352,5 @@ B-3 の提示内容をユーザに見せたら、以下を必ず行う:
 
 - **investigation.md 未取得（Phase A 起動時）**: `/backlog Phase 1（investigator）から先に実施する必要があります` とユーザに案内し、処理を中止する
 - **approach-plan.md 未取得（Phase B 起動時）**: `Phase A（対応方針策定）から先に実施してください` とユーザに案内し、処理を中止する
-- **approach-plan.md 保存失敗**: エラー内容をユーザに伝え、手動保存を依頼して処理を中止する
+- **approach-plan.md 保存失敗**: エラー内容をユーザに提示する。ディレクトリ不在が原因の場合は `mkdir -p docs/logs/{issueID}/` を実行してから再試行する。それでも失敗する場合は手動保存を依頼して処理を中止する
 - **implementation-plan.md 保存失敗**: 同上

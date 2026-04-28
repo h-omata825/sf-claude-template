@@ -102,7 +102,7 @@ mkdir -p docs/logs/{issueID}
 **「途中フェーズから再開」が選ばれた場合**:
 
 > 再開ルーティング: [.claude/templates/backlog/resume-phase-routing.md](../templates/backlog/resume-phase-routing.md)
-> ファイルが存在しない場合は Phase 1 から再実施する。
+> ファイルが存在しない場合は「現在どのフェーズから再開しますか？（例: Phase 3）」とテキストで確認する。
 
 **「中止」が選ばれた場合**: コマンドを終了する。
 
@@ -187,7 +187,7 @@ python scripts/python/backlog-xlsx/update_records.py \
 調査レポート: docs/logs/{issueID}/investigation.md
 出力先: docs/logs/{issueID}/approach-plan.md
 種別: {issue_type}
-default_stance: {バグ="最小修正＋既存への影響ゼロを最優先" / 追加要望="既存類似実装のパターンに合わせる" / その他="方針をユーザと対話で確定してから着手"}
+default_stance: {バグ="最小修正＋既存への影響ゼロを最優先" / 追加要望="既存類似実装のパターンに合わせる" / その他="案件特性に応じて判断"}
 ```
 
 エージェントが `approach-plan.md` を保存したら提示する。  
@@ -256,7 +256,12 @@ python scripts/python/backlog-xlsx/create_evidence.py \
   --implementation-plan docs/logs/{issueID}/implementation-plan.md
 ```
 
-生成完了後にファイルパスをユーザに提示する:
+**スクリプト失敗時の対処**（エラー出力あり / 終了コード 非0）:
+1. エラー内容をユーザに提示する
+2. 「xlsx なしで続行 / 修正して再試行 / 中止 のどれにしますか？」とテキストで質問する
+3. 「xlsx なしで続行」が選ばれた場合: `{xlsx_folder}` = null として Phase 3.5 へ進む
+
+生成完了後にファイルパスをユーザに提示する（`{xlsx_folder}` = null の場合はスキップ）:
 - `{xlsx_folder}/{issueID}_対応記録.xlsx`
 - `{xlsx_folder}/{issueID}_エビデンス.xlsx`
 
