@@ -9,7 +9,6 @@ tools:
   - Glob
   - Grep
   - Bash
-  - TodoWrite
 ---
 
 > **禁止**: `scripts/` 配下のスクリプトを修正・上書きしない。問題発見時は完了報告に「要修正: {ファイル名} — {概要}」として記録のみ。
@@ -24,7 +23,7 @@ tools:
 
 ## 品質原則（最重要・全フェーズ共通）
 
-[共通品質原則参照](.claude/CLAUDE.md#品質原則sf-memory-全カテゴリ共通) — 以下はカテゴリ1固有の追加原則。
+[共通品質原則参照](../CLAUDE.md#品質原則sf-memory-全カテゴリ共通) — 以下はカテゴリ1固有の追加原則。
 
 1. **網羅的に読む**: 指定資料は配下を再帰的に**全て**読む。サンプリングや抜粋禁止。大きいファイルは分割読みで**最後まで**目を通す。
 2. **具体的に書く**: 「顧客」ではなく「新規申込者（未契約のエンドユーザー）」。「承認」ではなく「課長承認（金額≥100万円時）／部長承認（金額≥500万円時）」。数値・固有名詞・条件を必ず入れる。
@@ -35,7 +34,7 @@ tools:
 
 ## ファイル読み込み
 
-[共通ルール参照](.claude/CLAUDE.md#ファイル読み込み共通) — 対応形式・sf コマンド代替実行パスは CLAUDE.md の「ファイル読み込み（共通）」セクションを参照。
+[共通ルール参照](../CLAUDE.md#ファイル読み込み共通) — 対応形式・sf コマンド代替実行パスは CLAUDE.md の「ファイル読み込み（共通）」セクションを参照。
 
 ---
 
@@ -81,6 +80,7 @@ tools:
 | `swimlanes.json` | `flow_type: "asis"` のフローが1件以上あるか | 無ければ AS-IS 課題・導入背景から推定生成 |
 | `swimlanes.json` | **`flow_type: "tobe"` のフローが1件以上あるか** | **無ければ必ず生成**。生成ソースは ①requirements.md の TO-BE ②overall フローをベースに Salesforce 導入後の動線に書き換え ③既存 usecase フローを統合 |
 | `swimlanes.json` | 全レーンに `type` が付与されているか | 未付与レーンに `external_actor` / `internal_actor` / `system` / `external_system` のいずれかを付与 |
+| `usecases.md` | 各UCに `UC-XX` 採番・トリガー・主な登場人物・主要オブジェクト・承認経路・例外ケースが揃っているか | 欠けている項目を `**[要確認]**` で補完。UCが5件未満または細粒度（Apex単位）の場合は業務単位で集約して再採番 |
 
 **補完判断フロー**: 上記チェック項目ごとに、以下の表に従ってアクションを決定する。いずれのケースでも `changelog.md` に「規約適合化: <項目>」として記録する。
 
@@ -94,7 +94,7 @@ tools:
 
 ### Phase 1: 組織情報の自動収集
 
-#### 1-1. 組織基本情報・コンポーネント一覧
+#### 1-1. 組織基本情報・コンポーネント一覧（エラー時は早期停止して報告）
 ```bash
 sf org display --json
 sf sobject list -s custom
@@ -103,7 +103,7 @@ sf data query -q "SELECT Name, TableEnumOrId, ApiVersion, Status FROM ApexTrigge
 sf data query -q "SELECT ApiName, ActiveVersionId, Description, ProcessType, TriggerType FROM FlowDefinitionView" --json
 ```
 
-#### 1-2. ユーザー・権限構成
+#### 1-2. ユーザー・権限構成（エラーが出ても続行）
 ```bash
 sf data query -q "SELECT COUNT() FROM User WHERE IsActive = true" --json
 sf data query -q "SELECT Profile.Name, COUNT(Id) cnt FROM User WHERE IsActive = true GROUP BY Profile.Name ORDER BY COUNT(Id) DESC" --json
@@ -111,7 +111,7 @@ sf data query -q "SELECT Name, UserType FROM Profile WHERE UserType IN ('Standar
 sf data query -q "SELECT Name, Label, Description, IsCustom FROM PermissionSet WHERE IsCustom = true AND NamespacePrefix = null" --json
 ```
 
-#### 1-3. オブジェクト・設定情報
+#### 1-3. オブジェクト・設定情報（エラーが出ても続行）
 ```bash
 sf data query -q "SELECT QualifiedApiName, DeveloperName FROM CustomObject WHERE QualifiedApiName LIKE '%__mdt'" --json
 sf data query -q "SELECT SobjectType, Name, DeveloperName, IsActive, Description FROM RecordType ORDER BY SobjectType" --json
@@ -124,7 +124,7 @@ sf data query -q "SELECT DeveloperName, Endpoint, PrincipalType FROM NamedCreden
 sf data query -q "SELECT Name, Description, StartUrl FROM ConnectedApplication" --json
 ```
 
-#### 1-5. Platform Event・カスタム設定（あれば）
+#### 1-5. Platform Event・カスタム設定（エラーが出ても続行）
 ```bash
 sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__e'" --use-tooling-api --json
 sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__c' AND IsHierarchyNestingSupported = false" --use-tooling-api --json
@@ -144,7 +144,7 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 `docs/overview/org-profile.md` を生成（または更新）する。**後続の全カテゴリが参照する基盤ドキュメント**。各セクションとも数値・固有名詞を含む具体的な記述を心がける。
 
 > スキーマ（プロジェクト基本情報テーブル・ステークホルダーマップ・必須見出し等）:
-> [.claude/templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
+> [../templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
 
 ### Phase 4: requirements.md の生成/更新
 
@@ -155,7 +155,7 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 - **推測で埋めない**: 不明な点は「要確認」として明記。特に非機能要件（性能・可用性・セキュリティ）は空欄のままにするより「要確認」を入れる方がよい
 
 > 必須見出し骨格（下流パーサーが見出し名から本文を拾う）:
-> [.claude/templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
+> [../templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
 
 要件番号体系: `FR-001`〜（機能要件）、`NFR-001`〜（非機能要件）
 
@@ -164,7 +164,7 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 `docs/architecture/system.json` を生成する。**プロジェクト資料のシステム構成図スライドの唯一のソース**。
 
 > フィールド定義・サンプル構造:
-> [.claude/templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
+> [../templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
 
 ソース優先順位: ①既存システム構成図（画像/PPT/Visio）→最優先で読み込み再構築 ②Named Credential/Connected App/Apex HTTP呼び出し ③org-profile・要件定義書 ④不明は `notes` に記録（未確認のまま推測しない）
 
@@ -177,14 +177,14 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 **定義**: ユースケースは「新規申込」「解約申込」「見積依頼」「契約更新」「問合せ対応」のような**業務単位**を指す。Apexクラス単位ではない（粒度が細かすぎる）。目安は1プロジェクトあたり5〜15個。採番規則: `UC-01` 〜 `UC-99` の2桁ゼロ埋め固定。
 
 > 各UCに含める必須項目・ソース優先順位:
-> [.claude/templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
+> [../templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
 
 ### Phase 4.3: swimlanes.json の生成
 
 `docs/flow/swimlanes.json` を生成する。**プロジェクト資料の業務フロー図スライド群の唯一のソース**。
 
 > スキーマ・flow_type定義・レーンtype・粒度ルール:
-> [.claude/templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
+> [../templates/sf-analyst-cat1/file-templates.md](../templates/sf-analyst-cat1/file-templates.md)
 
 ### Phase 5: changelog への記録
 
@@ -192,7 +192,7 @@ sf data query -q "SELECT QualifiedApiName, Label FROM EntityDefinition WHERE IsC
 
 ### Phase 最終: クリーンアップ
 
-[共通ルール参照](.claude/CLAUDE.md#一時ファイルの後片付け全エージェント共通)
+[共通ルール参照](../CLAUDE.md#一時ファイルの後片付け全エージェント共通)
 
 本エージェントが実行中に作成した作業フォルダ・一時ファイルを削除してから完了報告する:
 
