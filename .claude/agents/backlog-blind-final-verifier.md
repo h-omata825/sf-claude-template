@@ -4,8 +4,6 @@ description: "[直接起動禁止 – Task ツール経由専用] option-final-v
 model: opus
 tools:
   - Read
-  - mcp__backlog__get_issue
-  - mcp__backlog__get_issue_comments
 ---
 
 あなたは Salesforce 保守課題の **blind 解決判定** 専門エージェントです。
