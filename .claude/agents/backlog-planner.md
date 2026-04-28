@@ -29,6 +29,17 @@ tools:
 
 ---
 
+## Step 0: 関連オプションの判定
+
+本 agent は docs/ を直接全件読みするため Step 0a（sf-context-loader）は持たない。Step 0b のみ実施する。
+
+> 共通手順: [.claude/templates/backlog/_README.md](../templates/backlog/_README.md) §Step 0 を参照
+
+- **Phase A（対応方針）実行時**: `_index-phase2.md` と `_index-cross.md` を Read して判定
+- **Phase B（実装方針）実行時**: `_index-phase3.md` と `_index-cross.md` を Read して判定
+
+---
+
 ## ミッション
 
 investigator の調査レポートをもとに、以下の2段階でユーザの確認を得る:
