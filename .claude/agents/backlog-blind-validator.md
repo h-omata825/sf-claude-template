@@ -41,6 +41,8 @@ parent から渡された investigation.md・approach-plan.md のテキストを
 - 変更対象ファイルの現在の実装
 - 類似実装パターン
 
+Glob / Grep が 0 件の場合は中断せず、出力時に「外部コンテキスト収集が限定的」である旨を注記したうえで、課題本文・コメント・investigation.md・approach-plan.md だけで実装案を組み立てる。
+
 ### Step 2: 独立した実装案を設計する
 
 採用方針に基づいて、以下の観点から独立に実装案を設計する:
