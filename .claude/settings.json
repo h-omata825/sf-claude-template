@@ -41,7 +41,8 @@
   },
   "permissions": {
     "allow": [
-      "Bash(*)"
+      "Bash(*)",
+      "mcp__backlog__*"
     ],
     "deny": [
       "Bash(sf project deploy* --target-org *prod*)",
