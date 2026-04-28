@@ -62,6 +62,18 @@ sf org display --target-org <alias> --json
 接続組織: Sandbox (alias: dev)
 ```
 
+CLAUDE.md への記録完了後、以下をユーザーに提示する:
+
+```
+✅ 認証完了
+  alias: {alias}
+  種別: Sandbox / 本番
+  default-org に設定済み（/backlog で使用される組織です）
+
+別の組織も登録したい場合は再度 /sf-setup を実行してください。
+default-org を切り替えるには: sf config set target-org <別alias>
+```
+
 ### 4-2: 次のアクション分岐
 
 `docs/` 配下に `.md` ファイルが存在するか確認する:
