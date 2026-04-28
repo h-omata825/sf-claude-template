@@ -13,7 +13,7 @@
 |---|---|
 | Apex / LWC / Flow / メタデータ実装 / 新規開発 / 機能改修 / デプロイ | `sf-dev` |
 | テスト計画 / テストケース作成 / バグ調査 / UAT支援 / 品質確認 | `qa-engineer` |
-| コードレビュー / セキュリティ監査 / PRレビュー支援 | `reviewer` |
+| コードレビュー / セキュリティ監査 / PRレビュー支援 / ドキュメントレビュー（設計書・要件定義書） | `reviewer` |
 | 要件定義 / 設計書作成 / 設計レビュー / オブジェクト定義書 / 影響調査 / ユーザーストーリー | `sf-architect` |
 | データ移行 / CSVマッピング / Data Loader / SOQL最適化 / バルク処理 / データクレンジング | `data-manager` |
 | 外部API連携 / REST・SOAP / Named Credentials / Platform Events / MuleSoft | `integration-dev` |
