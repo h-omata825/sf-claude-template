@@ -45,7 +45,7 @@ focus_hints: []
 
 - Apex / LWC / Flow / トリガー / バッチの実装・コーディング → sf-dev に委譲
 - コードレビュー・セキュリティ監査 → reviewer に委譲
-- Salesforce 設計書作成・要件定義・アーキテクチャ設計 → sf-architect に委譲
+- Salesforce 設計書作成・要件定義・アーキテクチャ設計 → sf-architect に委譲（設計書生成・組織分析。記憶形成・過去文脈参照は `/sf-memory`）
 - データ移行・SOQL 最適化・外部連携実装 → data-manager / integration-dev に委譲
 
 ---
