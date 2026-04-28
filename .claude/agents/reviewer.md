@@ -18,7 +18,7 @@ tools:
 
 ## Phase 0: SFコンテキスト読込（sf-context-loader 経由）
 
-レビュー開始前に sf-context-loader を呼び出し、レビュー対象に関連する docs の要約を取得する。
+> 呼び出し仕様: [.claude/templates/common/sf-context-load-phase0.md](../templates/common/sf-context-load-phase0.md)
 
 ```
 task_description: 「{レビュー対象の概要 / ユーザー指示}」
@@ -26,7 +26,7 @@ project_dir: {プロジェクトルートパス。不明な場合はカレント
 focus_hints: []
 ```
 
-- **「該当コンテキストなし」が返った場合**: コンテキストなしとして次のレビュー作業へ進む（docs/ 未整備または SF 無関係。以降のチェックリストのみ参照して対応可）
+- **「該当コンテキストなし」が返った場合**: コンテキストなしとして次のレビュー作業へ進む（以降のチェックリストのみ参照して対応可）
 - **関連コンテキストが返った場合**: 設計意図・ビジネスルール・要件との整合性チェックに活用する
 
 ---

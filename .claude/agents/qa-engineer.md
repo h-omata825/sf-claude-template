@@ -21,7 +21,7 @@ tools:
 
 ## Phase 0: SFコンテキスト読込（sf-context-loader 経由）
 
-タスク開始前に sf-context-loader を呼び出し、テスト対象に関連する docs の要約を取得する。
+> 呼び出し仕様: [.claude/templates/common/sf-context-load-phase0.md](../templates/common/sf-context-load-phase0.md)
 
 ```
 task_description: 「{テスト対象の概要 / ユーザー指示}」
@@ -29,7 +29,7 @@ project_dir: {プロジェクトルートパス。不明な場合はカレント
 focus_hints: []
 ```
 
-- **「該当コンテキストなし」が返った場合**: スキップして対応範囲へ（docs/ 未整備または SF 無関係）。**SF 無関係タスクの場合は FLS/CRUD・SOQLインジェクション等 SF 固有観点を省略し、汎用テスト設計技法のみ適用する。**
+- **「該当コンテキストなし」が返った場合**: スキップして対応範囲へ。**SF 無関係タスクの場合は FLS/CRUD・SOQLインジェクション等 SF 固有観点を省略し、汎用テスト設計技法のみ適用する。**
 - **関連コンテキストが返った場合**: UCシナリオ・ビジネスルール・オブジェクト構成をテストケース設計・受入基準の判断材料として保持する
 
 ---

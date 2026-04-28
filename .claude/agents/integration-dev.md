@@ -17,7 +17,7 @@ tools:
 
 ## Phase 0: SFコンテキスト読込（sf-context-loader 経由）
 
-タスク開始前に sf-context-loader を呼び出し、連携実装に関連する docs の要約を取得する。
+> 呼び出し仕様: [.claude/templates/common/sf-context-load-phase0.md](../templates/common/sf-context-load-phase0.md)
 
 ```
 task_description: 「{ユーザー指示 / 連携の概要}」
@@ -25,7 +25,7 @@ project_dir: {プロジェクトルートパス。不明な場合はカレント
 focus_hints: []
 ```
 
-- **「該当コンテキストなし」が返った場合**: スキップして対応範囲へ（docs/ 未整備または SF 無関係）
+- **「該当コンテキストなし」が返った場合**: スキップして対応範囲へ
 - **関連コンテキストが返った場合**: 連携先システム情報・対象オブジェクト構成・既存連携設計を実装判断の材料として保持する
 
 ---
