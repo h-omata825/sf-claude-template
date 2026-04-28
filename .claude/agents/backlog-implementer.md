@@ -122,6 +122,25 @@ Glob で変更対象ファイルのパスを確定してから Read する。計
 - [ ] API名・フィールド名が計画書通りか（誤字を含む）
 - [ ] ドキュメント更新（catalog/design/changelog.md）が完了しているか
 
+### 7. xlsx 対応記録の追記（`{xlsx_folder}` が設定されている場合のみ）
+
+**タイムライン追記**:
+```bash
+python scripts/python/backlog-xlsx/update_records.py \
+  --folder "{xlsx_folder}" --issue-id "{issueID}" \
+  timeline --phase "実装" \
+  --content "Phase 4 実装完了: {変更ファイル数}ファイル変更（{主な変更概要1行}）"
+```
+
+**対応内容シート Before/After 追記**（変更ファイルごとに r14 から 1 行ずつ）:
+```bash
+python scripts/python/backlog-xlsx/update_records.py \
+  --folder "{xlsx_folder}" --issue-id "{issueID}" \
+  cell --sheet "対応内容" --row 14 --col 1 \
+  --value "{ファイルパス1}: Before: {変更前コード要約} / After: {変更後コード要約}"
+# ファイルが複数ある場合は --row 15, 16 ... と繰り返す
+```
+
 ---
 
 ## エラー・不整合発見時の行動

@@ -183,6 +183,29 @@ NG 項目:
 ```
 
 **NG 項目がある場合は `.claude/templates/backlog/test-fail-routing.md` の戻り先テーブルに従って Phase 4/3/2 のいずれかに戻る。判定できない・複合原因の場合は同テーブル末尾の指示に従いユーザーに戻り先を確認してから戻る。**
+
+### 8. xlsx 対応記録の追記（`{xlsx_folder}` が設定されている場合のみ）
+
+**タイムライン追記**:
+```bash
+python scripts/python/backlog-xlsx/update_records.py \
+  --folder "{xlsx_folder}" --issue-id "{issueID}" \
+  timeline --phase "テスト" \
+  --content "Phase 5 テスト完了: 全{N}件 {PASS/FAIL（NG件数）}"
+```
+
+**テスト・検証記録シート 実際の結果・判定 追記**（テストケースごとに r7 から 1 行ずつ）:
+```bash
+python scripts/python/backlog-xlsx/update_records.py \
+  --folder "{xlsx_folder}" --issue-id "{issueID}" \
+  cell --sheet "テスト・検証記録" --row 7 --col 6 \
+  --value "{テストケース1の実際の結果}"
+python scripts/python/backlog-xlsx/update_records.py \
+  --folder "{xlsx_folder}" --issue-id "{issueID}" \
+  cell --sheet "テスト・検証記録" --row 7 --col 7 \
+  --value "PASS"
+# テストケースが複数ある場合は --row 8, 9 ... と繰り返す
+```
 **計画変更が生じた場合は implementation-plan.md の改版履歴に追記する。**
 **全項目 OK になるまでユーザに完了報告しない。**
 

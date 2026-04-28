@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
-"""backlog-xlsx / create_evidence.py
-エビデンス.xlsx を生成する（implementation-plan.md のテスト仕様からテストケース埋め）
+"""backlog-xlsx / create_evidence_v2.py
+エビデンス_v2.xlsx を生成する（v1 に画像が貼付された後にテストケースが追加された場合）
+
+v1 は読み取り専用で参照し、増分テストケース（v1 にない No）のみを含む
+v2 を新規ファイルとして発行する。v1 の画像は保護される。
 
 Usage:
-    python create_evidence.py \\
-      --folder FOLDER --issue-id ID \\
+    python create_evidence_v2.py \\
+      --v1 PATH_TO_V1 --folder FOLDER --issue-id ID \\
       --implementation-plan PATH
 """
 
@@ -16,7 +19,7 @@ from pathlib import Path
 
 try:
     from openpyxl import load_workbook
-    from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
+    from openpyxl.styles import Alignment, PatternFill, Font
     from openpyxl.utils import get_column_letter
 except ImportError:
     print("[ERROR] openpyxl がインストールされていません。`pip install openpyxl` を実行してください。")
@@ -26,14 +29,13 @@ TEMPLATE = Path(__file__).parent / "エビデンステンプレート.xlsx"
 WRAP = Alignment(wrap_text=True, vertical="top")
 STRIPE_A = PatternFill("solid", fgColor="FFFFFF")
 STRIPE_B = PatternFill("solid", fgColor="F2F7FB")
-BLUE_HDR  = PatternFill("solid", fgColor="1F3864")   # ヘッダー行の濃紺（テンプレ準拠）
-LIGHT_BLUE = PatternFill("solid", fgColor="D6E4F7")  # サブヘッダー（テンプレ準拠）
-CHECKLIST_BG = PatternFill("solid", fgColor="E8F0FE")  # チェックリスト行
-EVIDENCE_BG  = PatternFill("solid", fgColor="FFF3CD")  # エビデンス貼付枠
+LIGHT_BLUE = PatternFill("solid", fgColor="D6E4F7")
+CHECKLIST_BG = PatternFill("solid", fgColor="E8F0FE")
+EVIDENCE_BG  = PatternFill("solid", fgColor="FFF3CD")
 WHITE = PatternFill("solid", fgColor="FFFFFF")
 
 
-# ── パースユーティリティ（create_records.py と同じ） ────────────────────────
+# ── パースユーティリティ（create_evidence.py と共通） ─────────────────────────
 
 def read_md(path):
     if path and Path(path).exists():
@@ -71,10 +73,27 @@ def parse_md_table(section_text):
     return rows
 
 
-# ── テスト仕様シート ────────────────────────────────────────────────────────
+# ── v1 のテストケース No を読み取る ──────────────────────────────────────────
+
+def read_v1_nos(v1_path):
+    """v1 のテスト仕様シートから既存の No セットを返す。"""
+    nos = set()
+    try:
+        wb = load_workbook(v1_path, data_only=True)
+        if "テスト仕様" not in wb.sheetnames:
+            return nos
+        ws = wb["テスト仕様"]
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if row[0] is not None:
+                nos.add(str(row[0]).strip())
+    except Exception as e:
+        print(f"[WARN] v1 読み取りエラー: {e}")
+    return nos
+
+
+# ── テスト仕様シート ───────────────────────────────────────────────────────
 
 def fill_test_spec(ws, test_cases):
-    """テスト仕様シートにテストケースを書き込む（r3 以降）。"""
     for i, tc in enumerate(test_cases):
         r = 3 + i
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -93,16 +112,9 @@ def fill_test_spec(ws, test_cases):
             cell.fill = fill
 
 
-# ── エビデンスシート（実装前 / 実装後 共通ロジック） ────────────────────────
+# ── エビデンスシート ──────────────────────────────────────────────────────────
 
 def fill_evidence_sheet(ws, cases, sheet_label):
-    """
-    cases: タイミングでフィルタ済みのテストケースリスト
-    sheet_label: 「実装前」or「実装後」
-    """
-    # r2 説明文はテンプレ時点で設定済み（「両方」削除済み）なのでそのまま
-
-    # チェックリスト（r6 以降）
     checklist_start = 6
     for i, tc in enumerate(cases):
         r = checklist_start + i
@@ -111,7 +123,6 @@ def fill_evidence_sheet(ws, cases, sheet_label):
         cell_cb.fill = CHECKLIST_BG
 
         label = f"No.{tc.get('No', i + 1)}: {tc.get('確認観点', '')}"
-        # 確認手順が複数行あれば短縮して括弧で補足
         steps = tc.get("確認手順", "")
         if steps and "\n" in steps:
             first_step = steps.split("\n")[0].strip().lstrip("0123456789. ")
@@ -120,18 +131,14 @@ def fill_evidence_sheet(ws, cases, sheet_label):
         cell_obs.alignment = WRAP
         cell_obs.fill = CHECKLIST_BG
 
-        ws.cell(row=r, column=3).fill = WHITE  # 結果欄
-        ws.cell(row=r, column=4).fill = WHITE  # メモ欄
+        ws.cell(row=r, column=3).fill = WHITE
+        ws.cell(row=r, column=4).fill = WHITE
 
-    # エビデンス貼付欄（チェックリスト末尾の次の行から）
     paste_start = checklist_start + len(cases) + 1
-
-    # セクション見出し行
     hdr_cell = ws.cell(row=paste_start, column=1, value="■ エビデンス貼付欄")
     hdr_cell.fill = LIGHT_BLUE
     hdr_cell.alignment = WRAP
 
-    # 各テストケースにエビデンス枠を作る
     row_ptr = paste_start + 1
     for i, tc in enumerate(cases):
         label = f"エビデンス{chr(0x2460 + i)}: No.{tc.get('No', i + 1)} {tc.get('エビデンス取得方法', tc.get('確認観点', ''))}"
@@ -141,18 +148,19 @@ def fill_evidence_sheet(ws, cases, sheet_label):
 
         ws.cell(row=row_ptr, column=1, value="ここにスクリーンショットを貼り付けてください").fill = WHITE
         ws.cell(row=row_ptr, column=1).alignment = WRAP
-        # 貼付スペース（10行）
         for _ in range(10):
             row_ptr += 1
             ws.cell(row=row_ptr, column=1).fill = WHITE
 
-        row_ptr += 1  # 区切り空白行
+        row_ptr += 1
 
 
 # ── main ────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="エビデンス.xlsx を生成する（テスト仕様埋め込み版）")
+    parser = argparse.ArgumentParser(description="エビデンス_v2.xlsx を生成する（増分テストケースのみ）")
+    parser.add_argument("--v1",                  required=True,
+                        help="既存の v1 xlsx パス（画像保護のため読み取り専用参照）")
     parser.add_argument("--folder",              required=True)
     parser.add_argument("--issue-id",            required=True, dest="issue_id")
     parser.add_argument("--implementation-plan", required=True, dest="implementation_plan",
@@ -163,32 +171,43 @@ def main():
         print(f"[ERROR] テンプレートが見つかりません: {TEMPLATE}")
         sys.exit(1)
 
+    if not Path(args.v1).exists():
+        print(f"[ERROR] v1 ファイルが見つかりません: {args.v1}")
+        sys.exit(1)
+
     impl_md = read_md(args.implementation_plan)
     if not impl_md:
         print(f"[ERROR] ファイルが見つかりません: {args.implementation_plan}")
         sys.exit(1)
 
-    # テスト仕様テーブル抽出
+    # 全テストケース取得
     spec_text = extract_section(impl_md, "テスト仕様", "テストケース", "テスト仕様テーブル")
-    test_cases = parse_md_table(spec_text)
+    all_cases = parse_md_table(spec_text)
 
-    if not test_cases:
-        print("[WARN] テスト仕様テーブルが見つかりませんでした。空のエビデンスファイルを生成します。")
+    # v1 に存在する No を取得し、増分のみ抽出
+    v1_nos = read_v1_nos(args.v1)
+    new_cases = [tc for tc in all_cases if str(tc.get("No", "")).strip() not in v1_nos]
 
-    before_cases = [tc for tc in test_cases if tc.get("タイミング", "") == "実装前"]
-    after_cases  = [tc for tc in test_cases if tc.get("タイミング", "") != "実装前"]
+    if not new_cases:
+        print("[INFO] 増分テストケースはありません。v2 の生成をスキップします。")
+        sys.exit(0)
+
+    print(f"増分テストケース: {len(new_cases)} 件（v1 既存: {len(v1_nos)} 件）")
+
+    before_cases = [tc for tc in new_cases if tc.get("タイミング", "") == "実装前"]
+    after_cases  = [tc for tc in new_cases if tc.get("タイミング", "") != "実装前"]
 
     os.makedirs(args.folder, exist_ok=True)
     wb = load_workbook(TEMPLATE)
 
-    fill_test_spec(wb["テスト仕様"], test_cases)
+    fill_test_spec(wb["テスト仕様"], new_cases)
     fill_evidence_sheet(wb["実装前エビデンス"], before_cases, "実装前")
     fill_evidence_sheet(wb["実装後エビデンス"], after_cases, "実装後")
 
-    path = os.path.join(args.folder, f"{args.issue_id}_エビデンス.xlsx")
+    path = os.path.join(args.folder, f"{args.issue_id}_エビデンス_v2.xlsx")
     wb.save(path)
     print(f"生成完了: {path}")
-    print(f"  テスト仕様: {len(test_cases)} 件（実装前: {len(before_cases)} 件 / 実装後: {len(after_cases)} 件）")
+    print(f"  テスト仕様: {len(new_cases)} 件（実装前: {len(before_cases)} 件 / 実装後: {len(after_cases)} 件）")
 
 
 if __name__ == "__main__":

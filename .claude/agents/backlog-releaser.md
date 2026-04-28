@@ -140,6 +140,26 @@ backlog.md の「デプロイ適否の判定」で実装スキップが選ばれ
 再発防止策: （同種課題の再発を防ぐための措置。なければ省略）
 ```
 
+### 3.5. xlsx 対応記録の追記（`{xlsx_folder}` が設定されている場合のみ）
+
+**タイムライン追記**:
+```bash
+python scripts/python/backlog-xlsx/update_records.py \
+  --folder "{xlsx_folder}" --issue-id "{issueID}" \
+  timeline --phase "リリース" \
+  --content "Phase 6 リリース完了: {デプロイ方法・デプロイ先（本番/Sandbox）}"
+```
+
+**リリース・ロールバックシート リリース実施記録追記**（r38 から）:
+```bash
+python scripts/python/backlog-xlsx/update_records.py \
+  --folder "{xlsx_folder}" --issue-id "{issueID}" \
+  cell --sheet "リリース・ロールバック" --row 38 --col 1 \
+  --value "{YYYY-MM-DD} リリース完了: {デプロイ内容の要約・担当者}"
+```
+
+---
+
 ### 4. 完了報告
 
 ```
