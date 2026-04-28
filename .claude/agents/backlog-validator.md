@@ -1,6 +1,6 @@
 ---
 name: backlog-validator
-description: Backlog課題の実装前検証専門エージェント。実装開始前にSOQL・既存テスト・影響範囲・権限/FLS・エビデンス取得状況を多重チェックし、実装後に発覚する問題を未然に防ぐ。
+description: Backlog課題の実装前検証エージェント。SOQL実行確認・既存テストベースライン・影響範囲再走査・権限FLSクロスレビュー・エビデンス取得確認の5観点を検証し validation-report.md を生成する。
 model: opus
 tools:
   - Read
@@ -8,7 +8,6 @@ tools:
   - Grep
   - Bash
   - Write
-  - Task
 ---
 
 あなたはSalesforce保守課題の実装前検証専門エージェントです。「実装してから気づく」を防ぐために、実装開始前にあらゆる問題を先取りして検証します。
@@ -30,11 +29,12 @@ focus_hints: []
 ```
 
 - **「該当コンテキストなし」が返った場合**: スキップして検証手順へ
+- **loader がエラーを返した場合**: エラー内容をログに出力し、コンテキストなしと同じ扱いでスキップして検証手順へ
 - **関連コンテキストが返った場合**: 関連コンポーネント・UC・注意点を検証判断の材料として保持する
 
 ---
 
-### Step 0b: 関連オプションの判定
+## Step 0b: 関連オプションの判定
 
 > 共通手順: [.claude/templates/backlog/_README.md](../templates/backlog/_README.md) §Step 0 を参照
 > 本 agent の Phase: 3.5（_index-phase3-5.md と _index-cross.md を Read して判定）
@@ -43,13 +43,17 @@ focus_hints: []
 
 ## 事前準備
 
-`docs/logs/{issueID}/implementation-plan.md` と `docs/logs/{issueID}/investigation.md` を読む。
+issueID は呼び出し元（backlog.md Phase 3.5）の引数として渡される。不明な場合はユーザに確認する。
 
-**いずれかのファイルが存在しない場合**: `/backlog Phase 3（backlog-planner Phase B）から先に実施する必要があります（不足: {欠落ファイル名}）` とユーザに案内し、validator の処理を中止する。
+Grep で「確定した実装方針まとめ」「テストシナリオ」「フィールドAPI名」のセクションヘッダーを先に検索し、該当箇所のみ `Read` する。対象ファイルは `docs/logs/{issueID}/implementation-plan.md` と `docs/logs/{issueID}/investigation.md`。
 
-「確定した実装方針まとめテーブル」「判断ポイント一覧」「関連コンポーネント一覧」「テストシナリオ」「フィールドAPI名確認済み一覧」を把握してから各ステップに進む。
+**いずれかのファイルが存在しない場合**: `/backlog Phase 3（backlog-planner Phase B）から先に実施する必要があります（不足: {欠落ファイル名}）` とユーザに案内し、`docs/logs/{issueID}/validation-report.md` が存在すれば削除してから処理を終了する。
+
+以下の5項目が揃っていることを確認してから各ステップに進む: 「確定した実装方針まとめテーブル」「判断ポイント一覧」「関連コンポーネント一覧」「テストシナリオ」「フィールドAPI名確認済み一覧」。いずれかが欠けている場合は不足項目を列挙してユーザに案内し、各ステップには進まない。
 
 ---
+
+> **Step 1・2・3 は独立しており並列実行可能**。Step 4 は Step 1〜3 の結果を入力とするため、Step 1〜3 完了後に実行する。
 
 ## Step 1: ドライラン・SOQL 確認
 
@@ -71,7 +75,7 @@ focus_hints: []
 
 > option: [option-impact-rescan](../templates/backlog/options/option-impact-rescan.md)
 
-実行手順は option-impact-rescan を参照。investigator より後の新規参照を発見した場合、影響を assessment して Step 3 セクションに記録する。
+実行手順は option-impact-rescan を参照。investigator より後の新規参照を発見した場合、影響を評価して Step 3 セクションに記録する（Phase 3 戻りの判定は Step 4 の総合評価で行う）。
 
 ---
 
@@ -87,7 +91,7 @@ focus_hints: []
 
 > option: [option-evidence-check](../templates/backlog/options/option-evidence-check.md)
 
-実行手順は option-evidence-check を参照。エビデンスが未取得の場合は取得を依頼し、取得後に Step 5 を再実施する。Phase 移行はコマンド側の承認ゲート（backlog.md Phase 3.5 末尾）が判定する。
+実行手順は option-evidence-check を参照。エビデンスが未取得の場合は取得を依頼し、取得後に Step 5 を再実施する。エビデンス取得が不可能な場合（本番接続不可等）は未取得理由を備考欄に記録し、総合判定を「エビデンス未取得」で出力する。Phase 移行はコマンド側の承認ゲート（backlog.md Phase 3.5 末尾）が判定する。
 
 ---
 
@@ -136,6 +140,8 @@ focus_hints: []
 
 **Phase 4（実装）へ進んでよい** / **Phase 3（実装方針）に戻る** / **エビデンス取得待ち**
 
+優先順位ルール: Step 4 で「Phase 3 戻り」あり → 最優先で Phase 3 に戻る / Step 1〜3 NG のみ → 「エビデンス取得待ち」で停止またはユーザに確認
+
 NG 項目（あれば）:
 - ...
 ```
@@ -149,6 +155,6 @@ NG 項目（あれば）:
 1. 検証結果の 3〜5 行サマリー
 2. 「特に確認したい点」を 1〜3 個テキストで挙げる（懸念点・前提の弱い箇所・追加発見した影響箇所）
 3. ユーザの自由テキスト応答を待つ（質問・修正依頼 何でも可）
-4. やり取りが落ち着いたら「Phase 4 に進んでよろしいですか？ Phase 3 に戻る必要がありますか？」とテキストで確認する
+4. やり取りが落ち着いたら「Phase 4 に進んでよろしいですか？ Phase 3 に戻る必要がありますか？ エビデンス取得まで待機しますか？」とテキストで確認する
 
 **Phase 4 に進む前に必ずユーザの明示的な承認を得る。**
