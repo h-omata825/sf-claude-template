@@ -1,0 +1,34 @@
+# option-unit-test-creation
+
+## 何をするか
+
+修正・追加した Apex メソッドのテストクラスを作成または拡充する。75% カバレッジ達成と正常系・異常系の確認を目標とする。
+
+## 実行手順
+
+1. テスト対象のメソッドを確認する（実装した全 public / global メソッド）
+2. 既存テストクラスがある場合:
+   - 修正メソッドのテストケースを確認する
+   - 不足している正常系・異常系テストを追加する
+3. 既存テストクラスがない場合: 新規テストクラスを作成する
+4. テストケースの設計（最低限）:
+   - 正常系: メインフロー（期待通りの入力 → 期待通りの出力）
+   - 異常系: null / 空文字 / 不正値での挙動
+   - 権限系: 権限なしユーザーでの挙動（with sharing の場合）
+   - バルク系: 200 件以上での挙動
+5. テストデータは `@TestSetup` で共通化する
+6. テストを実行してカバレッジ・全 PASS を確認する:
+   ```bash
+   sf apex run test --class-names {TestClassName} --code-coverage --target-org {sandbox-alias} --json
+   ```
+
+## 出力
+
+テストクラスを `force-app/main/default/classes/{ClassName}Test.cls` に保存。
+test-report.md に追記:
+
+## Apex 単体テスト作成
+
+| テストクラス | テストメソッド数 | カバレッジ | PASS / FAIL |
+|---|---|---|---|
+| {TestClassName} | {N} | {N}% | {N} / 0 |
