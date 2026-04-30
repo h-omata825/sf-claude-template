@@ -4,7 +4,7 @@
 
 ## 「作成しない」が選ばれた場合
 
-`{xlsx_folder}` = null として Phase 2 へ進む。
+`{xlsx_folder}` = null、`{evidence_dir}` = `docs/logs/{issueID}/evidence` として Phase 2 へ進む。
 
 > **エビデンス取得依頼は Phase 3 末尾（実装方針確定後・実装直前）で行う**。Phase 1.5 ではフォルダ確定のみを行い、ユーザに作業負荷をかけない。
 
@@ -38,7 +38,7 @@ python -c "import yaml,pathlib; pathlib.Path('docs/.backlog_config.yml').write_t
 python -c "import re,sys; print(re.sub(r'[/\\\\:*?\"<>|]', '_', sys.argv[1]))" "{件名}"
 ```
 
-`{xlsx_folder}` = `{report_dir}/{issueID}_{件名_sanitized}` として会話の最後まで保持する。
+`{xlsx_folder}` = `{report_dir}/{issueID}_{件名_sanitized}`、`{evidence_dir}` = `{xlsx_folder}/evidence` として会話の最後まで保持する。
 
 **xlsx ファイルの生成は Phase 3 末尾（実装方針確定後）で実施する。この時点では生成しない。**
 
