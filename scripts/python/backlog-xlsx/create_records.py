@@ -274,6 +274,18 @@ def _merge_exists(ws, r1, c1, r2, c2):
     )
 
 
+def _shrink_table(ws, data_start, actual_count, limit):
+    """実データ件数がテンプレ枠数より少ない場合、余り行を削除。  [R4]"""
+    excess = limit - actual_count
+    if excess <= 0:
+        return
+    delete_start = data_start + actual_count
+    for mg in list(ws.merged_cells.ranges):
+        if mg.min_row >= delete_start and mg.max_row <= delete_start + excess - 1:
+            ws.unmerge_cells(str(mg))
+    ws.delete_rows(delete_start, excess)
+
+
 # ── 行高自動調整ヘルパー ─────────────────────────────────────────────────────  [F11]
 
 def _get_merged_width(ws, row, col):
@@ -287,7 +299,7 @@ def _get_merged_width(ws, row, col):
     return ws.column_dimensions[get_column_letter(col)].width or 8
 
 
-def _calc_row_height(text, width_chars, line_height=18, padding=4, min_height=22):
+def _calc_row_height(text, width_chars, line_height=20, padding=4, min_height=28):
     """テキストの折り返し行数を概算して row.height を返す。
     visual width: 全角=2 / 半角=1。width_chars=10 → chars_per_row=20 visual chars。
     """
@@ -305,7 +317,7 @@ def _calc_row_height(text, width_chars, line_height=18, padding=4, min_height=22
     return max(min_height, total_lines * line_height + padding)
 
 
-def auto_fit_row(ws, row_idx, target_cols=None, min_height=22):
+def auto_fit_row(ws, row_idx, target_cols=None, min_height=28):
     """行 row_idx の各セル値から折り返し行数を概算し row.height を設定。
     target_cols=None で全列対象。merge セルは範囲全体の列幅で計算。
     """
@@ -463,6 +475,8 @@ def fill_approach(ws, approach_md):
             source_row=APPROACH_START + APPROACH_LIMIT - 1,
             max_col=6,
         )
+    elif len(rows) < APPROACH_LIMIT:
+        _shrink_table(ws, APPROACH_START, len(rows), APPROACH_LIMIT)
 
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -524,6 +538,8 @@ def fill_approach(ws, approach_md):
             source_row=confirm_data_start + CONFIRM_LIMIT - 1,
             max_col=2,
         )
+    elif len(checks) < CONFIRM_LIMIT:
+        _shrink_table(ws, confirm_data_start, len(checks), CONFIRM_LIMIT)
 
     for i, (checked, text) in enumerate(checks):
         target_row = confirm_data_start + i
@@ -554,6 +570,8 @@ def fill_approach(ws, approach_md):
             source_row=concern_data_start + CONCERN_LIMIT - 1,
             max_col=6,
         )
+    elif len(concerns) < CONCERN_LIMIT:
+        _shrink_table(ws, concern_data_start, len(concerns), CONCERN_LIMIT)
     for i, item in enumerate(concerns):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         target_row = concern_data_start + i
@@ -627,6 +645,8 @@ def fill_investigation(ws, inv_md):
             source_row=code_data_start + CODE_LIMIT - 1,
             max_col=4,
         )
+    elif len(code_rows) < CODE_LIMIT:
+        _shrink_table(ws, code_data_start, len(code_rows), CODE_LIMIT)
     for i, row in enumerate(code_rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, (_, candidates) in enumerate(code_col_map, start=1):
@@ -647,6 +667,13 @@ def fill_investigation(ws, inv_md):
     impact_data_start = (impact_header_row + 2) if impact_header_row else 20
     IMPACT_LIMIT = 4  # テンプレ修正後の標準枠
 
+    # ヘッダー行 (header_row + 1) の役割列を C:D merge  [R1]
+    if impact_header_row:
+        col_header_row = impact_header_row + 1
+        if not _merge_exists(ws, col_header_row, 3, col_header_row, 4):
+            ws.merge_cells(start_row=col_header_row, end_row=col_header_row,
+                           start_column=3, end_column=4)
+
     extra_impact = max(0, len(impact_rows) - IMPACT_LIMIT)
     if extra_impact > 0:
         insert_rows_with_format(
@@ -656,6 +683,8 @@ def fill_investigation(ws, inv_md):
             source_row=impact_data_start + IMPACT_LIMIT - 1,
             max_col=4,
         )
+    elif len(impact_rows) < IMPACT_LIMIT:
+        _shrink_table(ws, impact_data_start, len(impact_rows), IMPACT_LIMIT)
 
     # テンプレ修正後の列構成: A=種別, B=対象, C=役割  [F9: 影響内容列削除]
     impact_col_map = [
@@ -678,6 +707,13 @@ def fill_investigation(ws, inv_md):
     comp_data_start = (comp_header_row + 2) if comp_header_row else 29
     COMP_LIMIT = 5
 
+    # ヘッダー行 (comp_header_row + 1) の役割列を C:D merge  [R2]
+    if comp_header_row:
+        comp_col_header_row = comp_header_row + 1
+        if not _merge_exists(ws, comp_col_header_row, 3, comp_col_header_row, 4):
+            ws.merge_cells(start_row=comp_col_header_row, end_row=comp_col_header_row,
+                           start_column=3, end_column=4)
+
     extra_comp = max(0, len(impact_rows) - COMP_LIMIT)
     if extra_comp > 0:
         insert_rows_with_format(
@@ -687,6 +723,8 @@ def fill_investigation(ws, inv_md):
             source_row=comp_data_start + COMP_LIMIT - 1,
             max_col=4,
         )
+    elif len(impact_rows) < COMP_LIMIT:
+        _shrink_table(ws, comp_data_start, len(impact_rows), COMP_LIMIT)
 
     for i, row in enumerate(impact_rows[:10]):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -738,6 +776,8 @@ def fill_content(ws, impl_md):
             source_row=CHANGE_FILES_START + CHANGE_FILES_LIMIT - 1,
             max_col=4,  # E列削除後 4列
         )
+    elif len(rows) < CHANGE_FILES_LIMIT:
+        _shrink_table(ws, CHANGE_FILES_START, len(rows), CHANGE_FILES_LIMIT)
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, col in enumerate(["No", "ファイルパス", "変更種別", "変更概要"], start=1):
@@ -756,6 +796,14 @@ def fill_content(ws, impl_md):
     impact_header_row = find_header_row(ws, ("■ 影響確認チェックリスト",))
     IMPACT_CHECK_START = (impact_header_row + 2) if impact_header_row else 21
     IMPACT_CHECK_LIMIT = 6  # テンプレ標準 6 件枠
+
+    # ヘッダー行 (impact_header_row + 1) の確認内容列を B:D merge  [R3]
+    if impact_header_row:
+        check_col_header_row = impact_header_row + 1
+        if not _merge_exists(ws, check_col_header_row, 2, check_col_header_row, 4):
+            ws.merge_cells(start_row=check_col_header_row, end_row=check_col_header_row,
+                           start_column=2, end_column=4)
+
     extra_impact = max(0, len(checks) - IMPACT_CHECK_LIMIT)
     if extra_impact > 0:
         insert_rows_with_format(
@@ -765,6 +813,8 @@ def fill_content(ws, impl_md):
             source_row=IMPACT_CHECK_START + IMPACT_CHECK_LIMIT - 1,
             max_col=2,
         )
+    elif len(checks) < IMPACT_CHECK_LIMIT:
+        _shrink_table(ws, IMPACT_CHECK_START, len(checks), IMPACT_CHECK_LIMIT)
     for i, (checked, text) in enumerate(checks):
         target_row = IMPACT_CHECK_START + i
         wset(ws, target_row, 1, "☑" if checked else "☐")
@@ -805,6 +855,8 @@ def fill_test(ws, impl_md):
             source_row=TEST_START + TEST_LIMIT - 1,
             max_col=7,  # H列削除後 7列  [F5]
         )
+    elif len(rows) < TEST_LIMIT:
+        _shrink_table(ws, TEST_START, len(rows), TEST_LIMIT)
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         # H列「根拠」を削除した 7列構成  [F5]
@@ -842,6 +894,8 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=RELEASE_START + RELEASE_LIMIT - 1,
             max_col=4,  # E/F列削除後 4列  [F6]
         )
+    elif len(rows) < RELEASE_LIMIT:
+        _shrink_table(ws, RELEASE_START, len(rows), RELEASE_LIMIT)
 
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -883,6 +937,8 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=pre_data_start + PRE_CHECK_LIMIT - 1,
             max_col=2,
         )
+    elif len(checks) < PRE_CHECK_LIMIT:
+        _shrink_table(ws, pre_data_start, len(checks), PRE_CHECK_LIMIT)
     for i, (checked, text) in enumerate(checks):
         target_row = pre_data_start + i
         wset(ws, target_row, 1, "☑" if checked else "☐")
@@ -907,6 +963,8 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=deploy_data_start + DEPLOY_LIMIT - 1,
             max_col=4,  # E/F削除後  [F6]
         )
+    elif len(steps) < DEPLOY_LIMIT:
+        _shrink_table(ws, deploy_data_start, len(steps), DEPLOY_LIMIT)
     for i, step in enumerate(steps):
         target_row = deploy_data_start + i
         has_merge = any(
@@ -941,6 +999,8 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=post_data_start + POST_CHECK_LIMIT - 1,
             max_col=2,
         )
+    elif len(post_checks) < POST_CHECK_LIMIT:
+        _shrink_table(ws, post_data_start, len(post_checks), POST_CHECK_LIMIT)
     for i, (checked, text) in enumerate(post_checks):
         target_row = post_data_start + i
         wset(ws, target_row, 1, "☑" if checked else "☐")
@@ -976,6 +1036,8 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=notes_data_start + NOTES_LIMIT - 1,
             max_col=4,  # E/F削除後  [F6]
         )
+    elif len(notes) < NOTES_LIMIT:
+        _shrink_table(ws, notes_data_start, len(notes), NOTES_LIMIT)
     for i, item in enumerate(notes):
         target_row = notes_data_start + i
         has_merge = any(
@@ -1002,6 +1064,8 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=rb_data_start + RB_LIMIT - 1,
             max_col=4,  # E/F削除後  [F6]
         )
+    elif len(rb_steps) < RB_LIMIT:
+        _shrink_table(ws, rb_data_start, len(rb_steps), RB_LIMIT)
     for i, step in enumerate(rb_steps):
         target_row = rb_data_start + i
         has_merge = any(
