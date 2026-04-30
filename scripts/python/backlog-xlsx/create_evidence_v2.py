@@ -141,24 +141,34 @@ def fill_evidence_sheet(ws, cases, sheet_label):
         ws.cell(row=r, column=4).fill = WHITE
 
     paste_start = checklist_start + len(cases) + 1
+
+    # セクション見出し行: A:D 横幅マージ
+    ws.merge_cells(start_row=paste_start, start_column=1, end_row=paste_start, end_column=4)
     hdr_cell = ws.cell(row=paste_start, column=1, value="■ エビデンス貼付欄")
     hdr_cell.fill = LIGHT_BLUE
     hdr_cell.alignment = WRAP
 
     row_ptr = paste_start + 1
     for i, tc in enumerate(cases):
+        # ラベル行: A:D 横幅マージ
         label = f"エビデンス{chr(0x2460 + i)}: No.{tc.get('No', i + 1)} {tc.get('エビデンス取得方法', tc.get('確認観点', ''))}"
-        ws.cell(row=row_ptr, column=1, value=label).fill = EVIDENCE_BG
-        ws.cell(row=row_ptr, column=1).alignment = WRAP
+        ws.merge_cells(start_row=row_ptr, start_column=1, end_row=row_ptr, end_column=4)
+        cell = ws.cell(row=row_ptr, column=1, value=label)
+        cell.fill = EVIDENCE_BG
+        cell.alignment = WRAP
         row_ptr += 1
 
-        ws.cell(row=row_ptr, column=1, value="ここにスクリーンショットを貼り付けてください").fill = WHITE
-        ws.cell(row=row_ptr, column=1).alignment = WRAP
-        for _ in range(10):
-            row_ptr += 1
-            ws.cell(row=row_ptr, column=1).fill = WHITE
+        # 貼付エリア: A:D × 10行をまとめてマージ
+        paste_top = row_ptr
+        paste_bottom = paste_top + 9
+        for r in range(paste_top, paste_bottom + 1):
+            for c in range(1, 5):
+                ws.cell(row=r, column=c).fill = WHITE
+        ws.cell(row=paste_top, column=1, value="ここにスクリーンショットを貼り付けてください")
+        ws.cell(row=paste_top, column=1).alignment = WRAP
+        ws.merge_cells(start_row=paste_top, start_column=1, end_row=paste_bottom, end_column=4)
 
-        row_ptr += 1
+        row_ptr = paste_bottom + 2
 
 
 # ── main ────────────────────────────────────────────────────────────────────
