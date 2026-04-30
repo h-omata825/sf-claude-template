@@ -40,7 +40,7 @@ def read_md(path):
 
 def extract_section(md, *headings):
     """指定見出し（## または ###）のセクション本文を返す。
-    複数見出しは先にマッチしたものを使用。
+    複数見出しは先にマッチしたものを使用。本文が空のセクションはスキップ。
     末尾の括弧「（確定後に記入）」のような付記も許容する。  [M2]
     """
     for h in headings:
@@ -51,7 +51,9 @@ def extract_section(md, *headings):
             rest = md[start:]
             end_m = re.search(r"^#{1,3}\s", rest, re.MULTILINE)
             body = rest[: end_m.start()] if end_m else rest
-            return body.strip()
+            stripped = body.strip()
+            if stripped:
+                return stripped
     return ""
 
 
@@ -147,6 +149,7 @@ def get_col(row, *candidates):
 def parse_approach_options_h3(section_md):
     """### 案A: 方針名 配下の - **概要**: ... 形式を dict リストへ変換。  [M4]
     既存 parse_md_table が空の場合の fallback として使う。
+    デメリットとリスクを統合して「デメリット」キーに格納する。  [F2]
     """
     options = []
     for m in re.finditer(
@@ -166,6 +169,17 @@ def parse_approach_options_h3(section_md):
             if sm:
                 value = re.sub(r"\s+", " ", sm.group(1)).strip()
                 opt["工数" if key == "見込み工数" else key] = value
+
+        # デメリットにリスクを統合  [F2]
+        if opt.get("リスク"):
+            demerits = opt.get("デメリット", "")
+            risk_text = opt["リスク"]
+            if demerits:
+                opt["デメリット"] = demerits + "　" + risk_text
+            else:
+                opt["デメリット"] = risk_text
+            del opt["リスク"]
+
         options.append(opt)
     return options
 
@@ -250,6 +264,48 @@ def wset(ws, row, col, value, stripe=None):
     return cell
 
 
+# ── タイムライン理由抽出ヘルパー ──────────────────────────────────────────  [F1]
+
+def _extract_inv_reason(md):
+    """調査完了時の理由: 根本原因・制約セクションの先頭文。"""
+    body = extract_section(
+        md,
+        "根本原因", "根本原因 / 要件の本質", "要件の本質", "本質的に必要なこと",
+        "Pardot 連携アーキテクチャの本質的制約", "アーキテクチャの本質的制約", "本質的制約",
+    )
+    if body:
+        # 箇条書き「- 」を除去して先頭文を返す
+        line = body.split("\n")[0].strip().lstrip("- ").replace("**", "")
+        return line[:80]
+    # フォールバック: 一言要約
+    oneliner = extract_metadata(md, "一言要約")
+    if oneliner:
+        return oneliner.split("。")[0][:80]
+    return ""
+
+
+def _extract_adopted_reason(md):
+    """採用方針確定時の理由: 採用方針セクションの「— 」以降テキスト。"""
+    adopted = extract_section(md, "採用方針", "推奨案と根拠", "推奨案")
+    if not adopted:
+        return ""
+    # 「案D（...）— 理由」の「— 」以降を返す
+    m = re.search(r"[—\-]\s*(.+)", adopted)
+    if m:
+        text = re.sub(r"\s+", " ", m.group(1)).strip()
+        return text[:80]
+    # フォールバック: 採用方針テキスト冒頭
+    return re.sub(r"^\s*採用方針[:|：]\s*", "", adopted).split("\n")[0][:80]
+
+
+def _extract_impl_reason(md):
+    """実装方針確定時の理由: 概要セクションの先頭文。"""
+    body = extract_section(md, "概要", "実装方針まとめ")
+    if body:
+        return body.split("。")[0].strip()[:80]
+    return ""
+
+
 # ── サマリー・経緯シート ────────────────────────────────────────────────────
 
 def fill_summary(ws, args, inv_md, approach_md, impl_md):
@@ -260,15 +316,19 @@ def fill_summary(ws, args, inv_md, approach_md, impl_md):
     deadline   = extract_metadata(inv_md, "期限") or ""
     issue_type = extract_metadata(inv_md, "種別") or extract_metadata(inv_md, "課題種別") or ""
 
-    # 背景: 見出し別名を追加 [M3]
-    summary_bg = extract_section(
-        inv_md,
-        "概要", "背景", "背景・要件", "課題概要",
-        "課題サマリー", "要件理解", "一言要約",
-    )
-    if not summary_bg:
-        paras = [p.strip() for p in inv_md.split("\n\n") if p.strip() and not p.strip().startswith("#")]
-        summary_bg = paras[0][:200] if paras else ""
+    # 背景・要件: 一言要約 を最優先  [F1]
+    oneliner = extract_metadata(inv_md, "一言要約")
+    if oneliner:
+        summary_bg = oneliner
+    else:
+        summary_bg = extract_section(
+            inv_md,
+            "概要", "背景", "背景・要件", "課題概要",
+            "課題サマリー", "要件理解", "一言要約",
+        )
+        if not summary_bg:
+            paras = [p.strip() for p in inv_md.split("\n\n") if p.strip() and not p.strip().startswith("#")]
+            summary_bg = paras[0][:200] if paras else ""
 
     wset(ws, 3, 2, issue_id)
     wset(ws, 4, 2, title)
@@ -277,14 +337,20 @@ def fill_summary(ws, args, inv_md, approach_md, impl_md):
     wset(ws, 7, 2, "対応中")
     wset(ws, 8, 2, summary_bg)
 
-    # タイムライン 3 行（Phase 1〜3）
+    # タイムライン 3 行（Phase 1〜3）— 理由列も埋める  [F1]
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     inv_result = extract_section(
         inv_md,
         "根本原因", "調査結果", "原因", "調査・まとめ",
         "根本原因 / 要件の本質", "要件の本質", "調査まとめ",
+        "Pardot 連携アーキテクチャの本質的制約", "アーキテクチャの本質的制約",
     )
-    inv_result_oneliner = inv_result.replace("\n", " ")[:80] if inv_result else "調査完了"
+    if inv_result:
+        inv_result_oneliner = inv_result.replace("\n", " ").lstrip("- ").replace("**", "")[:80]
+    else:
+        # 一言要約から生成（セクション名なしの場合）
+        oneliner_v = extract_metadata(inv_md, "一言要約")
+        inv_result_oneliner = oneliner_v.split("、")[0][:60] if oneliner_v else "調査完了"
     approach_adopted = extract_section(approach_md, "採用方針", "推奨案", "推奨案と根拠")
     approach_oneliner = approach_adopted.replace("\n", " ")[:80] if approach_adopted else "対応方針確定"
     impl_summary = extract_section(impl_md, "実装方針まとめ", "概要", "方針まとめ")
@@ -294,9 +360,12 @@ def fill_summary(ws, args, inv_md, approach_md, impl_md):
     impl_oneliner = impl_summary.replace("\n", " ")[:80]
 
     tl_rows = [
-        (1, now, "Claude", "調査", f"調査完了: {inv_result_oneliner}", ""),
-        (2, now, "ユーザ", "方針策定", f"対応方針確定: {approach_oneliner}", ""),
-        (3, now, "ユーザ", "実装方針確定", f"全判断ポイント確定: {impl_oneliner}", ""),
+        (1, now, "Claude", "調査", f"調査完了: {inv_result_oneliner}",
+         _extract_inv_reason(inv_md)),
+        (2, now, "ユーザ", "方針策定", f"対応方針確定: {approach_oneliner}",
+         _extract_adopted_reason(approach_md)),
+        (3, now, "ユーザ", "実装方針確定", f"全判断ポイント確定: {impl_oneliner}",
+         _extract_impl_reason(impl_md)),
     ]
     for i, row in enumerate(tl_rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -307,7 +376,7 @@ def fill_summary(ws, args, inv_md, approach_md, impl_md):
 # ── 対応方針シート ──────────────────────────────────────────────────────────
 
 def fill_approach(ws, approach_md):
-    # 方針比較テーブル（r4〜、テンプレ標準 3 件枠）[M3, M4, M5, M7]
+    # 方針比較テーブル（r4〜、テンプレ標準 2 件枠）[F2: 6列構成、リスクをデメリットに統合]
     table_text = extract_section(
         approach_md,
         "方針比較", "方針比較テーブル", "対応方針比較",
@@ -321,7 +390,8 @@ def fill_approach(ws, approach_md):
         # セクション名が section_text に入らず approach_md 全体に対して走らせる
         rows = parse_approach_options_h3(approach_md)
 
-    col_order = ["案No", "方針名", "概要", "メリット", "デメリット", "リスク", "工数"]
+    # テンプレ修正後 6列構成: 案No/方針名/概要/メリット/デメリット/工数  [F2]
+    col_order = ["案No", "方針名", "概要", "メリット", "デメリット", "工数"]
     APPROACH_START = 4
     APPROACH_LIMIT = 2  # テンプレ r4-r5
     extra_approach = max(0, len(rows) - APPROACH_LIMIT)
@@ -331,7 +401,7 @@ def fill_approach(ws, approach_md):
             APPROACH_START + APPROACH_LIMIT,
             extra_approach,
             source_row=APPROACH_START + APPROACH_LIMIT - 1,
-            max_col=7,
+            max_col=6,
         )
 
     for i, row in enumerate(rows):
@@ -342,27 +412,36 @@ def fill_approach(ws, approach_md):
                 val = to_median_hours(val)  # [M5]
             wset(ws, APPROACH_START + i, j, val, fill)
 
-    # 採用方針（r8 or 行数シフト後の位置） [M2, M3]
-    adopted_row = APPROACH_START + len(rows) + 3  # ■採用方針ヘッダの次
-    # テンプレ r7 = ■採用方針、r8 以降に内容。insert_rows でシフト済みならその位置
-    # ヘッダ行を A 列走査で特定する
+    # 採用方針（テンプレ修正後 r8 or 行数シフト後の位置）  [F2: 案名+理由 短文形式]
     adopted_header_row = find_header_row(ws, ("■ 採用方針",))
     adopted_write_row = (adopted_header_row + 1) if adopted_header_row else 8
 
-    adopted = extract_section(approach_md, "採用方針", "推奨案", "推奨案と根拠")
-    if adopted:
-        # insert_rows でマージが欠落することがあるため明示的に再付与  [L3]
+    adopted_full = extract_section(approach_md, "採用方針", "推奨案", "推奨案と根拠")
+    if adopted_full:
+        # 「採用方針: 案D（...）— 理由本文」を「採用案: ... / 理由: ...」短文形式に変換
+        m = re.search(
+            r"採用方針[:|：]\s*\*?\*?(案[A-Z][^*\n]+)\*?\*?\s*[—\-]\s*(.+?)(?=\n\n|\Z)",
+            adopted_full, re.DOTALL
+        )
+        if m:
+            plan_name = m.group(1).strip()
+            reason = re.sub(r"\s+", " ", m.group(2)).strip()[:200]
+            adopted_short = f"採用案: {plan_name}\n理由: {reason}"
+        else:
+            # フォールバック: 先頭300字
+            adopted_short = adopted_full[:300]
+
         has_merge = any(
-            m.min_row == adopted_write_row and m.max_row == adopted_write_row
-            and m.min_col == 1 and m.max_col == 7
-            for m in ws.merged_cells.ranges
+            mg.min_row == adopted_write_row and mg.max_row == adopted_write_row
+            and mg.min_col == 1 and mg.max_col == 6
+            for mg in ws.merged_cells.ranges
         )
         if not has_merge:
             ws.merge_cells(start_row=adopted_write_row, end_row=adopted_write_row,
-                           start_column=1, end_column=7)
-        wset(ws, adopted_write_row, 1, adopted)
+                           start_column=1, end_column=6)
+        wset(ws, adopted_write_row, 1, adopted_short)
 
-    # 実施前確認事項（テンプレ標準 5 件枠 r22〜r26）[M3, M7]
+    # 実施前確認事項（テンプレ修正後 r11 or ヘッダ検索で特定）[F2: 2列構成]
     checks_text = extract_section(
         approach_md,
         "実施前確認事項", "確認事項", "事前確認",
@@ -370,12 +449,11 @@ def fill_approach(ws, approach_md):
     )
     checks = parse_checklist(checks_text)
     if not checks:
-        # チェックリスト形式でなければ numbered list を試みる
         checks = parse_numbered_list(checks_text)
 
     confirm_header_row = find_header_row(ws, ("■ 実施前確認事項",))
-    confirm_data_start = (confirm_header_row + 2) if confirm_header_row else 22
-    CONFIRM_LIMIT = 4  # テンプレ r22-r25
+    confirm_data_start = (confirm_header_row + 2) if confirm_header_row else 12
+    CONFIRM_LIMIT = 4  # テンプレ修正後 標準4枠
 
     extra_confirm = max(0, len(checks) - CONFIRM_LIMIT)
     if extra_confirm > 0:
@@ -391,15 +469,15 @@ def fill_approach(ws, approach_md):
         wset(ws, confirm_data_start + i, 1, "□")
         wset(ws, confirm_data_start + i, 2, item)
 
-    # 懸念事項（テンプレ r27「■ 懸念事項」の直下から書き込み）[M6]
+    # 懸念事項（テンプレ修正後 r17「■ 懸念事項」の直下から書き込み）[M6]
     concerns_text = extract_section(approach_md, "懸念事項", "リスク・懸念事項", "懸念点")
     concerns = parse_numbered_list(concerns_text)
     if not concerns:
         concerns = [l.strip().lstrip("0123456789.。 ").lstrip("- ") for l in concerns_text.splitlines() if l.strip()]
 
     concern_header_row = find_header_row(ws, ("■ 懸念事項", "懸念事項"))
-    concern_data_start = (concern_header_row + 1) if concern_header_row else 28
-    CONCERN_LIMIT = 3  # テンプレ r28-r30 (各行 A:G マージ済)
+    concern_data_start = (concern_header_row + 1) if concern_header_row else 18
+    CONCERN_LIMIT = 3  # テンプレ修正後 r18-r20 (各行 A:F マージ済)
 
     extra_concerns = max(0, len(concerns) - CONCERN_LIMIT)
     if extra_concerns > 0:
@@ -408,40 +486,20 @@ def fill_approach(ws, approach_md):
             concern_data_start + CONCERN_LIMIT,
             extra_concerns,
             source_row=concern_data_start + CONCERN_LIMIT - 1,
-            max_col=7,
+            max_col=6,
         )
     for i, item in enumerate(concerns):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         target_row = concern_data_start + i
-        # テンプレ枠外の行はマージなし → 明示付与  [L4]
         has_merge = any(
-            m.min_row == target_row and m.max_row == target_row
-            and m.min_col == 1 and m.max_col == 7
-            for m in ws.merged_cells.ranges
+            mg.min_row == target_row and mg.max_row == target_row
+            and mg.min_col == 1 and mg.max_col == 6
+            for mg in ws.merged_cells.ranges
         )
         if not has_merge:
             ws.merge_cells(start_row=target_row, end_row=target_row,
-                           start_column=1, end_column=7)
+                           start_column=1, end_column=6)
         wset(ws, target_row, 1, f"{i + 1}. {item}", fill)
-
-    # 方針変更履歴（r28-30 の位置は懸念事項書き込みにより移動している可能性がある）
-    # 別名候補で探してヒットしなければスキップ（LINK-139 のように改版履歴しかない MD でも安全）
-    log_text = extract_section(approach_md, "方針変更履歴", "変更履歴", "ログ履歴")
-    if log_text:
-        log_rows = parse_md_table(log_text)
-        log_header_row = find_header_row(ws, ("■ 方針変更履歴", "■ ログ履歴"))
-        log_data_start = (log_header_row + 1) if log_header_row else None
-        if log_data_start:
-            col_order_log = ["変更日", "旧方針", "新方針", "理由"]
-            for i, row in enumerate(log_rows[:3]):
-                fill = STRIPE_A if i % 2 == 0 else STRIPE_B
-                if any(col in row for col in col_order_log):
-                    line = " / ".join(
-                        f"{col}: {row.get(col, '')}" for col in col_order_log if row.get(col, "")
-                    )
-                else:
-                    line = " / ".join(f"{k}: {v}" for k, v in row.items() if v)
-                wset(ws, log_data_start + i, 1, line, fill)
 
 
 # ── 調査・影響範囲シート ────────────────────────────────────────────────────
@@ -455,19 +513,19 @@ def fill_investigation(ws, inv_md):
     )
     rows = parse_md_table(hypo_text)
     if not rows:
-        # フリーテキストで「ただし以下の代替経路の検討は…」の後のテーブルを探す [M8]
         for kw in ("ただし以下の代替経路", "代替経路の検討", "再検討の余地"):
             alt_text = extract_section_after_keyword(inv_md, kw)
             rows = parse_md_table(alt_text)
             if rows:
                 break
 
+    # 判定列に「実現可能性」をマップ  [F3]
     hypo_col_map = [
         ("No", ["No", "#"]),
         ("仮説内容", ["仮説内容", "代替アプローチ", "仮説", "アプローチ"]),
-        ("検証方法", ["検証方法", "実現可能性", "方法"]),
+        ("検証方法", ["検証方法", "方法"]),
         ("検証結果", ["検証結果", "備考", "補足"]),
-        ("判定", ["判定"]),
+        ("判定", ["判定", "実現可能性"]),
     ]
     for i, row in enumerate(rows[:6]):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -482,7 +540,6 @@ def fill_investigation(ws, inv_md):
     )
     code_rows = parse_md_table(code_text)
     if not code_rows:
-        # ## 使用中のフィールドAPI名 直下の ### サブセクション2本を fallback で結合 [M9]
         sub1 = extract_section(inv_md, "標準 Prospect オブジェクト", "標準Prospectオブジェクト")
         sub2 = extract_section(inv_md, "Pardot 連携カスタム項目", "Pardot連携カスタム項目")
         code_rows = parse_md_table(sub1) + parse_md_table(sub2)
@@ -498,48 +555,90 @@ def fill_investigation(ws, inv_md):
         for j, (_, candidates) in enumerate(code_col_map, start=1):
             wset(ws, 12 + i, j, get_col(row, *candidates), fill)
 
-    # 影響範囲（r20-25）[M3, M10]
-    impact_text = extract_section(
-        inv_md,
-        "影響範囲", "影響範囲テーブル",
-        "影響する処理・データ", "業務文脈",
-    )
-    impact_rows = parse_md_table(impact_text)
+    # 影響範囲（テンプレ修正後 3列構成: 種別/対象/役割/影響内容）[F3: 動的拡張 + ソース変更]
+    # ソースを「関連コンポーネント一覧」に変更（フロー名/役割 2列より情報が豊富）
+    comp_text = extract_section(inv_md, "関連コンポーネント", "関連コンポーネント一覧")
+    impact_rows = parse_md_table(comp_text)
     if not impact_rows:
-        # 業務文脈配下の関連フロー表を fallback
+        # フォールバック: 業務文脈 > 関連フロー
         ctx_text = extract_section(inv_md, "業務文脈", "業務文脈（docs/ から）")
         flow_text = extract_section_after_keyword(ctx_text or inv_md, "関連フロー")
         impact_rows = parse_md_table(flow_text)
 
+    impact_header_row = find_header_row(ws, ("■ 影響範囲テーブル", "■ 影響範囲"))
+    impact_data_start = (impact_header_row + 2) if impact_header_row else 20
+    IMPACT_LIMIT = 4  # テンプレ修正後の標準枠
+
+    extra_impact = max(0, len(impact_rows) - IMPACT_LIMIT)
+    if extra_impact > 0:
+        insert_rows_with_format(
+            ws,
+            impact_data_start + IMPACT_LIMIT,
+            extra_impact,
+            source_row=impact_data_start + IMPACT_LIMIT - 1,
+            max_col=5,
+        )
+
+    # テンプレ修正後の列構成: A=種別, B=対象, C=役割, D=影響内容  [F3]
     impact_col_map = [
         ("種別", ["種別"]),
-        ("対象", ["対象", "フロー名", "コンポーネント名"]),
-        ("内容", ["内容", "役割", "影響内容"]),
-        ("根拠", ["根拠", "補足", "備考"]),
+        ("対象", ["対象", "フロー名", "ファイルパス", "コンポーネント名"]),
+        ("役割", ["役割", "内容"]),
+        ("影響内容", ["影響内容", "補足", "備考"]),
     ]
-    for i, row in enumerate(impact_rows[:6]):
+    for i, row in enumerate(impact_rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, (_, candidates) in enumerate(impact_col_map, start=1):
-            wset(ws, 20 + i, j, get_col(row, *candidates), fill)
+            wset(ws, impact_data_start + i, j, get_col(row, *candidates), fill)
 
-    # 関連コンポーネント（r29-33）[M3, M11]
-    comp_text = extract_section(inv_md, "関連コンポーネント", "関連コンポーネント一覧")
-    comp_rows = parse_md_table(comp_text)
-    for i, row in enumerate(comp_rows[:5]):
+    # 関連コンポーネント一覧（テンプレ修正後 3列構成: 種別/名前/役割）[F3: 調査結果列削除]
+    comp_header_row = find_header_row(ws, ("■ 関連コンポーネント", "■ 関連コンポーネント一覧"))
+    comp_data_start = (comp_header_row + 2) if comp_header_row else 29
+    COMP_LIMIT = 5
+
+    extra_comp = max(0, len(impact_rows) - COMP_LIMIT)
+    if extra_comp > 0:
+        insert_rows_with_format(
+            ws,
+            comp_data_start + COMP_LIMIT,
+            extra_comp,
+            source_row=comp_data_start + COMP_LIMIT - 1,
+            max_col=4,
+        )
+
+    for i, row in enumerate(impact_rows[:10]):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
-        # 列名 alias: 「ファイルパス」→「名前」相当として扱う [M11]
-        name = get_col(row, "名前", "ファイルパス", "コンポーネント名")
-        role = row.get("役割", "")
-        finding = get_col(row, "調査結果", "補足", "備考")
-        wset(ws, 29 + i, 1, row.get("種別", ""), fill)
-        wset(ws, 29 + i, 2, name, fill)
-        wset(ws, 29 + i, 3, role, fill)
-        wset(ws, 29 + i, 4, finding, fill)
+        # 3列構成: 種別/名前(ファイルパス)/役割  [F3]
+        wset(ws, comp_data_start + i, 1, row.get("種別", ""), fill)
+        wset(ws, comp_data_start + i, 2, get_col(row, "名前", "ファイルパス", "コンポーネント名"), fill)
+        wset(ws, comp_data_start + i, 3, row.get("役割", ""), fill)
+        # D列(調査結果)には書き込まない [F3]
 
 
 # ── 対応内容シート ──────────────────────────────────────────────────────────
 
+def _has_code_change(impl_md):
+    """変更ファイル一覧に *.cls/*.flow-meta.xml/*.field-meta.xml 等が含まれるか。  [F4]"""
+    files_text = extract_section(impl_md, "変更ファイル一覧", "変更ファイル")
+    return bool(re.search(
+        r"\.(cls|flow-meta|object-meta|field-meta|page|component|trigger)\.xml|\.cls\b",
+        files_text
+    ))
+
+
 def fill_content(ws, impl_md):
+    # バックアップ情報 (r3-r5): コード変更なし案件は「該当なし」default を入れる  [F4]
+    if _has_code_change(impl_md):
+        wset(ws, 3, 2, "（実装時記入）")
+        wset(ws, 4, 2, "（実装時記入）")
+        wset(ws, 5, 2, "（実装時記入）")
+    else:
+        wset(ws, 3, 2, "該当なし（コード変更なし）")
+        wset(ws, 4, 2, "該当なし")
+        rb_text = extract_section(impl_md, "ロールバック手順")
+        rb_first = parse_numbered_list(rb_text)
+        wset(ws, 5, 2, rb_first[0] if rb_first else "ロールバック手順を参照")
+
     # 変更ファイル一覧（r9-11、テンプレ標準 3 件枠）
     rows = parse_md_table(extract_section(impl_md, "変更ファイル一覧", "変更ファイル"))
     CHANGE_FILES_START = 9
@@ -551,7 +650,7 @@ def fill_content(ws, impl_md):
             CHANGE_FILES_START + CHANGE_FILES_LIMIT,
             extra_chg,
             source_row=CHANGE_FILES_START + CHANGE_FILES_LIMIT - 1,
-            max_col=5,
+            max_col=4,  # E列削除後 4列
         )
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -559,17 +658,18 @@ def fill_content(ws, impl_md):
             wset(ws, CHANGE_FILES_START + i, j, row.get(col, ""), fill)
 
     # Before/After セクションは動的に位置を特定
-    ba_header_row = find_header_row(ws, ("■ Before / After",)) or (CHANGE_FILES_START + CHANGE_FILES_LIMIT + 1 + extra_chg)
-    wset(ws, ba_header_row + 1, 1, "実装完了後、各ファイルの変更前後を記載する")
+    ba_header_row = find_header_row(ws, ("■ Before / After",))
+    if ba_header_row:
+        wset(ws, ba_header_row + 1, 1, "実装完了後、各ファイルの変更前後を記載する")
 
-    # 影響確認チェックリスト（r21〜）[M3]
+    # 影響確認チェックリスト（r21〜）[F4: 2列構成]
     checks = parse_checklist(extract_section(
         impl_md,
         "影響確認チェックリスト", "影響確認",
     ))
     impact_header_row = find_header_row(ws, ("■ 影響確認チェックリスト",))
     IMPACT_CHECK_START = (impact_header_row + 2) if impact_header_row else 21
-    IMPACT_CHECK_LIMIT = 6  # テンプレ r21-r26
+    IMPACT_CHECK_LIMIT = 6  # テンプレ標準 6 件枠
     extra_impact = max(0, len(checks) - IMPACT_CHECK_LIMIT)
     if extra_impact > 0:
         insert_rows_with_format(
@@ -597,7 +697,7 @@ def fill_test(ws, impl_md):
         policy = "実装前後での動作確認を行う。実装前は現状把握、実装後は修正確認。"
     wset(ws, 3, 1, policy)
 
-    # テストテーブル（r7〜、テンプレ標準 8 件枠）[M3]
+    # テストテーブル（r7〜、テンプレ標準 8 件枠）[F5: H列削除後 7列構成]
     rows = parse_md_table(extract_section(
         impl_md,
         "テスト仕様", "テストケース", "テスト仕様テーブル",
@@ -612,10 +712,11 @@ def fill_test(ws, impl_md):
             TEST_START + TEST_LIMIT,
             extra_test,
             source_row=TEST_START + TEST_LIMIT - 1,
-            max_col=8,
+            max_col=7,  # H列削除後 7列  [F5]
         )
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        # H列「根拠」を削除した 7列構成  [F5]
         vals = [
             row.get("No", str(i + 1)),
             row.get("タイミング", row.get("区分", "")),
@@ -624,7 +725,6 @@ def fill_test(ws, impl_md):
             row.get("期待結果", ""),
             "",  # 実際の結果（実装後記入）
             "",  # 判定（実装後記入）
-            row.get("エビデンス取得方法", row.get("根拠", "")),
         ]
         for j, val in enumerate(vals, start=1):
             wset(ws, TEST_START + i, j, val, fill)
@@ -633,7 +733,7 @@ def fill_test(ws, impl_md):
 # ── リリース・ロールバックシート ────────────────────────────────────────────
 
 def fill_release(ws, impl_md, approach_md=""):
-    # リリース対象（r4-6、テンプレ標準 3 件枠）[M3, M7, M12]
+    # リリース対象（r4-5、テンプレ標準 2 件枠）[F6: 4列構成 No/種別/対象/デプロイ方法]
     rows = parse_md_table(extract_section(
         impl_md,
         "リリース対象", "リリース対象一覧",
@@ -648,22 +748,19 @@ def fill_release(ws, impl_md, approach_md=""):
             RELEASE_START + RELEASE_LIMIT,
             extra_release,
             source_row=RELEASE_START + RELEASE_LIMIT - 1,
-            max_col=6,
+            max_col=4,  # E/F列削除後 4列  [F6]
         )
 
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
-        # 「対象」列を「API名」の alias として扱う [M12]
         api_name = get_col(row, "API名", "対象", "ファイルパス")
-        change_type = get_col(row, "変更種別", "種別変更")
         wset(ws, RELEASE_START + i, 1, row.get("No", str(i + 1)), fill)
         wset(ws, RELEASE_START + i, 2, row.get("種別", ""), fill)
         wset(ws, RELEASE_START + i, 3, api_name, fill)
-        wset(ws, RELEASE_START + i, 4, change_type, fill)
-        wset(ws, RELEASE_START + i, 5, row.get("デプロイ方法", ""), fill)
-        wset(ws, RELEASE_START + i, 6, row.get("備考", ""), fill)
+        wset(ws, RELEASE_START + i, 4, row.get("デプロイ方法", ""), fill)
+        # 変更種別・備考は削除  [F6]
 
-    # リリース前確認事項（r9-13）[M3, M13]
+    # リリース前確認事項（テンプレ修正後 r9+）[F6: 2列構成]
     pre_text = extract_section(
         impl_md,
         "リリース前確認事項", "リリース前確認", "デプロイ前確認",
@@ -672,7 +769,6 @@ def fill_release(ws, impl_md, approach_md=""):
     checks = parse_checklist(pre_text)
     if not checks:
         checks = parse_numbered_list(pre_text)
-    # approach_md fallback: 実施前確認事項を転記 [M13]
     if not checks and approach_md:
         pre_fallback = extract_section(
             approach_md,
@@ -699,11 +795,11 @@ def fill_release(ws, impl_md, approach_md=""):
         wset(ws, pre_data_start + i, 1, "□")
         wset(ws, pre_data_start + i, 2, item)
 
-    # デプロイ手順（r15-18、テンプレ標準 4 件枠、各行 A:F マージ済）
+    # デプロイ手順（テンプレ修正後 A:D マージ）[F6: max_col=4]
     steps = parse_numbered_list(extract_section(impl_md, "デプロイ手順", "リリース手順"))
     deploy_header_row = find_header_row(ws, ("■ デプロイ手順",))
     deploy_data_start = (deploy_header_row + 1) if deploy_header_row else 15
-    DEPLOY_LIMIT = 4  # テンプレ r15-r18
+    DEPLOY_LIMIT = 4  # テンプレ標準 4 件
     extra_deploy = max(0, len(steps) - DEPLOY_LIMIT)
     if extra_deploy > 0:
         insert_rows_with_format(
@@ -711,21 +807,21 @@ def fill_release(ws, impl_md, approach_md=""):
             deploy_data_start + DEPLOY_LIMIT,
             extra_deploy,
             source_row=deploy_data_start + DEPLOY_LIMIT - 1,
-            max_col=6,
+            max_col=4,  # E/F削除後  [F6]
         )
     for i, step in enumerate(steps):
         target_row = deploy_data_start + i
         has_merge = any(
-            m.min_row == target_row and m.max_row == target_row
-            and m.min_col == 1 and m.max_col == 6
-            for m in ws.merged_cells.ranges
+            mg.min_row == target_row and mg.max_row == target_row
+            and mg.min_col == 1 and mg.max_col == 4
+            for mg in ws.merged_cells.ranges
         )
         if not has_merge:
             ws.merge_cells(start_row=target_row, end_row=target_row,
-                           start_column=1, end_column=6)
+                           start_column=1, end_column=4)
         wset(ws, target_row, 1, f"{i + 1}. {step}")
 
-    # デプロイ後確認事項（r22-26）[M3]
+    # デプロイ後確認事項（テンプレ修正後 2列構成）[F6]
     post_text = extract_section(
         impl_md,
         "デプロイ後確認事項", "リリース後確認", "デプロイ後確認",
@@ -737,7 +833,7 @@ def fill_release(ws, impl_md, approach_md=""):
 
     post_header_row = find_header_row(ws, ("■ デプロイ後確認事項",))
     post_data_start = (post_header_row + 2) if post_header_row else 22
-    POST_CHECK_LIMIT = 4  # テンプレ r22-r25
+    POST_CHECK_LIMIT = 4
     extra_post = max(0, len(post_checks) - POST_CHECK_LIMIT)
     if extra_post > 0:
         insert_rows_with_format(
@@ -751,13 +847,12 @@ def fill_release(ws, impl_md, approach_md=""):
         wset(ws, post_data_start + i, 1, "□")
         wset(ws, post_data_start + i, 2, item)
 
-    # 注意事項（r28-30）[M3, M13]
+    # 注意事項（テンプレ修正後 A:D マージ）[F6: max_col=4, 番号prefix再付与]
     notes_text = extract_section(
         impl_md,
         "注意事項", "リスク・注意事項", "注意点",
         "懸念事項", "リスク",
     )
-    # approach_md fallback: impl_md に注意事項がなければ approach の懸念事項を転記 [M13]
     if not notes_text and approach_md:
         notes_text = extract_section(approach_md, "懸念事項", "リスク・懸念事項", "注意事項")
 
@@ -767,7 +862,7 @@ def fill_release(ws, impl_md, approach_md=""):
 
     notes_header_row = find_header_row(ws, ("■ 注意事項・リスク", "■ 注意事項"))
     notes_data_start = (notes_header_row + 1) if notes_header_row else 28
-    NOTES_LIMIT = 2  # テンプレ r28-r29 (各行 A:F マージ済)
+    NOTES_LIMIT = 2  # テンプレ標準 2 件
     extra_notes = max(0, len(notes) - NOTES_LIMIT)
     if extra_notes > 0:
         insert_rows_with_format(
@@ -775,21 +870,21 @@ def fill_release(ws, impl_md, approach_md=""):
             notes_data_start + NOTES_LIMIT,
             extra_notes,
             source_row=notes_data_start + NOTES_LIMIT - 1,
-            max_col=6,
+            max_col=4,  # E/F削除後  [F6]
         )
     for i, item in enumerate(notes):
         target_row = notes_data_start + i
         has_merge = any(
-            m.min_row == target_row and m.max_row == target_row
-            and m.min_col == 1 and m.max_col == 6
-            for m in ws.merged_cells.ranges
+            mg.min_row == target_row and mg.max_row == target_row
+            and mg.min_col == 1 and mg.max_col == 4
+            for mg in ws.merged_cells.ranges
         )
         if not has_merge:
             ws.merge_cells(start_row=target_row, end_row=target_row,
-                           start_column=1, end_column=6)
-        wset(ws, target_row, 1, item)
+                           start_column=1, end_column=4)
+        wset(ws, target_row, 1, f"{i + 1}. {item}")  # 番号prefix再付与  [F6]
 
-    # ロールバック手順（r32-r35、テンプレ標準 4 件枠、各行 A:F マージ済）
+    # ロールバック手順（テンプレ修正後 A:D マージ）[F6]
     rb_steps = parse_numbered_list(extract_section(impl_md, "ロールバック手順"))
     rb_header_row = find_header_row(ws, ("■ ロールバック手順",))
     rb_data_start = (rb_header_row + 1) if rb_header_row else 32
@@ -801,18 +896,18 @@ def fill_release(ws, impl_md, approach_md=""):
             rb_data_start + RB_LIMIT,
             extra_rb,
             source_row=rb_data_start + RB_LIMIT - 1,
-            max_col=6,
+            max_col=4,  # E/F削除後  [F6]
         )
     for i, step in enumerate(rb_steps):
         target_row = rb_data_start + i
         has_merge = any(
-            m.min_row == target_row and m.max_row == target_row
-            and m.min_col == 1 and m.max_col == 6
-            for m in ws.merged_cells.ranges
+            mg.min_row == target_row and mg.max_row == target_row
+            and mg.min_col == 1 and mg.max_col == 4
+            for mg in ws.merged_cells.ranges
         )
         if not has_merge:
             ws.merge_cells(start_row=target_row, end_row=target_row,
-                           start_column=1, end_column=6)
+                           start_column=1, end_column=4)
         wset(ws, target_row, 1, f"{i + 1}. {step}")
 
 
@@ -857,7 +952,7 @@ def main():
     fill_investigation(wb["調査・影響範囲"], inv_md)
     fill_content(wb["対応内容"], impl_md)
     fill_test(wb["テスト・検証記録"], impl_md)
-    fill_release(wb["リリース・ロールバック"], impl_md, app_md)  # [M13] approach_md を渡す
+    fill_release(wb["リリース・ロールバック"], impl_md, app_md)
 
     path = os.path.join(args.folder, f"{args.issue_id}_対応記録.xlsx")
     wb.save(path)
