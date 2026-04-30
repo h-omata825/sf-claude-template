@@ -472,7 +472,7 @@ def fill_approach(ws, approach_md):
             ws,
             APPROACH_START + APPROACH_LIMIT,
             extra_approach,
-            source_row=APPROACH_START + APPROACH_LIMIT - 1,
+            source_row=APPROACH_START,
             max_col=6,
         )
     elif len(rows) < APPROACH_LIMIT:
@@ -535,7 +535,7 @@ def fill_approach(ws, approach_md):
             ws,
             confirm_data_start + CONFIRM_LIMIT,
             extra_confirm,
-            source_row=confirm_data_start + CONFIRM_LIMIT - 1,
+            source_row=confirm_data_start,
             max_col=2,
         )
     elif len(checks) < CONFIRM_LIMIT:
@@ -567,7 +567,7 @@ def fill_approach(ws, approach_md):
             ws,
             concern_data_start + CONCERN_LIMIT,
             extra_concerns,
-            source_row=concern_data_start + CONCERN_LIMIT - 1,
+            source_row=concern_data_start,
             max_col=6,
         )
     elif len(concerns) < CONCERN_LIMIT:
@@ -610,11 +610,19 @@ def fill_investigation(ws, inv_md):
         ("備考", ["備考", "検証結果", "補足"]),
         ("判定", ["判定", "実現可能性"]),
     ]
-    for i, row in enumerate(rows[:6]):
+    HYPO_START = 4
+    HYPO_LIMIT = 5  # テンプレ r4-r8（r9 は spacer）
+    extra_hypo = max(0, len(rows) - HYPO_LIMIT)
+    if extra_hypo > 0:
+        insert_rows_with_format(ws, HYPO_START + HYPO_LIMIT, extra_hypo,
+                                source_row=HYPO_START, max_col=4)
+    elif len(rows) < HYPO_LIMIT:
+        _shrink_table(ws, HYPO_START, len(rows), HYPO_LIMIT)
+    for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, (_, candidates) in enumerate(hypo_col_map, start=1):
-            wset(ws, 4 + i, j, get_col(row, *candidates), fill)
-        auto_fit_row(ws, 4 + i)
+            wset(ws, HYPO_START + i, j, get_col(row, *candidates), fill)
+        auto_fit_row(ws, HYPO_START + i)
 
     # コード根拠（r12-17）[M3, M9] — 動的拡張対応  [F9]
     code_text = extract_section(
@@ -634,15 +642,16 @@ def fill_investigation(ws, inv_md):
         ("コード内容", ["コード内容", "確認元", "コード", "参照元"]),
         ("説明", ["説明", "補足", "備考"]),
     ]
-    code_data_start = 12  # テンプレ r12
-    CODE_LIMIT = 6        # テンプレ標準6枠 (r12-r17)
+    code_header_row = find_header_row(ws, ("■ コード根拠テーブル", "■ コード根拠"))
+    code_data_start = (code_header_row + 2) if code_header_row else 12
+    CODE_LIMIT = 5  # テンプレ r12-r16（r17 は spacer）
     extra_code = max(0, len(code_rows) - CODE_LIMIT)
     if extra_code > 0:
         insert_rows_with_format(
             ws,
             code_data_start + CODE_LIMIT,
             extra_code,
-            source_row=code_data_start + CODE_LIMIT - 1,
+            source_row=code_data_start,
             max_col=4,
         )
     elif len(code_rows) < CODE_LIMIT:
@@ -665,7 +674,7 @@ def fill_investigation(ws, inv_md):
 
     impact_header_row = find_header_row(ws, ("■ 影響範囲テーブル", "■ 影響範囲"))
     impact_data_start = (impact_header_row + 2) if impact_header_row else 20
-    IMPACT_LIMIT = 4  # テンプレ修正後の標準枠
+    IMPACT_LIMIT = 6  # テンプレ r20-r25（r26 は spacer）
 
     # ヘッダー行 (header_row + 1) の役割列を C:D merge  [R1]
     if impact_header_row:
@@ -680,7 +689,7 @@ def fill_investigation(ws, inv_md):
             ws,
             impact_data_start + IMPACT_LIMIT,
             extra_impact,
-            source_row=impact_data_start + IMPACT_LIMIT - 1,
+            source_row=impact_data_start,
             max_col=4,
         )
     elif len(impact_rows) < IMPACT_LIMIT:
@@ -720,7 +729,7 @@ def fill_investigation(ws, inv_md):
             ws,
             comp_data_start + COMP_LIMIT,
             extra_comp,
-            source_row=comp_data_start + COMP_LIMIT - 1,
+            source_row=comp_data_start,
             max_col=4,
         )
     elif len(impact_rows) < COMP_LIMIT:
@@ -773,7 +782,7 @@ def fill_content(ws, impl_md):
             ws,
             CHANGE_FILES_START + CHANGE_FILES_LIMIT,
             extra_chg,
-            source_row=CHANGE_FILES_START + CHANGE_FILES_LIMIT - 1,
+            source_row=CHANGE_FILES_START,
             max_col=4,  # E列削除後 4列
         )
     elif len(rows) < CHANGE_FILES_LIMIT:
@@ -810,7 +819,7 @@ def fill_content(ws, impl_md):
             ws,
             IMPACT_CHECK_START + IMPACT_CHECK_LIMIT,
             extra_impact,
-            source_row=IMPACT_CHECK_START + IMPACT_CHECK_LIMIT - 1,
+            source_row=IMPACT_CHECK_START,
             max_col=2,
         )
     elif len(checks) < IMPACT_CHECK_LIMIT:
@@ -852,7 +861,7 @@ def fill_test(ws, impl_md):
             ws,
             TEST_START + TEST_LIMIT,
             extra_test,
-            source_row=TEST_START + TEST_LIMIT - 1,
+            source_row=TEST_START,
             max_col=7,  # H列削除後 7列  [F5]
         )
     elif len(rows) < TEST_LIMIT:
@@ -891,7 +900,7 @@ def fill_release(ws, impl_md, approach_md=""):
             ws,
             RELEASE_START + RELEASE_LIMIT,
             extra_release,
-            source_row=RELEASE_START + RELEASE_LIMIT - 1,
+            source_row=RELEASE_START,
             max_col=4,  # E/F列削除後 4列  [F6]
         )
     elif len(rows) < RELEASE_LIMIT:
@@ -934,7 +943,7 @@ def fill_release(ws, impl_md, approach_md=""):
             ws,
             pre_data_start + PRE_CHECK_LIMIT,
             extra_pre,
-            source_row=pre_data_start + PRE_CHECK_LIMIT - 1,
+            source_row=pre_data_start,
             max_col=2,
         )
     elif len(checks) < PRE_CHECK_LIMIT:
@@ -960,7 +969,7 @@ def fill_release(ws, impl_md, approach_md=""):
             ws,
             deploy_data_start + DEPLOY_LIMIT,
             extra_deploy,
-            source_row=deploy_data_start + DEPLOY_LIMIT - 1,
+            source_row=deploy_data_start,
             max_col=4,  # E/F削除後  [F6]
         )
     elif len(steps) < DEPLOY_LIMIT:
@@ -996,7 +1005,7 @@ def fill_release(ws, impl_md, approach_md=""):
             ws,
             post_data_start + POST_CHECK_LIMIT,
             extra_post,
-            source_row=post_data_start + POST_CHECK_LIMIT - 1,
+            source_row=post_data_start,
             max_col=2,
         )
     elif len(post_checks) < POST_CHECK_LIMIT:
@@ -1033,7 +1042,7 @@ def fill_release(ws, impl_md, approach_md=""):
             ws,
             notes_data_start + NOTES_LIMIT,
             extra_notes,
-            source_row=notes_data_start + NOTES_LIMIT - 1,
+            source_row=notes_data_start,
             max_col=4,  # E/F削除後  [F6]
         )
     elif len(notes) < NOTES_LIMIT:
@@ -1061,7 +1070,7 @@ def fill_release(ws, impl_md, approach_md=""):
             ws,
             rb_data_start + RB_LIMIT,
             extra_rb,
-            source_row=rb_data_start + RB_LIMIT - 1,
+            source_row=rb_data_start,
             max_col=4,  # E/F削除後  [F6]
         )
     elif len(rb_steps) < RB_LIMIT:
