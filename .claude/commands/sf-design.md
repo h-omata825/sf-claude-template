@@ -121,11 +121,31 @@ python -c "import pathlib; p = pathlib.Path(r'{project_dir}/docs/.sf'); p.mkdir(
 
 ### バージョン種別
 
-AskUserQuestion で選択する（2択＋Other自動）:
+既存ファイルの有無で出し分ける。判定スクリプト:
+```bash
+python -c "
+import pathlib
+selected = {selected_types}
+output = pathlib.Path(r'{output_dir}')
+checks = []
+if '詳細設計' in selected:
+    checks += list((output / '02_詳細設計').glob('*.xlsx')) if (output / '02_詳細設計').exists() else []
+if 'プログラム設計' in selected:
+    checks += list((output / '03_プログラム設計').glob('*.xlsx')) if (output / '03_プログラム設計').exists() else []
+if '機能一覧' in selected:
+    p = output / '01_基本設計' / '機能一覧.xlsx'
+    if p.exists(): checks.append(p)
+print('HAS_EXISTING:', len(checks) > 0)
+"
+```
+
+**既存ファイルが1件以上ある場合:** AskUserQuestion で選択する（2択＋Other自動）:
 - label: "minor"、description: "機能追加・仕様変更・軽微な修正（デフォルト）"
 - label: "major"、description: "大規模な変更・後方互換性のない改訂"
 
 選択値を **`version_increment`** として保持する。Other が選ばれた場合はチャットで入力してもらう。
+
+**既存ファイルが1件もない場合（新規作成）:** AskUserQuestion をスキップし、`version_increment = "minor"` を自動セット。ユーザーに「新規作成のため version を minor で自動設定しました」と1行通知する。
 
 ### プロジェクト名
 
