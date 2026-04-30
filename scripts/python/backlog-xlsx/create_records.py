@@ -20,6 +20,7 @@ from pathlib import Path
 try:
     from openpyxl import load_workbook
     from openpyxl.styles import Alignment, PatternFill
+    from openpyxl.utils import get_column_letter
 except ImportError:
     print("[ERROR] openpyxl がインストールされていません。`pip install openpyxl` を実行してください。")
     sys.exit(1)
@@ -88,12 +89,13 @@ def parse_md_table(section_text):
 
 
 def parse_checklist(section_text):
-    """- [ ] または - [x] の行からチェックリスト文字列のリストを返す。"""
+    """- [x] / - [ ] の行から (checked: bool, text: str) タプルのリストを返す。  [F11]"""
     items = []
     for line in section_text.splitlines():
-        m = re.match(r"^\s*-\s+\[[ xX]\]\s+(.+)", line)
+        m = re.match(r"^\s*-\s+\[([ xX])\]\s+(.+)", line)
         if m:
-            items.append(m.group(1).strip())
+            checked = m.group(1).lower() == "x"
+            items.append((checked, m.group(2).strip()))
     return items
 
 
@@ -270,6 +272,54 @@ def _merge_exists(ws, r1, c1, r2, c2):
         m.min_row == r1 and m.max_row == r2 and m.min_col == c1 and m.max_col == c2
         for m in ws.merged_cells.ranges
     )
+
+
+# ── 行高自動調整ヘルパー ─────────────────────────────────────────────────────  [F11]
+
+def _get_merged_width(ws, row, col):
+    """row,col が属する merge 範囲の全列幅合計を返す。merge なしなら単独列幅。"""
+    for m in ws.merged_cells.ranges:
+        if m.min_row <= row <= m.max_row and m.min_col <= col <= m.max_col:
+            return sum(
+                ws.column_dimensions[get_column_letter(c)].width or 8
+                for c in range(m.min_col, m.max_col + 1)
+            )
+    return ws.column_dimensions[get_column_letter(col)].width or 8
+
+
+def _calc_row_height(text, width_chars, line_height=18, padding=4, min_height=22):
+    """テキストの折り返し行数を概算して row.height を返す。
+    visual width: 全角=2 / 半角=1。width_chars=10 → chars_per_row=20 visual chars。
+    """
+    if not text or not str(text).strip():
+        return min_height
+    text = str(text)
+    chars_per_row = max(int(width_chars * 2), 4)
+    total_lines = 0
+    for line in text.split("\n"):
+        if not line.strip():
+            total_lines += 1
+            continue
+        visual_width = sum(2 if ord(c) > 127 else 1 for c in line)
+        total_lines += max(1, (visual_width + chars_per_row - 1) // chars_per_row)
+    return max(min_height, total_lines * line_height + padding)
+
+
+def auto_fit_row(ws, row_idx, target_cols=None, min_height=22):
+    """行 row_idx の各セル値から折り返し行数を概算し row.height を設定。
+    target_cols=None で全列対象。merge セルは範囲全体の列幅で計算。
+    """
+    if target_cols is None:
+        target_cols = list(range(1, ws.max_column + 1))
+    max_h = min_height
+    for col in target_cols:
+        cell = ws.cell(row=row_idx, column=col)
+        if cell.value:
+            width = _get_merged_width(ws, row_idx, col)
+            h = _calc_row_height(cell.value, width, min_height=min_height)
+            if h > max_h:
+                max_h = h
+    ws.row_dimensions[row_idx].height = max_h
 
 
 # ── タイムライン理由抽出ヘルパー ──────────────────────────────────────────  [F1]
@@ -459,7 +509,7 @@ def fill_approach(ws, approach_md):
     )
     checks = parse_checklist(checks_text)
     if not checks:
-        checks = parse_numbered_list(checks_text)
+        checks = [(False, item) for item in parse_numbered_list(checks_text)]
 
     confirm_header_row = find_header_row(ws, ("■ 実施前確認事項",))
     confirm_data_start = (confirm_header_row + 2) if confirm_header_row else 12
@@ -475,14 +525,15 @@ def fill_approach(ws, approach_md):
             max_col=2,
         )
 
-    for i, item in enumerate(checks):
+    for i, (checked, text) in enumerate(checks):
         target_row = confirm_data_start + i
-        wset(ws, target_row, 1, "□")
-        wset(ws, target_row, 2, item)
+        wset(ws, target_row, 1, "☑" if checked else "☐")
+        wset(ws, target_row, 2, text)
         # B:F merge を動的付与 (テンプレ6列構成、確認内容を広く)  [F8]
         if not _merge_exists(ws, target_row, 2, target_row, 6):
             ws.merge_cells(start_row=target_row, end_row=target_row,
                            start_column=2, end_column=6)
+        auto_fit_row(ws, target_row, target_cols=[1, 2])
 
     # 懸念事項（テンプレ修正後 r17「■ 懸念事項」の直下から書き込み）[M6]
     concerns_text = extract_section(approach_md, "懸念事項", "リスク・懸念事項", "懸念点")
@@ -545,6 +596,7 @@ def fill_investigation(ws, inv_md):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, (_, candidates) in enumerate(hypo_col_map, start=1):
             wset(ws, 4 + i, j, get_col(row, *candidates), fill)
+        auto_fit_row(ws, 4 + i)
 
     # コード根拠（r12-17）[M3, M9] — 動的拡張対応  [F9]
     code_text = extract_section(
@@ -579,6 +631,7 @@ def fill_investigation(ws, inv_md):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, (_, candidates) in enumerate(code_col_map, start=1):
             wset(ws, code_data_start + i, j, get_col(row, *candidates), fill)
+        auto_fit_row(ws, code_data_start + i)
 
     # 影響範囲（テンプレ修正後 3列構成: 種別/対象/役割/影響内容）[F3: 動的拡張 + ソース変更]
     # ソースを「関連コンポーネント一覧」に変更（フロー名/役割 2列より情報が豊富）
@@ -614,6 +667,11 @@ def fill_investigation(ws, inv_md):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, (_, candidates) in enumerate(impact_col_map, start=1):
             wset(ws, impact_data_start + i, j, get_col(row, *candidates), fill)
+        target_row = impact_data_start + i
+        if not _merge_exists(ws, target_row, 3, target_row, 4):
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=3, end_column=4)
+        auto_fit_row(ws, target_row)
 
     # 関連コンポーネント一覧（テンプレ修正後 3列構成: 種別/名前/役割）[F3: 調査結果列削除]
     comp_header_row = find_header_row(ws, ("■ 関連コンポーネント", "■ 関連コンポーネント一覧"))
@@ -636,7 +694,11 @@ def fill_investigation(ws, inv_md):
         wset(ws, comp_data_start + i, 1, row.get("種別", ""), fill)
         wset(ws, comp_data_start + i, 2, get_col(row, "名前", "ファイルパス", "コンポーネント名"), fill)
         wset(ws, comp_data_start + i, 3, row.get("役割", ""), fill)
-        # D列(調査結果)には書き込まない [F3]
+        target_row = comp_data_start + i
+        if not _merge_exists(ws, target_row, 3, target_row, 4):
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=3, end_column=4)
+        auto_fit_row(ws, target_row)
 
 
 # ── 対応内容シート ──────────────────────────────────────────────────────────
@@ -703,9 +765,14 @@ def fill_content(ws, impl_md):
             source_row=IMPACT_CHECK_START + IMPACT_CHECK_LIMIT - 1,
             max_col=2,
         )
-    for i, item in enumerate(checks):
-        wset(ws, IMPACT_CHECK_START + i, 1, "□")
-        wset(ws, IMPACT_CHECK_START + i, 2, item)
+    for i, (checked, text) in enumerate(checks):
+        target_row = IMPACT_CHECK_START + i
+        wset(ws, target_row, 1, "☑" if checked else "☐")
+        wset(ws, target_row, 2, text)
+        if not _merge_exists(ws, target_row, 2, target_row, 4):
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=2, end_column=4)
+        auto_fit_row(ws, target_row, target_cols=[1, 2])
 
 
 # ── テスト・検証記録シート ──────────────────────────────────────────────────
@@ -747,11 +814,12 @@ def fill_test(ws, impl_md):
             row.get("確認観点", row.get("テスト項目", "")),
             row.get("確認手順", row.get("確認方法", "")),
             row.get("期待結果", ""),
-            "",  # 実際の結果（実装後記入）
-            "",  # 判定（実装後記入）
+            row.get("実際の結果", "（テスト実行後記入）"),  # [F11]
+            row.get("判定", "（実行後）"),                  # [F11]
         ]
         for j, val in enumerate(vals, start=1):
             wset(ws, TEST_START + i, j, val, fill)
+        auto_fit_row(ws, TEST_START + i)
 
 
 # ── リリース・ロールバックシート ────────────────────────────────────────────
@@ -792,7 +860,7 @@ def fill_release(ws, impl_md, approach_md=""):
     )
     checks = parse_checklist(pre_text)
     if not checks:
-        checks = parse_numbered_list(pre_text)
+        checks = [(False, item) for item in parse_numbered_list(pre_text)]
     if not checks and approach_md:
         pre_fallback = extract_section(
             approach_md,
@@ -801,7 +869,7 @@ def fill_release(ws, impl_md, approach_md=""):
         )
         checks = parse_checklist(pre_fallback)
         if not checks:
-            checks = parse_numbered_list(pre_fallback)
+            checks = [(False, item) for item in parse_numbered_list(pre_fallback)]
 
     pre_header_row = find_header_row(ws, ("■ リリース前確認事項",))
     pre_data_start = (pre_header_row + 2) if pre_header_row else 9
@@ -815,14 +883,15 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=pre_data_start + PRE_CHECK_LIMIT - 1,
             max_col=2,
         )
-    for i, item in enumerate(checks):
+    for i, (checked, text) in enumerate(checks):
         target_row = pre_data_start + i
-        wset(ws, target_row, 1, "□")
-        wset(ws, target_row, 2, item)
+        wset(ws, target_row, 1, "☑" if checked else "☐")
+        wset(ws, target_row, 2, text)
         # B:D merge を動的付与 (確認内容列を広く)  [F10]
         if not _merge_exists(ws, target_row, 2, target_row, 4):
             ws.merge_cells(start_row=target_row, end_row=target_row,
                            start_column=2, end_column=4)
+        auto_fit_row(ws, target_row, target_cols=[1, 2])
 
     # デプロイ手順（テンプレ修正後 A:D マージ）[F6: max_col=4]
     steps = parse_numbered_list(extract_section(impl_md, "デプロイ手順", "リリース手順"))
@@ -858,7 +927,7 @@ def fill_release(ws, impl_md, approach_md=""):
     )
     post_checks = parse_checklist(post_text)
     if not post_checks:
-        post_checks = parse_numbered_list(post_text)
+        post_checks = [(False, item) for item in parse_numbered_list(post_text)]
 
     post_header_row = find_header_row(ws, ("■ デプロイ後確認事項",))
     post_data_start = (post_header_row + 2) if post_header_row else 22
@@ -872,14 +941,15 @@ def fill_release(ws, impl_md, approach_md=""):
             source_row=post_data_start + POST_CHECK_LIMIT - 1,
             max_col=2,
         )
-    for i, item in enumerate(post_checks):
+    for i, (checked, text) in enumerate(post_checks):
         target_row = post_data_start + i
-        wset(ws, target_row, 1, "□")
-        wset(ws, target_row, 2, item)
+        wset(ws, target_row, 1, "☑" if checked else "☐")
+        wset(ws, target_row, 2, text)
         # B:D merge を動的付与  [F10]
         if not _merge_exists(ws, target_row, 2, target_row, 4):
             ws.merge_cells(start_row=target_row, end_row=target_row,
                            start_column=2, end_column=4)
+        auto_fit_row(ws, target_row, target_cols=[1, 2])
 
     # 注意事項（テンプレ修正後 A:D マージ）[F6: max_col=4, 番号prefix再付与]
     notes_text = extract_section(
