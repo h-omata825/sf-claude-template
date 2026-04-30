@@ -196,13 +196,26 @@ def fill_approach(ws, approach_md):
         wset(ws, 22 + i, 1, "□")
         wset(ws, 22 + i, 2, item)
 
-    # 懸念事項（r28-30）
-    concerns_text = extract_section(approach_md, "懸念事項", "リスク・懸念事項")
-    concerns = parse_numbered_list(concerns_text)
-    if not concerns:
-        concerns = [l.strip().lstrip("- ") for l in concerns_text.splitlines() if l.strip().startswith("-")]
-    for i, item in enumerate(concerns[:3]):
-        wset(ws, 28 + i, 1, item)
+    # 方針変更履歴（r28-30）— A27「■ ログ履歴」セクション
+    log_text = extract_section(approach_md, "方針変更履歴", "変更履歴", "ログ履歴")
+    log_rows = parse_md_table(log_text)
+    if log_rows:
+        # テーブル形式: 変更日 / 旧方針 / 新方針 / 理由 など
+        col_order = ["変更日", "旧方針", "新方針", "理由"]
+        for i, row in enumerate(log_rows[:3]):
+            fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+            # テーブル列があればそのまま、なければ全列を1行にまとめる
+            if any(col in row for col in col_order):
+                line = " / ".join(f"{col}: {row.get(col, '')}" for col in col_order if row.get(col, ""))
+            else:
+                line = " / ".join(f"{k}: {v}" for k, v in row.items() if v)
+            wset(ws, 28 + i, 1, line, fill)
+    else:
+        log_lines = parse_numbered_list(log_text)
+        if not log_lines:
+            log_lines = [l.strip().lstrip("- ") for l in log_text.splitlines() if l.strip().startswith("-")]
+        for i, item in enumerate(log_lines[:3]):
+            wset(ws, 28 + i, 1, item)
 
 
 # ── 調査・影響範囲シート ────────────────────────────────────────────────────
@@ -320,9 +333,14 @@ def fill_release(ws, impl_md):
     for i, item in enumerate(notes[:3]):
         wset(ws, 28 + i, 1, item)
 
-    # ロールバック手順（r32-37）
+    # ロールバック手順（r32-r36 が標準枠。5件超は r37「■ リリース実施記録」以降を下方シフト）
     rb_steps = parse_numbered_list(extract_section(impl_md, "ロールバック手順"))
-    for i, step in enumerate(rb_steps[:6]):
+    RB_TEMPLATE_LIMIT = 5  # テンプレ標準枠 r32-r36
+    extra = max(0, len(rb_steps) - RB_TEMPLATE_LIMIT)
+    if extra > 0:
+        # r37 (「■ リリース実施記録」ヘッダ) 以降を extra 行下にずらす
+        ws.insert_rows(37, amount=extra)
+    for i, step in enumerate(rb_steps):
         wset(ws, 32 + i, 1, f"{i + 1}. {step}")
 
 
