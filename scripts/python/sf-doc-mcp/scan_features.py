@@ -19,6 +19,7 @@ from pathlib import Path
 from feature_id_ledger import (
     load_ledger, save_ledger, resolve_id, mark_deprecated, _make_key,
 )
+from text_cleaning import clean_tech_business, translate_sf_objects, translate_trigger_events
 
 
 FEATURE_TYPES = {
@@ -100,11 +101,13 @@ def _apex_role_from_name(api_name: str) -> str:
     for suffix, role_ja in _APEX_SUFFIX_ROLES:
         if api_name.endswith(suffix) and len(api_name) > len(suffix):
             prefix = api_name[:-len(suffix)]
-            return f"{prefix} の{role_ja}"
+            prefix_ja = clean_tech_business(prefix)
+            return f"{prefix_ja} の{role_ja}" if prefix_ja else role_ja
     for prefix_en, role_ja in _APEX_PREFIX_ACTIONS:
         if api_name.startswith(prefix_en) and len(api_name) > len(prefix_en):
             rest = api_name[len(prefix_en):]
-            return f"{rest} の{role_ja}"
+            rest_ja = clean_tech_business(rest)
+            return f"{rest_ja} の{role_ja}" if rest_ja else role_ja
     return ""
 
 
@@ -146,7 +149,7 @@ def extract_javadoc(path: Path, api_name: str = "", design_doc: str | None = Non
     if m:
         line = _first_meaningful_line(m.group(1))
         if line and not _is_default_javadoc(line):
-            return line
+            return clean_tech_business(line)
 
     # 3. ファイル先頭の javadoc（メソッド名・デフォルトテンプレ除外）
     METHOD_NAMES = {"start", "execute", "finish", "run", "handle", "init", "constructor"}
@@ -154,7 +157,7 @@ def extract_javadoc(path: Path, api_name: str = "", design_doc: str | None = Non
     if m:
         line = _first_meaningful_line(m.group(1))
         if line and line.lower() not in METHOD_NAMES and not _is_default_javadoc(line):
-            return line
+            return clean_tech_business(line)
 
     # 4. Suffix/Prefix ヒューリスティック
     return _apex_role_from_name(api_name)
@@ -180,11 +183,11 @@ def extract_trigger_overview(trigger_path: Path, design_doc: str | None = None) 
         lines = [l.strip().lstrip('*').strip() for l in m.group(1).split('\n')
                  if l.strip().strip('*').strip() and not l.strip().lstrip('*').strip().startswith('@')]
         if lines and not _is_default_javadoc(lines[0]):
-            return lines[0]
+            return clean_tech_business(lines[0])
     m = re.search(r'trigger\s+\w+\s+on\s+(\w+)\s*\(([^)]+)\)', text)
     if m:
-        obj = m.group(1)
-        events = ", ".join(e.strip() for e in m.group(2).split(",") if e.strip())
+        obj = translate_sf_objects(m.group(1))
+        events = translate_trigger_events(m.group(2))
         return f"{obj} の {events} トリガー"
     return ""
 
@@ -212,7 +215,7 @@ def extract_lwc_overview(lwc_dir: Path, design_doc: str | None = None) -> str:
                 if m:
                     val = m.group(1).strip()
                     if val:
-                        return val
+                        return clean_tech_business(val)
         except Exception:
             pass
     # Fallback: .js
@@ -226,14 +229,14 @@ def extract_lwc_overview(lwc_dir: Path, design_doc: str | None = None) -> str:
                 lines = [l.strip().lstrip('*').strip() for l in m.group(1).split('\n')
                          if l.strip().strip('*').strip() and not l.strip().lstrip('*').strip().startswith('@')]
                 if lines:
-                    return lines[0]
+                    return clean_tech_business(lines[0])
             # 2b: 最初に出現する `// コメント` を拾う（import 後の概要コメントを想定）
             for line in text.split('\n')[:30]:
                 stripped = line.strip()
                 if stripped.startswith('//'):
                     val = stripped.lstrip('/').strip()
                     if val and len(val) > 2:
-                        return val
+                        return clean_tech_business(val)
         except Exception:
             pass
     return ""
@@ -257,7 +260,7 @@ def extract_vf_overview(page_meta_path: Path, design_doc: str | None = None) -> 
             if m:
                 val = m.group(1).strip()
                 if val:
-                    return val
+                    return clean_tech_business(val)
     except Exception:
         pass
     # .page ファイルの <title> を fallback
@@ -269,7 +272,7 @@ def extract_vf_overview(page_meta_path: Path, design_doc: str | None = None) -> 
             if m:
                 val = m.group(1).strip()
                 if val:
-                    return val
+                    return clean_tech_business(val)
         except Exception:
             pass
     return ""
@@ -299,7 +302,7 @@ def extract_aura_overview(aura_dir: Path, design_doc: str | None = None) -> str:
             if m:
                 val = m.group(1).strip()
                 if val and val not in DEFAULT_DESCS:
-                    return val
+                    return clean_tech_business(val)
         except Exception:
             pass
 
@@ -312,7 +315,7 @@ def extract_aura_overview(aura_dir: Path, design_doc: str | None = None) -> str:
             if m:
                 val = m.group(1).strip()
                 if val:
-                    return val
+                    return clean_tech_business(val)
         except Exception:
             pass
 
@@ -326,7 +329,7 @@ def extract_aura_overview(aura_dir: Path, design_doc: str | None = None) -> str:
                 val = m.group(1).strip()
                 # "attribute" など雑なコメントは除外
                 if val and len(val) > 5 and "attribute" not in val.lower():
-                    return val.split('\n')[0]
+                    return clean_tech_business(val.split('\n')[0])
         except Exception:
             pass
     return ""
@@ -554,9 +557,9 @@ def scan(project_dir: Path) -> list[dict]:
             # flow_file.stem だと "X.flow-meta" のように .flow-meta が残ってしまうので api_name を使う
             doc = get_design_doc(docs_design, api_name, flow_type)
             # 優先順: design_doc の title → description → label
-            overview = extract_design_doc_title(doc) or desc.strip()
+            overview = extract_design_doc_title(doc) or clean_tech_business(desc.strip())
             if not overview and label and label != api_name:
-                overview = label
+                overview = clean_tech_business(label)
             _add(flow_type, api_name, {
                 "name":        label,
                 "overview":    overview,

@@ -37,6 +37,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from meta_store import read_meta, write_meta
 from version_manager import increment_version
+from text_cleaning import clean_tech_business
 
 DEFAULT_TEMPLATE = Path(__file__).parent / "機能一覧テンプレート.xlsx"
 
@@ -297,7 +298,7 @@ def fill_type_sheet(ws, type_key: str, features: list,
         is_modified = feat_id in modified_ids
 
         bg = C_ADD_BG if is_added else (C_ALT_ROW if i % 2 == 1 else None)
-        overview = feat.get("overview", "") or ""
+        overview = clean_tech_business(feat.get("overview", "") or "")
         set_h(ws, r, max(26, min(150, (len(overview) // 30) * 16 + 28)))
 
         vals = {
