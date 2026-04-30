@@ -189,18 +189,55 @@ def copy_row_style(ws, src_row, dst_row, max_col=8):
             dst.alignment = WRAP
 
 
-def unmerge_rows(ws, first_row, count):
-    """insert_rows 直後に挿入行をカバーするマージセルを解除する。
-    openpyxl は挿入行に元の merge を残すことがあり、書き込みが A 列のみになるバグを防ぐ。
-    ws.unmerge_cells はスレーブセルが _cells に無い場合 KeyError を出すため、
-    ranges から直接 discard して回避する。
+def insert_rows_with_format(ws, insert_at, count, source_row, max_col):
+    """insert_rows + 行高継承 + マージ補修を一括で行う (openpyxl の既知バグを回避)。
+
+    openpyxl の insert_rows は:
+    1. row_dimensions[height] のシフトが誤る場合がある
+    2. マージセルをシフトせず元位置に残し、シフト後位置にも追加して重複を作る
+    本関数はこれら両方を「挿入前スナップショット → クリア → 挿入 → 完全再構築」で補正する。
     """
-    to_remove = [
-        mcr for mcr in list(ws.merged_cells.ranges)
-        if mcr.min_row >= first_row and mcr.max_row < first_row + count
-    ]
-    for mcr in to_remove:
+    # 挿入前にマージ全件と行高全件をスナップショット
+    all_merges = [(m.min_row, m.max_row, m.min_col, m.max_col)
+                  for m in list(ws.merged_cells.ranges)]
+    row_heights = {r: ws.row_dimensions[r].height
+                   for r in ws.row_dimensions
+                   if ws.row_dimensions[r].height is not None}
+    src_h = row_heights.get(source_row)
+
+    # マージを全クリア (insert_rows による重複マージ作成を防止)
+    for mcr in list(ws.merged_cells.ranges):
         ws.merged_cells.ranges.discard(mcr)
+
+    # 挿入実行
+    ws.insert_rows(insert_at, amount=count)
+
+    # 行高をスナップショットから完全再構築 (openpyxl のシフト誤りを上書き)
+    # まず insert_at 以降のシフト元位置を None にリセット (stale コピーを除去)
+    for r in row_heights:
+        if r >= insert_at:
+            ws.row_dimensions[r].height = None
+    for r, h in row_heights.items():
+        new_r = r + count if r >= insert_at else r
+        ws.row_dimensions[new_r].height = h
+
+    # 挿入行に source_row の行高 + セルスタイルをコピー
+    for r in range(insert_at, insert_at + count):
+        if src_h:
+            ws.row_dimensions[r].height = src_h
+        copy_row_style(ws, source_row, r, max_col=max_col)
+
+    # マージをスナップショットから完全再構築 (insert_at 以降は count 行シフト)
+    for (min_r, max_r, min_c, max_c) in all_merges:
+        if min_r >= insert_at:
+            ws.merge_cells(start_row=min_r + count, end_row=max_r + count,
+                           start_column=min_c, end_column=max_c)
+        elif max_r >= insert_at:
+            ws.merge_cells(start_row=min_r, end_row=max_r + count,
+                           start_column=min_c, end_column=max_c)
+        else:
+            ws.merge_cells(start_row=min_r, end_row=max_r,
+                           start_column=min_c, end_column=max_c)
 
 
 # ── セル書き込みユーティリティ ──────────────────────────────────────────────
@@ -286,14 +323,16 @@ def fill_approach(ws, approach_md):
 
     col_order = ["案No", "方針名", "概要", "メリット", "デメリット", "リスク", "工数"]
     APPROACH_START = 4
-    APPROACH_LIMIT = 3  # テンプレ標準枠
+    APPROACH_LIMIT = 2  # テンプレ r4-r5
     extra_approach = max(0, len(rows) - APPROACH_LIMIT)
     if extra_approach > 0:
-        ws.insert_rows(APPROACH_START + APPROACH_LIMIT, amount=extra_approach)
-        unmerge_rows(ws, APPROACH_START + APPROACH_LIMIT, extra_approach)
-        for dr in range(extra_approach):
-            copy_row_style(ws, APPROACH_START + APPROACH_LIMIT - 1,
-                           APPROACH_START + APPROACH_LIMIT + dr, max_col=7)
+        insert_rows_with_format(
+            ws,
+            APPROACH_START + APPROACH_LIMIT,
+            extra_approach,
+            source_row=APPROACH_START + APPROACH_LIMIT - 1,
+            max_col=7,
+        )
 
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -312,6 +351,15 @@ def fill_approach(ws, approach_md):
 
     adopted = extract_section(approach_md, "採用方針", "推奨案", "推奨案と根拠")
     if adopted:
+        # insert_rows でマージが欠落することがあるため明示的に再付与  [L3]
+        has_merge = any(
+            m.min_row == adopted_write_row and m.max_row == adopted_write_row
+            and m.min_col == 1 and m.max_col == 7
+            for m in ws.merged_cells.ranges
+        )
+        if not has_merge:
+            ws.merge_cells(start_row=adopted_write_row, end_row=adopted_write_row,
+                           start_column=1, end_column=7)
         wset(ws, adopted_write_row, 1, adopted)
 
     # 実施前確認事項（テンプレ標準 5 件枠 r22〜r26）[M3, M7]
@@ -326,16 +374,18 @@ def fill_approach(ws, approach_md):
         checks = parse_numbered_list(checks_text)
 
     confirm_header_row = find_header_row(ws, ("■ 実施前確認事項",))
-    confirm_data_start = (confirm_header_row + 2) if confirm_header_row else 22  # ヘッダの 2 行下がデータ開始
-    CONFIRM_LIMIT = 5
+    confirm_data_start = (confirm_header_row + 2) if confirm_header_row else 22
+    CONFIRM_LIMIT = 4  # テンプレ r22-r25
 
     extra_confirm = max(0, len(checks) - CONFIRM_LIMIT)
     if extra_confirm > 0:
-        ws.insert_rows(confirm_data_start + CONFIRM_LIMIT, amount=extra_confirm)
-        unmerge_rows(ws, confirm_data_start + CONFIRM_LIMIT, extra_confirm)
-        for dr in range(extra_confirm):
-            copy_row_style(ws, confirm_data_start + CONFIRM_LIMIT - 1,
-                           confirm_data_start + CONFIRM_LIMIT + dr, max_col=4)
+        insert_rows_with_format(
+            ws,
+            confirm_data_start + CONFIRM_LIMIT,
+            extra_confirm,
+            source_row=confirm_data_start + CONFIRM_LIMIT - 1,
+            max_col=2,
+        )
 
     for i, item in enumerate(checks):
         wset(ws, confirm_data_start + i, 1, "□")
@@ -349,10 +399,30 @@ def fill_approach(ws, approach_md):
 
     concern_header_row = find_header_row(ws, ("■ 懸念事項", "懸念事項"))
     concern_data_start = (concern_header_row + 1) if concern_header_row else 28
+    CONCERN_LIMIT = 3  # テンプレ r28-r30 (各行 A:G マージ済)
 
+    extra_concerns = max(0, len(concerns) - CONCERN_LIMIT)
+    if extra_concerns > 0:
+        insert_rows_with_format(
+            ws,
+            concern_data_start + CONCERN_LIMIT,
+            extra_concerns,
+            source_row=concern_data_start + CONCERN_LIMIT - 1,
+            max_col=7,
+        )
     for i, item in enumerate(concerns):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
-        wset(ws, concern_data_start + i, 1, f"{i + 1}. {item}", fill)
+        target_row = concern_data_start + i
+        # テンプレ枠外の行はマージなし → 明示付与  [L4]
+        has_merge = any(
+            m.min_row == target_row and m.max_row == target_row
+            and m.min_col == 1 and m.max_col == 7
+            for m in ws.merged_cells.ranges
+        )
+        if not has_merge:
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=1, end_column=7)
+        wset(ws, target_row, 1, f"{i + 1}. {item}", fill)
 
     # 方針変更履歴（r28-30 の位置は懸念事項書き込みにより移動している可能性がある）
     # 別名候補で探してヒットしなければスキップ（LINK-139 のように改版履歴しかない MD でも安全）
@@ -470,24 +540,48 @@ def fill_investigation(ws, inv_md):
 # ── 対応内容シート ──────────────────────────────────────────────────────────
 
 def fill_content(ws, impl_md):
-    # 変更ファイル一覧（r9-12、テンプレ標準 4 件枠）
+    # 変更ファイル一覧（r9-11、テンプレ標準 3 件枠）
     rows = parse_md_table(extract_section(impl_md, "変更ファイル一覧", "変更ファイル"))
-    for i, row in enumerate(rows[:4]):
+    CHANGE_FILES_START = 9
+    CHANGE_FILES_LIMIT = 3  # テンプレ r9-r11
+    extra_chg = max(0, len(rows) - CHANGE_FILES_LIMIT)
+    if extra_chg > 0:
+        insert_rows_with_format(
+            ws,
+            CHANGE_FILES_START + CHANGE_FILES_LIMIT,
+            extra_chg,
+            source_row=CHANGE_FILES_START + CHANGE_FILES_LIMIT - 1,
+            max_col=5,
+        )
+    for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, col in enumerate(["No", "ファイルパス", "変更種別", "変更概要"], start=1):
-            wset(ws, 9 + i, j, row.get(col, ""), fill)
+            wset(ws, CHANGE_FILES_START + i, j, row.get(col, ""), fill)
 
-    # Before/After（r14）— 実装後に記入する旨の案内を入れる
-    wset(ws, 14, 1, "実装完了後、各ファイルの変更前後を記載する")
+    # Before/After セクションは動的に位置を特定
+    ba_header_row = find_header_row(ws, ("■ Before / After",)) or (CHANGE_FILES_START + CHANGE_FILES_LIMIT + 1 + extra_chg)
+    wset(ws, ba_header_row + 1, 1, "実装完了後、各ファイルの変更前後を記載する")
 
     # 影響確認チェックリスト（r21〜）[M3]
     checks = parse_checklist(extract_section(
         impl_md,
         "影響確認チェックリスト", "影響確認",
     ))
-    for i, item in enumerate(checks[:5]):
-        wset(ws, 21 + i, 1, "□")
-        wset(ws, 21 + i, 2, item)
+    impact_header_row = find_header_row(ws, ("■ 影響確認チェックリスト",))
+    IMPACT_CHECK_START = (impact_header_row + 2) if impact_header_row else 21
+    IMPACT_CHECK_LIMIT = 6  # テンプレ r21-r26
+    extra_impact = max(0, len(checks) - IMPACT_CHECK_LIMIT)
+    if extra_impact > 0:
+        insert_rows_with_format(
+            ws,
+            IMPACT_CHECK_START + IMPACT_CHECK_LIMIT,
+            extra_impact,
+            source_row=IMPACT_CHECK_START + IMPACT_CHECK_LIMIT - 1,
+            max_col=2,
+        )
+    for i, item in enumerate(checks):
+        wset(ws, IMPACT_CHECK_START + i, 1, "□")
+        wset(ws, IMPACT_CHECK_START + i, 2, item)
 
 
 # ── テスト・検証記録シート ──────────────────────────────────────────────────
@@ -503,12 +597,23 @@ def fill_test(ws, impl_md):
         policy = "実装前後での動作確認を行う。実装前は現状把握、実装後は修正確認。"
     wset(ws, 3, 1, policy)
 
-    # テストテーブル（r7〜）[M3]
+    # テストテーブル（r7〜、テンプレ標準 8 件枠）[M3]
     rows = parse_md_table(extract_section(
         impl_md,
         "テスト仕様", "テストケース", "テスト仕様テーブル",
         "テストシナリオ",
     ))
+    TEST_START = 7
+    TEST_LIMIT = 8  # テンプレ r7-r14
+    extra_test = max(0, len(rows) - TEST_LIMIT)
+    if extra_test > 0:
+        insert_rows_with_format(
+            ws,
+            TEST_START + TEST_LIMIT,
+            extra_test,
+            source_row=TEST_START + TEST_LIMIT - 1,
+            max_col=8,
+        )
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         vals = [
@@ -522,7 +627,7 @@ def fill_test(ws, impl_md):
             row.get("エビデンス取得方法", row.get("根拠", "")),
         ]
         for j, val in enumerate(vals, start=1):
-            wset(ws, 7 + i, j, val, fill)
+            wset(ws, TEST_START + i, j, val, fill)
 
 
 # ── リリース・ロールバックシート ────────────────────────────────────────────
@@ -535,14 +640,16 @@ def fill_release(ws, impl_md, approach_md=""):
         "デプロイ対象", "変更対象一覧",
     ))
     RELEASE_START = 4
-    RELEASE_LIMIT = 3
+    RELEASE_LIMIT = 2  # テンプレ r4-r5
     extra_release = max(0, len(rows) - RELEASE_LIMIT)
     if extra_release > 0:
-        ws.insert_rows(RELEASE_START + RELEASE_LIMIT, amount=extra_release)
-        unmerge_rows(ws, RELEASE_START + RELEASE_LIMIT, extra_release)
-        for dr in range(extra_release):
-            copy_row_style(ws, RELEASE_START + RELEASE_LIMIT - 1,
-                           RELEASE_START + RELEASE_LIMIT + dr, max_col=6)
+        insert_rows_with_format(
+            ws,
+            RELEASE_START + RELEASE_LIMIT,
+            extra_release,
+            source_row=RELEASE_START + RELEASE_LIMIT - 1,
+            max_col=6,
+        )
 
     for i, row in enumerate(rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -578,16 +685,45 @@ def fill_release(ws, impl_md, approach_md=""):
 
     pre_header_row = find_header_row(ws, ("■ リリース前確認事項",))
     pre_data_start = (pre_header_row + 2) if pre_header_row else 9
-    for i, item in enumerate(checks[:5]):
+    PRE_CHECK_LIMIT = 4  # テンプレ r9-r12
+    extra_pre = max(0, len(checks) - PRE_CHECK_LIMIT)
+    if extra_pre > 0:
+        insert_rows_with_format(
+            ws,
+            pre_data_start + PRE_CHECK_LIMIT,
+            extra_pre,
+            source_row=pre_data_start + PRE_CHECK_LIMIT - 1,
+            max_col=2,
+        )
+    for i, item in enumerate(checks):
         wset(ws, pre_data_start + i, 1, "□")
         wset(ws, pre_data_start + i, 2, item)
 
-    # デプロイ手順（r15-19）
+    # デプロイ手順（r15-18、テンプレ標準 4 件枠、各行 A:F マージ済）
     steps = parse_numbered_list(extract_section(impl_md, "デプロイ手順", "リリース手順"))
     deploy_header_row = find_header_row(ws, ("■ デプロイ手順",))
     deploy_data_start = (deploy_header_row + 1) if deploy_header_row else 15
-    for i, step in enumerate(steps[:5]):
-        wset(ws, deploy_data_start + i, 1, f"{i + 1}. {step}")
+    DEPLOY_LIMIT = 4  # テンプレ r15-r18
+    extra_deploy = max(0, len(steps) - DEPLOY_LIMIT)
+    if extra_deploy > 0:
+        insert_rows_with_format(
+            ws,
+            deploy_data_start + DEPLOY_LIMIT,
+            extra_deploy,
+            source_row=deploy_data_start + DEPLOY_LIMIT - 1,
+            max_col=6,
+        )
+    for i, step in enumerate(steps):
+        target_row = deploy_data_start + i
+        has_merge = any(
+            m.min_row == target_row and m.max_row == target_row
+            and m.min_col == 1 and m.max_col == 6
+            for m in ws.merged_cells.ranges
+        )
+        if not has_merge:
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=1, end_column=6)
+        wset(ws, target_row, 1, f"{i + 1}. {step}")
 
     # デプロイ後確認事項（r22-26）[M3]
     post_text = extract_section(
@@ -601,7 +737,17 @@ def fill_release(ws, impl_md, approach_md=""):
 
     post_header_row = find_header_row(ws, ("■ デプロイ後確認事項",))
     post_data_start = (post_header_row + 2) if post_header_row else 22
-    for i, item in enumerate(post_checks[:5]):
+    POST_CHECK_LIMIT = 4  # テンプレ r22-r25
+    extra_post = max(0, len(post_checks) - POST_CHECK_LIMIT)
+    if extra_post > 0:
+        insert_rows_with_format(
+            ws,
+            post_data_start + POST_CHECK_LIMIT,
+            extra_post,
+            source_row=post_data_start + POST_CHECK_LIMIT - 1,
+            max_col=2,
+        )
+    for i, item in enumerate(post_checks):
         wset(ws, post_data_start + i, 1, "□")
         wset(ws, post_data_start + i, 2, item)
 
@@ -621,19 +767,53 @@ def fill_release(ws, impl_md, approach_md=""):
 
     notes_header_row = find_header_row(ws, ("■ 注意事項・リスク", "■ 注意事項"))
     notes_data_start = (notes_header_row + 1) if notes_header_row else 28
-    for i, item in enumerate(notes[:3]):
-        wset(ws, notes_data_start + i, 1, item)
+    NOTES_LIMIT = 2  # テンプレ r28-r29 (各行 A:F マージ済)
+    extra_notes = max(0, len(notes) - NOTES_LIMIT)
+    if extra_notes > 0:
+        insert_rows_with_format(
+            ws,
+            notes_data_start + NOTES_LIMIT,
+            extra_notes,
+            source_row=notes_data_start + NOTES_LIMIT - 1,
+            max_col=6,
+        )
+    for i, item in enumerate(notes):
+        target_row = notes_data_start + i
+        has_merge = any(
+            m.min_row == target_row and m.max_row == target_row
+            and m.min_col == 1 and m.max_col == 6
+            for m in ws.merged_cells.ranges
+        )
+        if not has_merge:
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=1, end_column=6)
+        wset(ws, target_row, 1, item)
 
-    # ロールバック手順（r32-r36 標準枠）
+    # ロールバック手順（r32-r35、テンプレ標準 4 件枠、各行 A:F マージ済）
     rb_steps = parse_numbered_list(extract_section(impl_md, "ロールバック手順"))
     rb_header_row = find_header_row(ws, ("■ ロールバック手順",))
     rb_data_start = (rb_header_row + 1) if rb_header_row else 32
-    RB_TEMPLATE_LIMIT = 5
-    extra_rb = max(0, len(rb_steps) - RB_TEMPLATE_LIMIT)
+    RB_LIMIT = 4  # テンプレ r32-r35
+    extra_rb = max(0, len(rb_steps) - RB_LIMIT)
     if extra_rb > 0:
-        ws.insert_rows(rb_data_start + RB_TEMPLATE_LIMIT, amount=extra_rb)
+        insert_rows_with_format(
+            ws,
+            rb_data_start + RB_LIMIT,
+            extra_rb,
+            source_row=rb_data_start + RB_LIMIT - 1,
+            max_col=6,
+        )
     for i, step in enumerate(rb_steps):
-        wset(ws, rb_data_start + i, 1, f"{i + 1}. {step}")
+        target_row = rb_data_start + i
+        has_merge = any(
+            m.min_row == target_row and m.max_row == target_row
+            and m.min_col == 1 and m.max_col == 6
+            for m in ws.merged_cells.ranges
+        )
+        if not has_merge:
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=1, end_column=6)
+        wset(ws, target_row, 1, f"{i + 1}. {step}")
 
 
 # ── main ────────────────────────────────────────────────────────────────────
