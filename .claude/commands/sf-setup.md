@@ -76,22 +76,20 @@ default-org を切り替えるには: sf config set target-org <別alias>
 
 ### 4-2: 次のアクション分岐
 
-`docs/` 配下に `.md` ファイルが存在するか確認する:
+`force-app/` 配下にファイルが存在するか確認する:
 
 ```bash
-find docs -name "*.md" -type f 2>/dev/null | head -1
+find force-app -mindepth 1 -maxdepth 3 -type f 2>/dev/null | head -1
 ```
 
-**docs/ にファイルが存在する場合（メンバーセットアップ）**:
-
-組織情報・設計書はプロジェクトテンプレートに含まれています。すぐに作業を開始できます。
+**force-app/ にファイルがある場合（メタデータ取得済み）**:
 
 ```
 次のアクション（任意）:
 - /setup-mcp  — Backlog・Notion・GitHub 等の外部ツール連携を設定する
 ```
 
-**docs/ が空の場合（初期セットアップ）**:
+**force-app/ が空の場合（メタデータ未取得）**:
 
 AskUserQuestion ツールで以下を表示する:
 

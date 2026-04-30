@@ -2,14 +2,39 @@
 description: "MCP（外部ツール連携）のセットアップ。Backlog・GitHub・Slack等の連携を設定する。"
 ---
 
-## Step 1: 操作を選択
+## Step 1: 現在の設定を自動チェック
 
-AskUserQuestion ツールを使い、まず操作を選択する:
+スクリプトは使わない。Claude が `.mcp.json` を直接 Read/Write する。
 
-- `設定を追加する` — MCPを新規追加または上書き設定する
-- `現在の設定を確認する` — .mcp.json の設定済みMCPを一覧表示する（→ Step 2「show の場合」へ）
+`.mcp.json` の場所: プロジェクトルート（`sfdx-project.json` と同じ階層）
 
-「設定を追加する」が選ばれた場合、続けて AskUserQuestion で設定するMCPを選択する:
+`.mcp.json` を Read して `mcpServers` の内容を確認する。
+
+### 設定が存在する場合（.mcp.json があり mcpServers にキーがある）
+
+設定済みの MCP をリスト形式で表示する:
+
+```
+現在の設定:
+- backlog
+- github
+（設定済みのキーを列挙）
+```
+
+続けて AskUserQuestion で操作を選択する:
+
+- `追加する` — 新しい MCP を追加する（→ 追加するMCPの選択へ）
+- `完了` — そのまま終了する
+
+### 設定が存在しない場合（.mcp.json がないまたは mcpServers が空）
+
+「MCP がまだ設定されていません。」と伝え、AskUserQuestion で追加するMCPを選択する。
+
+---
+
+**追加するMCPの選択**（上記いずれかの分岐から来た場合）:
+
+AskUserQuestion で設定するMCPを選択する:
 
 - `backlog` — Backlogチケット管理
 - `github` — GitHub PR・Issue連携
@@ -19,14 +44,6 @@ AskUserQuestion ツールを使い、まず操作を選択する:
 playwright を設定する場合は「その他」を選択して `playwright` と入力する。
 
 ## Step 2: 実行
-
-スクリプトは使わない。Claude が以下の手順で `.mcp.json` を直接 Read/Write する。
-
-`.mcp.json` の場所: プロジェクトルート（`sfdx-project.json` と同じ階層）
-
-### 「show」の場合
-
-`.mcp.json` を Read して `mcpServers` のキー一覧を表示する。ファイルが存在しなければ「未設定」と伝える。
 
 ### 「playwright」の場合
 
