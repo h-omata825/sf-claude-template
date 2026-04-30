@@ -115,6 +115,12 @@ def fill_test_spec(ws, test_cases):
 # ── エビデンスシート ──────────────────────────────────────────────────────────
 
 def fill_evidence_sheet(ws, cases, sheet_label):
+    # テンプレートは3件固定想定のマージ構造を持つため、データエリア (r5以降) のマージを
+    # 事前に全解除してから動的書き込みする（r1-r4のタイトル/ヘッダー行マージは保持）
+    for mr in list(ws.merged_cells.ranges):
+        if mr.min_row >= 5:
+            ws.unmerge_cells(str(mr))
+
     checklist_start = 6
     for i, tc in enumerate(cases):
         r = checklist_start + i

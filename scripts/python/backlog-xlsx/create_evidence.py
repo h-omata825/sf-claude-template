@@ -102,6 +102,12 @@ def fill_evidence_sheet(ws, cases, sheet_label):
     """
     # r2 説明文はテンプレ時点で設定済み（「両方」削除済み）なのでそのまま
 
+    # テンプレートは3件固定想定のマージ構造を持つため、データエリア (r5以降) のマージを
+    # 事前に全解除してから動的書き込みする（r1-r4のタイトル/ヘッダー行マージは保持）
+    for mr in list(ws.merged_cells.ranges):
+        if mr.min_row >= 5:
+            ws.unmerge_cells(str(mr))
+
     # チェックリスト（r6 以降）
     checklist_start = 6
     for i, tc in enumerate(cases):
