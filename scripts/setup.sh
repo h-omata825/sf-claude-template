@@ -90,7 +90,15 @@ fi
 info "テンプレートを配置中..."
 [ -d "$TMP_DIR/.claude" ] && cp -r "$TMP_DIR/.claude" "$PROJECT_PATH/.claude"
 [ -f "$TMP_DIR/CLAUDE.md" ] && cp "$TMP_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
-[ -f "$TMP_DIR/README.md" ] && cp "$TMP_DIR/README.md" "$PROJECT_PATH/README.md"
+# README: 参加モードではプロジェクトリポジトリを介さず大本テンプレートから直接取得
+# （project repo に古い SFDX デフォルト README が入っていても正しいテンプレート内容が適用される）
+if [ -n "$PROJECT_REPO_URL" ]; then
+    TEMPLATE_README_URL="https://raw.githubusercontent.com/h-omata825/sf-claude-template/${TEMPLATE_BRANCH}/README.md"
+    curl -sSfL "$TEMPLATE_README_URL" -o "$PROJECT_PATH/README.md" 2>/dev/null || \
+        { [ -f "$TMP_DIR/README.md" ] && cp "$TMP_DIR/README.md" "$PROJECT_PATH/README.md"; }
+else
+    [ -f "$TMP_DIR/README.md" ] && cp "$TMP_DIR/README.md" "$PROJECT_PATH/README.md"
+fi
 [ -d "$TMP_DIR/docs" ] && cp -r "$TMP_DIR/docs" "$PROJECT_PATH/docs"
 if [ -d "$TMP_DIR/scripts" ]; then
     mkdir -p "$PROJECT_PATH/scripts"
