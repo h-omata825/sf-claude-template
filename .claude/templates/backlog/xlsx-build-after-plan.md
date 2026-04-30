@@ -61,7 +61,10 @@ python scripts/python/backlog-xlsx/create_evidence.py \
 
 どちらかのスクリプトが失敗した場合（エラー出力あり / 終了コード 非0）:
 1. エラー内容をユーザに提示する
-2. 「xlsx なしで続行 / 修正して再試行 / 中止 のどれにしますか？」とテキストで質問する
+2. AskUserQuestion で対処方法を選択する:
+   - label: `xlsx なしで続行`、description: "xlsx 生成を断念して Phase 3.5 へ進む"
+   - label: `修正して再試行`、description: "エラー原因を修正してスクリプトを再実行する"
+   - label: `中止`、description: "コマンドを終了する"
 3. 「xlsx なしで続行」が選ばれた場合: `{xlsx_folder}` = null として Phase 3.5 へ進む
 
 ---
