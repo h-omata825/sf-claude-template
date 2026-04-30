@@ -264,6 +264,14 @@ def wset(ws, row, col, value, stripe=None):
     return cell
 
 
+def _merge_exists(ws, r1, c1, r2, c2):
+    """指定範囲のマージが既に存在するか確認。"""
+    return any(
+        m.min_row == r1 and m.max_row == r2 and m.min_col == c1 and m.max_col == c2
+        for m in ws.merged_cells.ranges
+    )
+
+
 # ── タイムライン理由抽出ヘルパー ──────────────────────────────────────────  [F1]
 
 def _extract_inv_reason(md):
@@ -336,6 +344,8 @@ def fill_summary(ws, args, inv_md, approach_md, impl_md):
     wset(ws, 6, 2, issue_type)
     wset(ws, 7, 2, "対応中")
     wset(ws, 8, 2, summary_bg)
+    # r9 最終対応サマリー: 対応完了後に記入する欄  [F7]
+    wset(ws, 9, 2, "（対応完了後に記入）")
 
     # タイムライン 3 行（Phase 1〜3）— 理由列も埋める  [F1]
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -466,8 +476,13 @@ def fill_approach(ws, approach_md):
         )
 
     for i, item in enumerate(checks):
-        wset(ws, confirm_data_start + i, 1, "□")
-        wset(ws, confirm_data_start + i, 2, item)
+        target_row = confirm_data_start + i
+        wset(ws, target_row, 1, "□")
+        wset(ws, target_row, 2, item)
+        # B:F merge を動的付与 (テンプレ6列構成、確認内容を広く)  [F8]
+        if not _merge_exists(ws, target_row, 2, target_row, 6):
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=2, end_column=6)
 
     # 懸念事項（テンプレ修正後 r17「■ 懸念事項」の直下から書き込み）[M6]
     concerns_text = extract_section(approach_md, "懸念事項", "リスク・懸念事項", "懸念点")
@@ -519,12 +534,11 @@ def fill_investigation(ws, inv_md):
             if rows:
                 break
 
-    # 判定列に「実現可能性」をマップ  [F3]
+    # テンプレ修正後 4列構成: No/仮説内容/備考/判定  [F9: 検証方法削除]
     hypo_col_map = [
         ("No", ["No", "#"]),
         ("仮説内容", ["仮説内容", "代替アプローチ", "仮説", "アプローチ"]),
-        ("検証方法", ["検証方法", "方法"]),
-        ("検証結果", ["検証結果", "備考", "補足"]),
+        ("備考", ["備考", "検証結果", "補足"]),
         ("判定", ["判定", "実現可能性"]),
     ]
     for i, row in enumerate(rows[:6]):
@@ -532,7 +546,7 @@ def fill_investigation(ws, inv_md):
         for j, (_, candidates) in enumerate(hypo_col_map, start=1):
             wset(ws, 4 + i, j, get_col(row, *candidates), fill)
 
-    # コード根拠（r12-17）[M3, M9]
+    # コード根拠（r12-17）[M3, M9] — 動的拡張対応  [F9]
     code_text = extract_section(
         inv_md,
         "コード根拠", "コード根拠テーブル",
@@ -550,10 +564,21 @@ def fill_investigation(ws, inv_md):
         ("コード内容", ["コード内容", "確認元", "コード", "参照元"]),
         ("説明", ["説明", "補足", "備考"]),
     ]
-    for i, row in enumerate(code_rows[:6]):
+    code_data_start = 12  # テンプレ r12
+    CODE_LIMIT = 6        # テンプレ標準6枠 (r12-r17)
+    extra_code = max(0, len(code_rows) - CODE_LIMIT)
+    if extra_code > 0:
+        insert_rows_with_format(
+            ws,
+            code_data_start + CODE_LIMIT,
+            extra_code,
+            source_row=code_data_start + CODE_LIMIT - 1,
+            max_col=4,
+        )
+    for i, row in enumerate(code_rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
         for j, (_, candidates) in enumerate(code_col_map, start=1):
-            wset(ws, 12 + i, j, get_col(row, *candidates), fill)
+            wset(ws, code_data_start + i, j, get_col(row, *candidates), fill)
 
     # 影響範囲（テンプレ修正後 3列構成: 種別/対象/役割/影響内容）[F3: 動的拡張 + ソース変更]
     # ソースを「関連コンポーネント一覧」に変更（フロー名/役割 2列より情報が豊富）
@@ -576,15 +601,14 @@ def fill_investigation(ws, inv_md):
             impact_data_start + IMPACT_LIMIT,
             extra_impact,
             source_row=impact_data_start + IMPACT_LIMIT - 1,
-            max_col=5,
+            max_col=4,
         )
 
-    # テンプレ修正後の列構成: A=種別, B=対象, C=役割, D=影響内容  [F3]
+    # テンプレ修正後の列構成: A=種別, B=対象, C=役割  [F9: 影響内容列削除]
     impact_col_map = [
         ("種別", ["種別"]),
         ("対象", ["対象", "フロー名", "ファイルパス", "コンポーネント名"]),
-        ("役割", ["役割", "内容"]),
-        ("影響内容", ["影響内容", "補足", "備考"]),
+        ("役割", ["役割", "内容", "影響内容", "補足", "備考"]),
     ]
     for i, row in enumerate(impact_rows):
         fill = STRIPE_A if i % 2 == 0 else STRIPE_B
@@ -792,8 +816,13 @@ def fill_release(ws, impl_md, approach_md=""):
             max_col=2,
         )
     for i, item in enumerate(checks):
-        wset(ws, pre_data_start + i, 1, "□")
-        wset(ws, pre_data_start + i, 2, item)
+        target_row = pre_data_start + i
+        wset(ws, target_row, 1, "□")
+        wset(ws, target_row, 2, item)
+        # B:D merge を動的付与 (確認内容列を広く)  [F10]
+        if not _merge_exists(ws, target_row, 2, target_row, 4):
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=2, end_column=4)
 
     # デプロイ手順（テンプレ修正後 A:D マージ）[F6: max_col=4]
     steps = parse_numbered_list(extract_section(impl_md, "デプロイ手順", "リリース手順"))
@@ -844,8 +873,13 @@ def fill_release(ws, impl_md, approach_md=""):
             max_col=2,
         )
     for i, item in enumerate(post_checks):
-        wset(ws, post_data_start + i, 1, "□")
-        wset(ws, post_data_start + i, 2, item)
+        target_row = post_data_start + i
+        wset(ws, target_row, 1, "□")
+        wset(ws, target_row, 2, item)
+        # B:D merge を動的付与  [F10]
+        if not _merge_exists(ws, target_row, 2, target_row, 4):
+            ws.merge_cells(start_row=target_row, end_row=target_row,
+                           start_column=2, end_column=4)
 
     # 注意事項（テンプレ修正後 A:D マージ）[F6: max_col=4, 番号prefix再付与]
     notes_text = extract_section(
