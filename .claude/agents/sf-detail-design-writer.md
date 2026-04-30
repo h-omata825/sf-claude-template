@@ -156,7 +156,8 @@ source_paths=$(python -c "
 import yaml, pathlib, sys
 proj = pathlib.Path(r'{project_dir}')
 with open(proj / 'docs' / '.sf' / 'feature_groups.yml', encoding='utf-8') as f:
-    groups = yaml.safe_load(f)
+    _grp_data = yaml.safe_load(f)
+groups = _grp_data.get('groups', []) if isinstance(_grp_data, dict) else (_grp_data or [])
 with open(proj / 'docs' / '.sf' / 'feature_ids.yml', encoding='utf-8') as f:
     ids_data = yaml.safe_load(f) or {}
 fid_to_api = {}

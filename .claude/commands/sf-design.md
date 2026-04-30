@@ -152,10 +152,20 @@ print('project_name:' + name)
 "
 ```
 
-`project_name:` の値を使用する。値が不適切な場合はチャットで確認する:
+`project_name:` の値を **`detected_project_name`** として控える。
+
+> **必須**: 確認は **AskUserQuestion で行う**。`detected_project_name` の見た目が技術名（gf_prod 等）でも、CLAUDE.md・org-profile.md 等を勝手に参照して「より適切な名前」を探さないこと。判断はユーザー（AskUserQuestion の選択結果）に委ねる。
+
+AskUserQuestion で確認（2 択 + Other 自動）:
+- label: `{detected_project_name}`、description: "sfdx-project.json から自動取得（設計書表紙に使用）"
+- label: "別名を入力する"、description: "チャットで設計書表紙用のプロジェクト名を入力する"
+
+「別名を入力する」または Other が選ばれた場合はチャットで聞く:
 ```
 プロジェクト名を入力してください（設計書の表紙に記載）:
 ```
+
+確定値を **`project_name`** として保持する。
 
 ### 設定の保存
 

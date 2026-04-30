@@ -133,7 +133,8 @@ for t, n in sorted(cnt.items()): print(f'  {t}: {n}件')
 python -c "
 import yaml, json, pathlib
 with open(r'{project_dir}/docs/.sf/feature_groups.yml', encoding='utf-8') as f:
-    groups = yaml.safe_load(f)
+    _grp_data = yaml.safe_load(f)
+groups = _grp_data.get('groups', []) if isinstance(_grp_data, dict) else (_grp_data or [])
 raw = '{target_group_ids}'
 try:
     gid_list = json.loads(raw) if raw.strip() else []
