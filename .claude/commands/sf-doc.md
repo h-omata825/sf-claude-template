@@ -51,27 +51,12 @@ python -c "import os; print(os.getcwd())"
 
 ### 前回設定の読み込み
 
-```bash
-python -c "
-import pathlib, sys
-try:
-    import yaml
-    p = pathlib.Path(r'{project_dir}/docs/.sf/sf_doc_config.yml')
-    if p.exists():
-        d = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
-        print('author:' + str(d.get('author', '')))
-        print('output_dir:' + str(d.get('output_dir', '')))
-    else:
-        print('author:')
-        print('output_dir:')
-except Exception as e:
-    print('author:')
-    print('output_dir:')
-    print('warning: 前回設定の読み込みに失敗しました:', e, file=sys.stderr)
-"
-```
+Read tool で `{project_dir}/docs/.sf/sf_doc_config.yml` を読み取る。
 
-出力から `last_author`（前回の作成者名）と `last_output_dir`（前回の出力先フォルダ）を控える。
+- ファイルが存在しない場合（Read エラー）: `last_author = ""`、`last_output_dir = ""` として扱う
+- ファイルが存在する場合: `author:` 行の値を `last_author`、`output_dir:` 行の値を `last_output_dir` として控える（値が空文字または未定義の場合は `""`）
+
+> **重要**: ここで取得した日本語値は **絶対に `python -c` の stdout 経由で再表示・再取得しない**。Read tool で得た値をそのまま AskUserQuestion の補間に使うこと（Bash stdout のラウンドトリップで日本語値が文字化けする事例あり）。
 
 ### 作成者名
 
