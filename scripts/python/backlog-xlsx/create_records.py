@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import copy
 import datetime
 import os
 import re
@@ -27,8 +28,18 @@ except ImportError:
 
 TEMPLATE = Path(__file__).parent / "対応記録テンプレート.xlsx"
 WRAP = Alignment(wrap_text=True, vertical="top")
-STRIPE_A = PatternFill("solid", fgColor="FFFFFF")
-STRIPE_B = PatternFill("solid", fgColor="F2F7FB")
+_STRIPE_A_RGB = "FFFFFF"  # 白 (偶数行 i=0,2,4,...)
+_STRIPE_B_RGB = "F2F7FB"  # 薄青 (奇数行 i=1,3,5,...)
+
+
+def _stripe_fill(i):
+    """i 行目用の縞模様 PatternFill を毎回 fresh に生成して返す。
+
+    openpyxl の style index aliasing バグ（singleton を使うと白代入が
+    青セルで silent no-op になる）を回避するため、呼び出し毎に新規生成する。
+    """
+    rgb = _STRIPE_A_RGB if i % 2 == 0 else _STRIPE_B_RGB
+    return PatternFill("solid", fgColor=rgb)
 
 
 # ── MD パースユーティリティ ─────────────────────────────────────────────────
@@ -196,12 +207,16 @@ def find_header_row(ws, candidates):
 
 
 def copy_row_style(ws, src_row, dst_row, max_col=8):
-    """src_row の書式を dst_row にコピーする（insert_rows 後のスタイル継承用）。"""
+    """src_row の書式を dst_row にコピーする（insert_rows 後のスタイル継承用）。
+
+    copy.copy で StyleArray を独立コピーする。参照コピー（dst._style = src._style）は
+    同じ StyleArray オブジェクトを共有し、後続の fill 代入が全共有セルを上書きするバグを招く。
+    """
     for col in range(1, max_col + 1):
         src = ws.cell(row=src_row, column=col)
         dst = ws.cell(row=dst_row, column=col)
         if src.has_style:
-            dst._style = src._style
+            dst._style = copy.copy(src._style)
             dst.alignment = WRAP
 
 
@@ -261,7 +276,7 @@ def insert_rows_with_format(ws, insert_at, count, source_row, max_col):
 def wset(ws, row, col, value, stripe=None):
     cell = ws.cell(row=row, column=col, value=value)
     cell.alignment = WRAP
-    if stripe:
+    if stripe is not None:
         cell.fill = stripe
     return cell
 
@@ -440,7 +455,7 @@ def fill_summary(ws, args, inv_md, approach_md, impl_md):
          _extract_impl_reason(impl_md)),
     ]
     for i, row in enumerate(tl_rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         for j, val in enumerate(row, start=1):
             wset(ws, 13 + i, j, val, fill)
 
@@ -479,7 +494,7 @@ def fill_approach(ws, approach_md):
         _shrink_table(ws, APPROACH_START, len(rows), APPROACH_LIMIT)
 
     for i, row in enumerate(rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         for j, col in enumerate(col_order, start=1):
             val = row.get(col, "")
             if col == "工数":
@@ -573,7 +588,7 @@ def fill_approach(ws, approach_md):
     elif len(concerns) < CONCERN_LIMIT:
         _shrink_table(ws, concern_data_start, len(concerns), CONCERN_LIMIT)
     for i, item in enumerate(concerns):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         target_row = concern_data_start + i
         has_merge = any(
             mg.min_row == target_row and mg.max_row == target_row
@@ -619,7 +634,7 @@ def fill_investigation(ws, inv_md):
     elif len(rows) < HYPO_LIMIT:
         _shrink_table(ws, HYPO_START, len(rows), HYPO_LIMIT)
     for i, row in enumerate(rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         for j, (_, candidates) in enumerate(hypo_col_map, start=1):
             wset(ws, HYPO_START + i, j, get_col(row, *candidates), fill)
         auto_fit_row(ws, HYPO_START + i)
@@ -657,7 +672,7 @@ def fill_investigation(ws, inv_md):
     elif len(code_rows) < CODE_LIMIT:
         _shrink_table(ws, code_data_start, len(code_rows), CODE_LIMIT)
     for i, row in enumerate(code_rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         for j, (_, candidates) in enumerate(code_col_map, start=1):
             wset(ws, code_data_start + i, j, get_col(row, *candidates), fill)
         auto_fit_row(ws, code_data_start + i)
@@ -702,7 +717,7 @@ def fill_investigation(ws, inv_md):
         ("役割", ["役割", "内容", "影響内容", "補足", "備考"]),
     ]
     for i, row in enumerate(impact_rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         for j, (_, candidates) in enumerate(impact_col_map, start=1):
             wset(ws, impact_data_start + i, j, get_col(row, *candidates), fill)
         target_row = impact_data_start + i
@@ -736,7 +751,7 @@ def fill_investigation(ws, inv_md):
         _shrink_table(ws, comp_data_start, len(impact_rows), COMP_LIMIT)
 
     for i, row in enumerate(impact_rows[:10]):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         # 3列構成: 種別/名前(ファイルパス)/役割  [F3]
         wset(ws, comp_data_start + i, 1, row.get("種別", ""), fill)
         wset(ws, comp_data_start + i, 2, get_col(row, "名前", "ファイルパス", "コンポーネント名"), fill)
@@ -788,7 +803,7 @@ def fill_content(ws, impl_md):
     elif len(rows) < CHANGE_FILES_LIMIT:
         _shrink_table(ws, CHANGE_FILES_START, len(rows), CHANGE_FILES_LIMIT)
     for i, row in enumerate(rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         for j, col in enumerate(["No", "ファイルパス", "変更種別", "変更概要"], start=1):
             wset(ws, CHANGE_FILES_START + i, j, row.get(col, ""), fill)
 
@@ -867,7 +882,7 @@ def fill_test(ws, impl_md):
     elif len(rows) < TEST_LIMIT:
         _shrink_table(ws, TEST_START, len(rows), TEST_LIMIT)
     for i, row in enumerate(rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         # H列「根拠」を削除した 7列構成  [F5]
         vals = [
             row.get("No", str(i + 1)),
@@ -907,7 +922,7 @@ def fill_release(ws, impl_md, approach_md=""):
         _shrink_table(ws, RELEASE_START, len(rows), RELEASE_LIMIT)
 
     for i, row in enumerate(rows):
-        fill = STRIPE_A if i % 2 == 0 else STRIPE_B
+        fill = _stripe_fill(i)
         api_name = get_col(row, "API名", "対象", "ファイルパス")
         wset(ws, RELEASE_START + i, 1, row.get("No", str(i + 1)), fill)
         wset(ws, RELEASE_START + i, 2, row.get("種別", ""), fill)
