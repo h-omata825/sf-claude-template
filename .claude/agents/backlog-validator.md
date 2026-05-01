@@ -18,7 +18,7 @@ backlog-implementer が安全・確実に実装できるよう、**5オプショ
 
 ---
 
-## Phase 0: SFコンテキスト読込（sf-context-loader 経由）
+## Step 0a: SFコンテキスト読込（sf-context-loader 経由）
 
 > 呼び出し仕様: [.claude/templates/common/sf-context-load-phase0.md](../templates/common/sf-context-load-phase0.md)
 

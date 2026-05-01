@@ -8,7 +8,6 @@ tools:
   - Glob
   - Grep
   - Bash
-  - TodoWrite
   - Task
 ---
 
@@ -24,7 +23,7 @@ tools:
 
 ---
 
-## Phase 0: SFコンテキスト読込（sf-context-loader 経由）
+## Step 0a: SFコンテキスト読込（sf-context-loader 経由）
 
 > 呼び出し仕様: [.claude/templates/common/sf-context-load-phase0.md](../templates/common/sf-context-load-phase0.md)
 
@@ -41,7 +40,7 @@ focus_hints: []
 
 ---
 
-### Step 0b: 関連オプションの判定
+## Step 0b: 関連オプションの判定
 
 > 共通手順: [.claude/templates/backlog/_README.md](../templates/backlog/_README.md) §Step 0 を参照
 > 本 agent の Phase: 4（_index-phase4.md と _index-cross.md を Read して判定）
