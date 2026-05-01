@@ -33,7 +33,7 @@ AskUserQuestion で生成する設計書を選択する:
   - label: "プログラム設計"、description: "コンポーネント単位のプログラム設計書（処理フロー・SOQL・DML）"
   - label: "機能一覧"、description: "機能一覧.xlsx だけを再生成（設計書は更新しない）"
 
-> **最低1件選択必須**: 0件選択（空配列）が返された場合は、再度 AskUserQuestion で同じ質問を提示する。3種別のいずれも生成しない無実行は許容しない。
+> **最低1件選択必須**: 0件選択（空配列）が返された場合は、再度 AskUserQuestion で同じ質問を提示する。3種別のいずれも生成しない無実行は許容しない。3 回連続で 0 件選択された場合はチャットに「選択がないため処理を中止します」と出して終了する。
 
 選択の組み合わせとディスパッチ先:
 
@@ -47,7 +47,7 @@ AskUserQuestion で生成する設計書を選択する:
 | プログラム設計+機能一覧 | sf-design-step2 | step2 内で機能一覧も生成（step3 は不要） |
 | 詳細+プログラム+機能一覧 | sf-design-step1 | step1 → step2（機能一覧も生成）の順に連鎖 |
 
-> **副作用注記**: 「プログラム設計」を含む全ての選択（プログラム設計のみ / プログラム設計+機能一覧 / 詳細+プログラム / 詳細+プログラム+機能一覧）で `{output_dir}/01_基本設計/機能一覧.xlsx` が自動更新される（sf-design-writer の仕様）。意図しない上書きを避けたい場合は事前にバックアップすること。
+> **副作用注記**: 上表で「※機能一覧.xlsx も自動更新」と記された選択は `{output_dir}/01_基本設計/機能一覧.xlsx` を上書きする（sf-design-writer の仕様）。意図しない上書きを避けたい場合は事前にバックアップすること。
 
 > **詳細+プログラム選択時**: グループの一括確定と連鎖呼び出しは sf-design-step1 が担う。コマンドはディスパッチ後に step1 の完了を待つ。
 
@@ -60,7 +60,14 @@ AskUserQuestion で生成する設計書を選択する:
 > sf-design は **カレントディレクトリ（force-app/ / docs/ / scripts/ が存在するフォルダ）** をプロジェクトルートとして使用する。
 
 ```bash
-python -c "import pathlib; print('project_dir:' + str(pathlib.Path('.').resolve()))"
+python -c "
+import pathlib, sys
+p = pathlib.Path('.').resolve()
+if not any((p / d).exists() for d in ['force-app', 'docs', 'scripts']):
+    print('ERROR: カレントディレクトリは Salesforce プロジェクトルートではありません（force-app/ docs/ scripts/ のいずれも見つかりません）。', file=sys.stderr)
+    sys.exit(1)
+print('project_dir:' + str(p))
+"
 ```
 
 出力の `project_dir:` 以降を **`project_dir`** として控える。
@@ -71,7 +78,7 @@ Read tool で `{project_dir}/docs/.sf/sf_config.yml` を読み取る。
 
 - ファイルが存在しない場合: 旧ファイル `{project_dir}/docs/.sf/sf_design_config.yml` を Read tool で試みる（移行用 fallback）
 - いずれも存在しない場合: `last_author = ""`、`last_output_dir = ""`、`last_project_name = ""` として扱う
-- ファイルが存在する場合: `author:` 行の値を `last_author`、`output_dir:` 行の値を `last_output_dir`、`project_name:` 行の値を `last_project_name` として控える（値が空文字または未定義の場合は `""`）
+- ファイルが存在する場合: `author:` 行の値を `last_author`、`output_dir:` 行の値を `last_output_dir`、`project_name:` 行の値を `last_project_name` として控える（値が空文字、未定義、またはキー自体が存在しない場合は `""` として扱う）
 
 > **重要**: ここで取得した日本語値は **絶対に `python -c` の stdout 経由で再表示・再取得しない**。Read tool で得た値をそのまま AskUserQuestion の補間に使うこと（Bash stdout のラウンドトリップで日本語値が文字化けする事例あり）。
 
@@ -137,6 +144,8 @@ if '機能一覧' in selected:
 print('HAS_EXISTING:', len(checks) > 0)
 "
 ```
+
+**判定方法**: stdout に `HAS_EXISTING: True` が含まれる場合は既存ありとして下の「**既存ファイルが1件以上ある場合**」分岐へ進む。`HAS_EXISTING: False` の場合は「**既存ファイルが1件もない場合（新規作成）**」分岐へ進む。
 
 **既存ファイルが1件以上ある場合:** AskUserQuestion で選択する（2択＋Other自動）:
 - question: "バージョン更新の種別を選択してください？"
@@ -238,6 +247,8 @@ finally:
 "
 ```
 
+**警告通知**: 上記スクリプトの出力（stdout / stderr）に `warning:` を含む場合は、assistant message に「⚠️ 設定保存に失敗しました（次回起動時の前回値復元なし）」を 1 行通知する。
+
 ---
 
 ## Step 1: ディスパッチ — 各エージェントへの委譲
@@ -285,45 +296,9 @@ version_increment: {version_increment}
 
 ---
 
-## Step 2: 完了前クリーンアップ
-
-全エージェント完了後、全 `.tmp` フォルダを削除する:
-
-```bash
-python -c "
-import shutil, pathlib
-for subdir in ['02_詳細設計', '03_プログラム設計']:
-    tmp = pathlib.Path(r'{output_dir}') / subdir / '.tmp'
-    if tmp.exists():
-        shutil.rmtree(tmp, ignore_errors=True)
-        print(f'削除: {tmp}')
-print('クリーンアップ完了')
-"
-```
-
----
-
 ## Step 3: 完了報告
 
-```
-✅ 設計書生成完了
-
-【機能一覧】（生成した場合）
-  生成先: {output_dir}/01_基本設計/機能一覧.xlsx
-
-【詳細設計】（生成した場合）
-  生成先: {output_dir}/02_詳細設計/
-  生成数: {n} グループ
-
-【プログラム設計】（生成した場合）
-  生成先: {output_dir}/03_プログラム設計/
-  生成数: {n} 件
-
-⚠️ 要確認:
-- {FG-XXX}: 生成失敗の概要（例: 関連オブジェクトが特定できなかった）
-- 未分類コンポーネント {n} 件
-（要確認事項がない場合はこのセクションごと省略）
-```
+sf-design-step1（または直接呼ばれた sf-design-step2 / sf-design-step3）から返された完了報告をそのまま assistant message に転記する。フォーマット定義は各エージェント側に集約済み。
 
 ---
 
