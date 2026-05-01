@@ -73,7 +73,7 @@ python {project_dir}/scripts/python/sf-doc-mcp/scan_features.py \
   --output "{project_dir}/docs/.sf/feature_list.json"
 ```
 
-> `scan_features.py` は `--output` で指定したJSONに加え、`docs/.sf/feature_ids.yml`（機能ID台帳）を**固定パスで自動生成・更新**する。どちらも手編集禁止。`feature_list.json` は `/sf-design` が参照する永続キャッシュとしてここで生成する（sf-designでの二重実行を防ぐ）。
+> `scan_features.py` は `--output` で指定したJSONに加え、`docs/.sf/feature_ids.yml`（機能ID台帳）を**固定パスで自動生成・更新**する。どちらも手編集禁止。`feature_list.json` は `/sf-design` が参照する永続キャッシュとしてここで生成する（sf-designでの二重実行を防ぐ）。`--output` を省略した場合は JSON を stdout に出力し、`feature_ids.yml` は同様に更新される。
 
 ---
 

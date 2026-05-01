@@ -69,20 +69,25 @@ def fetch_field_usage(sf, obj_api_name: str) -> dict[str, str]:
     if not id_to_api:
         return {}
 
-    # Step2: MetadataComponentDependency 一括取得
-    id_list = "','".join(id_to_api.keys())
-    q2 = (f"SELECT MetadataComponentName, MetadataComponentType, RefMetadataComponentId "
-          f"FROM MetadataComponentDependency "
-          f"WHERE RefMetadataComponentId IN ('{id_list}')")
-    try:
-        r2 = sf.restful(f"tooling/query?q={urllib.parse.quote(q2, safe='')}")
-    except Exception as e:
-        print(f"  [WARN] 依存関係取得失敗 ({obj_api_name}): {e}")
-        return {}
+    # Step2: MetadataComponentDependency 一括取得（200件チャンクで URL 長超過を回避）
+    _CHUNK = 200
+    ids = list(id_to_api.keys())
+    all_records: list[dict] = []
+    for i in range(0, len(ids), _CHUNK):
+        id_list = "','".join(ids[i:i + _CHUNK])
+        q2 = (f"SELECT MetadataComponentName, MetadataComponentType, RefMetadataComponentId "
+              f"FROM MetadataComponentDependency "
+              f"WHERE RefMetadataComponentId IN ('{id_list}')")
+        try:
+            r2 = sf.restful(f"tooling/query?q={urllib.parse.quote(q2, safe='')}")
+        except Exception as e:
+            print(f"  [WARN] 依存関係取得失敗 ({obj_api_name}): {e}")
+            return {}
+        all_records.extend(r2.get("records", []))
 
     # Step3: api_name → 利用箇所リスト にまとめる
     usage_map: dict[str, list[str]] = defaultdict(list)
-    for r in r2.get("records", []):
+    for r in all_records:
         comp_type = r.get("MetadataComponentType", "")
         if comp_type not in _INCLUDE_TYPES:
             continue

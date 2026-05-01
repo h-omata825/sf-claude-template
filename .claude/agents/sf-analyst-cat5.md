@@ -232,7 +232,7 @@ FG確定後、以下の観点で割り当てを検証する:
 `feature_groups.yml` 生成直後に `check_feature_groups.py` を実行して、`feature_ids.yml` との整合性を検証する（sf-design より前のこの段階で不整合を潰す）。
 
 ```bash
-python scripts/python/sf-doc-mcp/check_feature_groups.py \
+python {project_dir}/scripts/python/sf-doc-mcp/check_feature_groups.py \
   --groups "{project_dir}/docs/.sf/feature_groups.yml" \
   --ids    "{project_dir}/docs/.sf/feature_ids.yml"
 ```

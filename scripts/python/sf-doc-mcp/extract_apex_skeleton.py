@@ -620,7 +620,15 @@ def main() -> None:
     ap.add_argument('--output', '-o', help='出力 JSON ファイル（省略時 stdout）')
     args = ap.parse_args()
 
-    code = Path(args.input).read_text(encoding='utf-8')
+    input_path = Path(args.input)
+    try:
+        code = input_path.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        print(f"[ERROR] ファイルが見つかりません: {input_path}", file=sys.stderr)
+        sys.exit(1)
+    except PermissionError:
+        print(f"[ERROR] ファイルへのアクセス権がありません: {input_path}", file=sys.stderr)
+        sys.exit(1)
     result = parse_apex(code)
     out = json.dumps(result, ensure_ascii=False, indent=2)
 

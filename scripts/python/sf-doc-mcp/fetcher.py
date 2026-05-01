@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Salesforce メタデータ取得"""
 
+import sys
 from typing import Any
 from connector import SalesforceConnector
 from dependency import fetch_field_usage
@@ -149,7 +150,8 @@ class MetadataFetcher:
                     "is_active":      r.get("IsActive", False),
                 })
             return rows
-        except Exception:
+        except Exception as e:
+            print(f"[WARN] _fetch_record_types({api_name}): {e}", file=sys.stderr)
             return []
 
     def _fetch_page_layouts(self, api_name: str) -> list[dict]:
@@ -230,7 +232,8 @@ class MetadataFetcher:
                 }
                 for cl in layouts
             ]
-        except Exception:
+        except Exception as e:
+            print(f"[WARN] _fetch_compact_layouts({api_name}): {e}", file=sys.stderr)
             return []
 
     def _fetch_search_layouts(self, api_name: str) -> list[dict]:

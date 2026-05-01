@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import os
+import shutil
 from pathlib import Path
 
 # ── 依存チェック ──────────────────────────────────────────────────
@@ -33,10 +34,10 @@ try:
 except ImportError:
     _HAS_PIL = False
 
-# Graphviz バイナリ PATH（winget インストール先）
-_GV_BIN = r"C:\Program Files\Graphviz\bin"
-if os.path.isdir(_GV_BIN) and _GV_BIN not in os.environ.get("PATH", ""):
-    os.environ["PATH"] = _GV_BIN + os.pathsep + os.environ.get("PATH", "")
+# Graphviz バイナリ PATH: PATH 上に dot がなければ winget 標準パスをフォールバックとして追加
+_GV_BIN_WIN = r"C:\Program Files\Graphviz\bin"
+if not shutil.which("dot") and os.path.isdir(_GV_BIN_WIN):
+    os.environ["PATH"] = _GV_BIN_WIN + os.pathsep + os.environ.get("PATH", "")
 
 # ── カラーパレット ────────────────────────────────────────────────
 C_SF_CORE   = "#1F3864"   # Salesforce中核（濃紺）

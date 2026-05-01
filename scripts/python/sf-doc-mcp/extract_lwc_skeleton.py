@@ -424,7 +424,14 @@ def main() -> None:
 
     path = Path(args.input)
     component_name = path.stem
-    code = path.read_text(encoding='utf-8')
+    try:
+        code = path.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        print(f"[ERROR] ファイルが見つかりません: {path}", file=sys.stderr)
+        sys.exit(1)
+    except PermissionError:
+        print(f"[ERROR] ファイルへのアクセス権がありません: {path}", file=sys.stderr)
+        sys.exit(1)
     result = parse_lwc(code, component_name)
     out = json.dumps(result, ensure_ascii=False, indent=2)
 

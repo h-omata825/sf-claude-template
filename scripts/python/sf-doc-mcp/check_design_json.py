@@ -17,13 +17,6 @@ import json
 import sys
 from pathlib import Path
 
-# Windows cp932 環境で絵文字・日本語の print が UnicodeEncodeError にならないよう UTF-8 を強制する。
-try:
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
-
 
 def check_feature(data: dict) -> tuple[list[str], list[str]]:
     """機能設計書（Apex/Flow/Integration）のチェック。"""

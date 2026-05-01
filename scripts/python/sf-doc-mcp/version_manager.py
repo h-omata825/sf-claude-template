@@ -13,7 +13,10 @@ def increment_version(current: str, mode: str) -> str:
     mode='minor': '1.0' → '1.1', '1.1' → '1.2'
     mode='major': '1.0' → '2.0', '1.2' → '2.0'
     """
-    major, minor = map(int, current.split("."))
+    try:
+        major, minor = map(int, current.split("."))
+    except ValueError:
+        raise ValueError(f"バージョン文字列の形式が不正です: {current!r}（期待: 'MAJOR.MINOR' 例: '1.0'）")
     if mode == "major":
         return f"{major + 1}.0"
     return f"{major}.{minor + 1}"

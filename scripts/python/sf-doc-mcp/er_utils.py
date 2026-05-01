@@ -28,8 +28,8 @@ except ImportError:
     HAS_MPL = False
 
 # ── 日本語フォント ────────────────────────────────────────────────────────────
-_JP_REG  = "C:/Windows/Fonts/YuGothR.ttc"
-_JP_BOLD = "C:/Windows/Fonts/YuGothB.ttc"
+_JP_REG  = os.environ.get("JAPANESE_FONT_PATH",      "C:/Windows/Fonts/YuGothR.ttc")
+_JP_BOLD = os.environ.get("JAPANESE_FONT_PATH_BOLD", "C:/Windows/Fonts/YuGothB.ttc")
 
 
 def _fpkw(size: float = 8.0, bold: bool = False) -> dict:
