@@ -24,11 +24,14 @@ Salesforce プロジェクトの設計書を生成します。
 
 ## Step 0: 設計書種別の選択
 
-AskUserQuestion で生成する設計書を **multiSelect: true** で選択する:
-
-- 詳細設計 — 機能グループ単位の詳細設計書（コンポーネント仕様・インターフェース・画面項目）
-- プログラム設計 — コンポーネント単位のプログラム設計書（処理フロー・SOQL・DML）
-- 機能一覧 — 機能一覧.xlsx だけを再生成（設計書は更新しない）
+AskUserQuestion で生成する設計書を選択する:
+- question: "生成する設計書を選択してください（複数選択可）？"
+- header: "設計書種別"
+- multiSelect: true
+- options:
+  - label: "詳細設計"、description: "機能グループ単位の詳細設計書（コンポーネント仕様・インターフェース・画面項目）"
+  - label: "プログラム設計"、description: "コンポーネント単位のプログラム設計書（処理フロー・SOQL・DML）"
+  - label: "機能一覧"、description: "機能一覧.xlsx だけを再生成（設計書は更新しない）"
 
 > **最低1件選択必須**: 0件選択（空配列）が返された場合は、再度 AskUserQuestion で同じ質問を提示する。3種別のいずれも生成しない無実行は許容しない。
 
@@ -74,8 +77,12 @@ Read tool で `{project_dir}/docs/.sf/sf_design_config.yml` を読み取る。
 ### 作成者名
 
 **前回値がある場合:** AskUserQuestion で提示（2択+Other自動）:
-- label: "前回: {last_author}"、description: "前回と同じ作成者名を使用"
-- label: "スキップ"、description: "作成者名なし"
+- question: "作成者名はどうしますか？"
+- header: "作成者名"
+- multiSelect: false
+- options:
+  - label: "前回: {last_author}"、description: "前回と同じ作成者名を使用"
+  - label: "スキップ"、description: "作成者名なし"
 
 **前回値がない場合:** チャットで直接聞く:
 ```
@@ -91,8 +98,12 @@ python -c "import pathlib; p = pathlib.Path(r'{project_dir}/docs/.sf'); p.mkdir(
 ### 出力先フォルダ
 
 **前回値がある場合:** AskUserQuestion で提示（2択+Other自動）:
-- label: "前回: {last_output_dir}"、description: "前回と同じフォルダを使用"
-- label: "別のフォルダを指定する"、description: "新しいパスをチャットで入力する"
+- question: "出力先フォルダはどうしますか？"
+- header: "出力先"
+- multiSelect: false
+- options:
+  - label: "前回: {last_output_dir}"、description: "前回と同じフォルダを使用"
+  - label: "別のフォルダを指定する"、description: "新しいパスをチャットで入力する"
 
 **前回値がない場合:** チャットで直接聞く:
 ```
@@ -127,8 +138,12 @@ print('HAS_EXISTING:', len(checks) > 0)
 ```
 
 **既存ファイルが1件以上ある場合:** AskUserQuestion で選択する（2択＋Other自動）:
-- label: "minor"、description: "機能追加・仕様変更・軽微な修正（デフォルト）"
-- label: "major"、description: "大規模な変更・後方互換性のない改訂"
+- question: "バージョン更新の種別を選択してください？"
+- header: "バージョン"
+- multiSelect: false
+- options:
+  - label: "minor"、description: "機能追加・仕様変更・軽微な修正（デフォルト）"
+  - label: "major"、description: "大規模な変更・後方互換性のない改訂"
 
 選択値を **`version_increment`** として保持する。Other が選ばれた場合はチャットで入力してもらう。
 
@@ -157,8 +172,12 @@ print('project_name:' + name)
 > **必須**: 確認は **AskUserQuestion で行う**。`detected_project_name` の見た目が技術名（gf_prod 等）でも、CLAUDE.md・org-profile.md 等を勝手に参照して「より適切な名前」を探さないこと。判断はユーザー（AskUserQuestion の選択結果）に委ねる。
 
 AskUserQuestion で確認（2 択 + Other 自動）:
-- label: `{detected_project_name}`、description: "sfdx-project.json から自動取得（設計書表紙に使用）"
-- label: "別名を入力する"、description: "チャットで設計書表紙用のプロジェクト名を入力する"
+- question: "設計書表紙に使うプロジェクト名を確認してください？"
+- header: "プロジェクト名"
+- multiSelect: false
+- options:
+  - label: "{detected_project_name}"、description: "sfdx-project.json から自動取得（設計書表紙に使用）"
+  - label: "別名を入力する"、description: "チャットで設計書表紙用のプロジェクト名を入力する"
 
 「別名を入力する」または Other が選ばれた場合はチャットで聞く:
 ```

@@ -59,8 +59,12 @@ else:
 ### AskUserQuestion で SF_ALIAS を確定
 
 **detected_alias がある場合** — AskUserQuestion で提示（2択＋Other自動）:
-- label: `{detected_alias}`、description: "config.json の target-org を使用"
-- label: "スキップ（認証済みエイリアスを直接入力）"
+- question: "接続先組織のエイリアスを確認してください？"
+- header: "接続先組織"
+- multiSelect: false
+- options:
+  - label: "{detected_alias}"、description: "config.json の target-org を使用"
+  - label: "スキップ（認証済みエイリアスを直接入力）"、description: "別のエイリアスをチャットで入力する"
 
 **detected_alias がない場合** — チャットで直接聞く:
 ```
@@ -158,8 +162,12 @@ else:
 ### step0_3_done = false の場合（単独実行）
 
 AskUserQuestion で対象を選択する:
-- 全機能 — スキャンで検出した全コンポーネントを処理
-- 対象を絞る（F-XXX で指定）— 機能ID（F-XXX 形式）をカンマ区切りで入力（次の質問で聞く）
+- question: "対象機能を選択してください？"
+- header: "対象機能"
+- multiSelect: false
+- options:
+  - label: "全機能"、description: "スキャンで検出した全コンポーネントを処理"
+  - label: "対象を絞る（F-XXX で指定）"、description: "機能ID（F-XXX 形式）をカンマ区切りで入力（次の質問で聞く）"
 
 「全機能」の場合は `target_ids = []`（全件）。
 「対象を絞る」または Other が選ばれた場合は F-XXX 形式の機能IDをカンマ区切りで入力してもらい `target_ids` に設定する（例: `F-001, F-002`）。API 名・グループID（FG-XXX）は F-XXX への変換をサポートしていないため受け付けない。

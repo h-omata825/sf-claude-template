@@ -93,9 +93,13 @@ print(f'合計: {len(groups)} グループ')
 stdout の最後の行 `合計: {n} グループ` から件数 `{n}` のみを取り出して以下の AskUserQuestion ラベル補間に使う。
 
 AskUserQuestion で選択する（3 択＋Other 自動）:
-- label: "全グループ（{n}グループ）"、description: "feature_groups.yml の全グループを対象"
-- label: "グループIDを指定"、description: "FG-XXX をカンマ区切りで入力（次の質問で聞く）"
-- label: "コンポーネントを指定"、description: "Apex名・LWC名・F-XXX等で指定（次の質問で聞く）"
+- question: "対象グループを選択してください？"
+- header: "対象グループ"
+- multiSelect: false
+- options:
+  - label: "全グループ（{n}グループ）"、description: "feature_groups.yml の全グループを対象"
+  - label: "グループIDを指定"、description: "FG-XXX をカンマ区切りで入力（次の質問で聞く）"
+  - label: "コンポーネントを指定"、description: "Apex名・LWC名・F-XXX等で指定（次の質問で聞く）"
 
 「グループIDを指定」の場合:
 ```
@@ -149,9 +153,13 @@ for e in errors:
 ```
 
 `error:` がある場合は AskUserQuestion で以下の3択を提示する:
-- 入力を修正して再試行 — Phase 2 の入力選択に戻る
-- エラー分を除外して続行 — resolved に含まれる FG のみを target_group_ids に設定して Phase 3 に進む
-- 中止 — エラー内容をユーザーに伝えて終了する
+- question: "グループ解決エラーが発生しました。どうしますか？"
+- header: "エラー対応"
+- multiSelect: false
+- options:
+  - label: "入力を修正して再試行"、description: "Phase 2 の入力選択に戻る"
+  - label: "エラー分を除外して続行"、description: "resolved に含まれる FG のみを target_group_ids に設定して Phase 3 に進む"
+  - label: "中止"、description: "エラー内容をユーザーに伝えて終了する"
 
 「全グループ」を選択した場合は `target_group_ids = []`（空リスト）と設定する。
 
