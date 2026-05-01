@@ -347,7 +347,8 @@ def main():
 
     template = Path(args.template)
     if not template.exists():
-        raise FileNotFoundError(f"テンプレートが見つかりません: {template}")
+        print(f"[ERROR] テンプレートが見つかりません: {template}", file=sys.stderr)
+        sys.exit(1)
 
     features = json.loads(Path(args.input).read_text(encoding="utf-8"))
     today = date.today().strftime("%Y-%m-%d")
@@ -400,8 +401,11 @@ def main():
                 ledger = yaml.safe_load(ledger_path.read_text(encoding="utf-8")) or {}
                 deprecated_ids = {e.get("id") for e in ledger.get("features", [])
                                   if e.get("deprecated")}
-        except Exception:
-            pass
+        except ImportError:
+            print("[WARN] pyyaml が未インストールのため deprecated_ids を取得できません。"
+                  "pip install pyyaml を実行してください。", file=sys.stderr)
+        except Exception as e:
+            print(f"[WARN] feature_ids.yml の読み込みに失敗しました: {e}", file=sys.stderr)
         preserved  = [f for f in old_features
                       if f.get("id") not in input_ids
                       and f.get("id") not in deprecated_ids]

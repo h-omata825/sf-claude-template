@@ -282,6 +282,7 @@ def build_json(
     groups_yml: Path,
     ids_yml: Path,
     existing_json: dict | None = None,
+    project_name: str = "",
 ) -> dict:
     # 1. feature_groups.yml からグループ定義を取得
     groups_data = _load_yaml(groups_yml)
@@ -402,7 +403,7 @@ def build_json(
     result = {
         "feature_id":   group_id,
         "name_ja":      group.get("name_ja", ""),
-        "project_name": "greenfield",
+        "project_name": project_name or ex.get("project_name", ""),
         "author":       ex.get("author", ""),
         "date":         ex.get("date", str(date.today())),
 
@@ -437,7 +438,8 @@ def main():
     parser.add_argument("--project-dir", required=True,  help="SF プロジェクトルート")
     parser.add_argument("--groups-yml",  required=True,  help="feature_groups.yml のパス")
     parser.add_argument("--ids-yml",     required=True,  help="feature_ids.yml のパス")
-    parser.add_argument("--output",      required=True,  help="出力JSONパス")
+    parser.add_argument("--output",       required=True,  help="出力JSONパス")
+    parser.add_argument("--project-name", default="",     help="プロジェクト名（省略時は既存JSONの値を保持）")
     args = parser.parse_args()
 
     project_dir = Path(args.project_dir)
@@ -453,11 +455,12 @@ def main():
             print(f"警告: 既存JSON読み込み失敗 ({e})", file=sys.stderr)
 
     result = build_json(
-        group_id    = args.group_id,
-        project_dir = project_dir,
-        groups_yml  = Path(args.groups_yml),
-        ids_yml     = Path(args.ids_yml),
+        group_id      = args.group_id,
+        project_dir   = project_dir,
+        groups_yml    = Path(args.groups_yml),
+        ids_yml       = Path(args.ids_yml),
         existing_json = existing_json,
+        project_name  = args.project_name,
     )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

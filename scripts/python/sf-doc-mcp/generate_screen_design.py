@@ -25,13 +25,6 @@ import tempfile
 from datetime import date as _date
 from pathlib import Path
 
-# Windows cp932 環境で print 時の UnicodeEncodeError/文字化けを防止する
-try:
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
-
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor

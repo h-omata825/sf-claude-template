@@ -202,7 +202,7 @@ print(matches[0] if matches else '')
 ```
 
 ```bash
-python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
+python "{project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py" \
   --source-paths "{source_paths}" \
   --existing-excel "{detected_excel_or_empty}"
 ```
@@ -241,13 +241,14 @@ python {project_dir}/scripts/python/sf-doc-mcp/source_hash_checker.py \
 ## Phase 4: Excel 生成
 
 ```bash
-python {project_dir}/scripts/python/sf-doc-mcp/generate_detail_design.py \
+python "{project_dir}/scripts/python/sf-doc-mcp/generate_detail_design.py" \
   --input "{tmp_dir}/{group_id}_detail.json" \
   --template "{project_dir}/scripts/python/sf-doc-mcp/詳細設計書テンプレート.xlsx" \
   --output-dir "{output_dir}" \
   --project-dir "{project_dir}" \
   --source-hash "{source_hash}" \
-  --version-increment "{version_increment}"
+  --version-increment "{version_increment}" \
+  --author "{author}"
 ```
 
 > `{source_hash}` は Phase 0.7 で source_hash_checker.py が出力した `hash:XXXX` の値。新規作成・ハッシュなしの場合は空文字で渡す（`--source-hash ""`）。スクリプト側は `_meta.source_hash` と照合して一致なら再生成をスキップする。

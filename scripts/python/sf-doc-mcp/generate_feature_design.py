@@ -24,6 +24,7 @@ import json
 import re
 import sys
 import tempfile
+import unicodedata
 from datetime import date as _date
 from pathlib import Path
 
@@ -260,7 +261,6 @@ def fill_overview(ws, data, changed_fields: set = None):
 
 def _display_len(s: str) -> int:
     """文字列の表示幅を返す。全角文字（CJK等）は2、半角は1としてカウントする。"""
-    import unicodedata
     return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in s)
 
 
@@ -643,40 +643,41 @@ def main():
         except Exception: pass
 
     # テンプレ読込→セル流し込み
-    wb = load_workbook(args.template)
-    fill_revision(wb["改版履歴"],  data, history)
-    fill_overview(wb["処理概要"],  data,
-                  changed_fields=set() if is_major else changed_scalars)
-    fill_process (wb["処理内容"],  data, flowchart_path,
-                  changed_step_nos=set() if is_major else changed_steps)
-    fill_params  (wb["パラメータ定義"], data,
-                  changed_input_keys =set() if is_major else changed_inputs,
-                  changed_output_keys=set() if is_major else changed_outputs)
+    try:
+        wb = load_workbook(args.template)
+        fill_revision(wb["改版履歴"],  data, history)
+        fill_overview(wb["処理概要"],  data,
+                      changed_fields=set() if is_major else changed_scalars)
+        fill_process (wb["処理内容"],  data, flowchart_path,
+                      changed_step_nos=set() if is_major else changed_steps)
+        fill_params  (wb["パラメータ定義"], data,
+                      changed_input_keys =set() if is_major else changed_inputs,
+                      changed_output_keys=set() if is_major else changed_outputs)
 
-    # _meta 保存（次回差分判定用）
-    meta_payload = {
-        "version": current_version,
-        "date":    today,
-        "author":  author,
-        "data":    data,
-        "history": history,
-    }
-    if args.source_hash:
-        meta_payload["source_hash"] = args.source_hash
-    write_meta(wb, meta_payload)
+        # _meta 保存（次回差分判定用）
+        meta_payload = {
+            "version": current_version,
+            "date":    today,
+            "author":  author,
+            "data":    data,
+            "history": history,
+        }
+        if args.source_hash:
+            meta_payload["source_hash"] = args.source_hash
+        write_meta(wb, meta_payload)
 
-    wb.save(out_path)
-    print(f"生成完了: v{current_version} → {out_path}")
+        wb.save(out_path)
+        print(f"生成完了: v{current_version} → {out_path}")
 
-    # 同一IDで別名の旧ファイルを削除（名称変更時の二重ファイル防止）
-    for old_f in out_dir.glob(f"【{feat_id}】*.xlsx"):
-        if old_f.resolve() != out_path.resolve():
-            old_f.unlink()
-            print(f"  [CLEANUP] 旧ファイルを削除: {old_f.name}")
-
-    if flowchart_path:
-        try: Path(flowchart_path).unlink()
-        except Exception: pass
+        # 同一IDで別名の旧ファイルを削除（名称変更時の二重ファイル防止）
+        for old_f in out_dir.glob(f"【{feat_id}】*.xlsx"):
+            if old_f.resolve() != out_path.resolve():
+                old_f.unlink()
+                print(f"  [CLEANUP] 旧ファイルを削除: {old_f.name}")
+    finally:
+        if flowchart_path:
+            try: Path(flowchart_path).unlink()
+            except Exception: pass
 
 
 if __name__ == "__main__":

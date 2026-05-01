@@ -3433,10 +3433,11 @@ def main():
             print(f"  [WARN] 改版履歴が {prev_history_len} 件に達しているため minor → major に強制昇格し、履歴をリセットします")
             args.version_increment = "major"
             forced_major = True
+        is_major = (args.version_increment == "major")
         current_version = increment_version(
             prev_meta.get("version", "1.0"), args.version_increment)
         # major 時は履歴リセット（手動・強制問わず。メジャーUP 1行だけ残す）
-        history    = [] if args.version_increment == "major" else prev_meta.get("history", [])
+        history    = [] if is_major else prev_meta.get("history", [])
         is_initial = False
         if forced_major:
             print(f"メジャー昇格モード（履歴リセット）: {prev_meta.get('version', '?')} -> {current_version}")
@@ -3446,6 +3447,7 @@ def main():
         current_version = data.get("version") or "1.0"
         history    = []
         is_initial = True
+        is_major   = (args.version_increment == "major")
         print(f"新規作成モード: v{current_version}")
 
     data["version"] = current_version
@@ -3464,7 +3466,7 @@ def main():
     new_entries = dr.build_entries(
         current_version, diffs, author, today,
         start_no=last_no + 1,
-        is_major=(args.version_increment == "major"),
+        is_major=is_major,
         is_initial=is_initial,
         section_sheet_map=SECTION_SHEETS,
         scalar_sheet="概要",
@@ -3476,7 +3478,6 @@ def main():
     changed_objs       = dr.changed_ids(diffs, "related_objects")
     changed_proc_steps = dr.changed_ids(diffs, "process_steps")
     changed_comps      = dr.changed_ids(diffs, "components")
-    is_major           = (args.version_increment == "major")
 
     # ── 図形PNG生成 ──────────────────────────────────────────────
     with tempfile.TemporaryDirectory(dir=get_project_tmp_dir()) as tmp_dir:

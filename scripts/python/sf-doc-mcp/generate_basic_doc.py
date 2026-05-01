@@ -876,9 +876,13 @@ def main():
                     choices=["minor", "major"],
                     help="minor: x.y+1 / major: x+1.0（履歴リセット）")
     args = ap.parse_args()
-    generate(Path(args.docs_dir), Path(args.output),
-             args.author, args.project_name,
-             args.source_file, args.version_increment)
+    try:
+        generate(Path(args.docs_dir), Path(args.output),
+                 args.author, args.project_name,
+                 args.source_file, args.version_increment)
+    except Exception as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
