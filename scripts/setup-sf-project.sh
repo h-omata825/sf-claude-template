@@ -91,7 +91,7 @@ fi
 
 # --- メタデータ取得の確認 ---
 echo ""
-read -p "組織のメタデータを取得しますか？ (y/N): " retrieve
+read -p "組織のメタデータを取得しますか？ (y/N): " retrieve || true
 if [[ ! "$retrieve" =~ ^[yY] ]]; then
     echo ""
     echo "セットアップ完了。メタデータ取得は後で /sf-retrieve で実行できます。"
