@@ -67,10 +67,11 @@ python -c "import pathlib; print('project_dir:' + str(pathlib.Path('.').resolve(
 
 前回設定の読み込み:
 
-Read tool で `{project_dir}/docs/.sf/sf_design_config.yml` を読み取る。
+Read tool で `{project_dir}/docs/.sf/sf_config.yml` を読み取る。
 
-- ファイルが存在しない場合（Read エラー）: `last_author = ""`、`last_output_dir = ""` として扱う
-- ファイルが存在する場合: `author:` 行の値を `last_author`、`output_dir:` 行の値を `last_output_dir` として控える（値が空文字または未定義の場合は `""`）
+- ファイルが存在しない場合: 旧ファイル `{project_dir}/docs/.sf/sf_design_config.yml` を Read tool で試みる（移行用 fallback）
+- いずれも存在しない場合: `last_author = ""`、`last_output_dir = ""`、`last_project_name = ""` として扱う
+- ファイルが存在する場合: `author:` 行の値を `last_author`、`output_dir:` 行の値を `last_output_dir`、`project_name:` 行の値を `last_project_name` として控える（値が空文字または未定義の場合は `""`）
 
 > **重要**: ここで取得した日本語値は **絶対に `python -c` の stdout 経由で再表示・再取得しない**。Read tool で得た値をそのまま AskUserQuestion の補間に使うこと（Bash stdout のラウンドトリップで日本語値が文字化けする事例あり）。
 
@@ -151,16 +152,28 @@ print('HAS_EXISTING:', len(checks) > 0)
 
 ### プロジェクト名
 
-`sfdx-project.json` から自動取得を試みる（`name` フィールドがない場合はプロジェクトディレクトリ名をフォールバックとして使用）:
+正式名称を優先順位順に自動取得する:
 ```bash
 python -c "
-import json, pathlib
+import json, re, pathlib
 proj = pathlib.Path(r'{project_dir}')
-p = proj / 'sfdx-project.json'
 name = ''
-if p.exists():
-    d = json.loads(p.read_text(encoding='utf-8'))
-    name = d.get('name', '') or d.get('namespace', '')
+prof = proj / 'docs/overview/org-profile.md'
+if prof.exists():
+    text = prof.read_text(encoding='utf-8')
+    for pat in [r'\|\s*システム名\s*\|\s*(.+?)\s*\|',
+                r'\|\s*プロジェクト名\s*\|\s*(.+?)\s*\|',
+                r'システム名[^\n:：]*[:：]\s*(.+)',
+                r'プロジェクト名[^\n:：]*[:：]\s*(.+)']:
+        m = re.search(pat, text)
+        if m:
+            name = m.group(1).strip()
+            break
+if not name:
+    p = proj / 'sfdx-project.json'
+    if p.exists():
+        d = json.loads(p.read_text(encoding='utf-8'))
+        name = d.get('name', '') or d.get('namespace', '')
 if not name:
     name = proj.name
 print('project_name:' + name)
@@ -169,14 +182,20 @@ print('project_name:' + name)
 
 `project_name:` の値を **`detected_project_name`** として控える。
 
-> **必須**: 確認は **AskUserQuestion で行う**。`detected_project_name` の見た目が技術名（gf_prod 等）でも、CLAUDE.md・org-profile.md 等を勝手に参照して「より適切な名前」を探さないこと。判断はユーザー（AskUserQuestion の選択結果）に委ねる。
-
-AskUserQuestion で確認（2 択 + Other 自動）:
+**`last_project_name` がある場合（sf_config.yml に前回値あり）:** AskUserQuestion で提示（2択+Other自動）:
 - question: "設計書表紙に使うプロジェクト名を確認してください？"
 - header: "プロジェクト名"
 - multiSelect: false
 - options:
-  - label: "{detected_project_name}"、description: "sfdx-project.json から自動取得（設計書表紙に使用）"
+  - label: "前回: {last_project_name}"、description: "前回と同じプロジェクト名を使用"
+  - label: "{detected_project_name}"、description: "自動取得値（org-profile.md / sfdx-project.json）"
+
+**`last_project_name` がない場合:** AskUserQuestion で提示（2択+Other自動）:
+- question: "設計書表紙に使うプロジェクト名を確認してください？"
+- header: "プロジェクト名"
+- multiSelect: false
+- options:
+  - label: "{detected_project_name}"、description: "自動取得値（org-profile.md / sfdx-project.json）"
   - label: "別名を入力する"、description: "チャットで設計書表紙用のプロジェクト名を入力する"
 
 「別名を入力する」または Other が選ばれた場合はチャットで聞く:
@@ -184,7 +203,10 @@ AskUserQuestion で確認（2 択 + Other 自動）:
 プロジェクト名を入力してください（設計書の表紙に記載）:
 ```
 
-確定値を **`project_name`** として保持する。
+確定値を **`project_name`** として保持する。確定後、直ちに以下を実行して値を保持する:
+```bash
+python -c "import pathlib; p = pathlib.Path(r'{project_dir}/docs/.sf'); p.mkdir(parents=True, exist_ok=True); p.joinpath('.project_name_tmp').write_text('{project_name}', encoding='utf-8')"
+```
 
 ### 設定の保存
 
@@ -194,18 +216,24 @@ python -c "
 import pathlib, sys
 author_f = pathlib.Path(r'{project_dir}/docs/.sf/.author_tmp')
 outdir_f = pathlib.Path(r'{project_dir}/docs/.sf/.output_dir_tmp')
+pname_f = pathlib.Path(r'{project_dir}/docs/.sf/.project_name_tmp')
 try:
     import yaml
     author = author_f.read_text(encoding='utf-8').strip() if author_f.exists() else ''
     output_dir = outdir_f.read_text(encoding='utf-8').strip() if outdir_f.exists() else ''
-    p = pathlib.Path(r'{project_dir}/docs/.sf/sf_design_config.yml')
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(yaml.dump({'author': author, 'output_dir': output_dir}, allow_unicode=True, default_flow_style=False), encoding='utf-8')
+    project_name = pname_f.read_text(encoding='utf-8').strip() if pname_f.exists() else ''
+    cfg = pathlib.Path(r'{project_dir}/docs/.sf/sf_config.yml')
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    existing = yaml.safe_load(cfg.read_text(encoding='utf-8')) or {} if cfg.exists() else {}
+    existing.update({'author': author, 'output_dir': output_dir})
+    if project_name:
+        existing['project_name'] = project_name
+    cfg.write_text(yaml.dump(existing, allow_unicode=True, default_flow_style=False), encoding='utf-8')
 except Exception as e:
     print('warning: 設定保存に失敗（次回デフォルト値の復元なし）:', e, file=sys.stderr)
 finally:
     # 成功・失敗にかかわらず一時ファイルは必ず削除する
-    for f in [author_f, outdir_f]:
+    for f in [author_f, outdir_f, pname_f]:
         f.unlink(missing_ok=True)
 "
 ```

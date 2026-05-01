@@ -158,6 +158,14 @@ print('LATEST:', files[0] if files else '')
 
 ## Phase 4: システム名称
 
+**Step 4-0: 共通前回値の読み込み**
+
+Read tool で `{project_dir}/docs/.sf/sf_config.yml` を読み取る。`project_name:` 行の値を `cfg_project_name` として控える（ファイルなし or 値なしの場合は空文字）。
+
+> **重要**: 日本語値は Read tool で直接取得すること（`python -c` の stdout 経由は文字化けリスクあり）。
+
+---
+
 **新規作成の場合:** **Phase 2 で取得した `system_name` を再利用する**（Phase 2 の Python 出力の `system_name:` 行）。Phase 2 で取得できなかった場合のみ、同じパターンで org-profile.md を再取得する（`システム名`・`プロジェクト名` の順で検索）。
 **更新の場合:** 既存ファイルの `_meta` シートから前回値を読む:
 ```bash
@@ -171,7 +179,18 @@ if m:
 "
 ```
 
-AskUserQuestion で提示（2択＋Other自動）:
+AskUserQuestion で提示（2択＋Other自動）。`cfg_project_name` の有無に応じて選択肢を組み立てる:
+
+**`cfg_project_name` がある場合:**
+- question: "システム名称を確認してください？"
+- header: "システム名称"
+- multiSelect: false
+- options:
+  - label: "{cfg_project_name}（共通前回値）"、description: "sf-doc/sf-design で確定した値"
+  - 上記以外に取得/読込できた値がある場合: label: "{値}（前回/自動取得）"、description: "ファイル内の前回値 or org-profile.md"
+  - 取得値がない場合: label: "スキップ"、description: "システム名称なし"
+
+**`cfg_project_name` がない場合（従来どおり）:**
 - question: "システム名称を確認してください？"
 - header: "システム名称"
 - multiSelect: false
@@ -182,7 +201,23 @@ AskUserQuestion で提示（2択＋Other自動）:
 
 「別の値を入力する」または Other が選ばれた場合はチャットで入力してもらう。
 
-> **重要**: `システム名称` として保持する値は、label から `（前回/自動取得）` を除去した **元の値だけ**。ラベルの付記文字列は UI 表示用であり、資料（xlsx の表紙・_meta シート）には含めない。
+> **重要**: `システム名称` として保持する値は、label から `（共通前回値）`・`（前回/自動取得）` を除去した **元の値だけ**。ラベルの付記文字列は UI 表示用であり、資料（xlsx の表紙・_meta シート）には含めない。
+
+確定後、共通設定に保存する（次回の sf-doc/sf-design のデフォルト値として使用）:
+```bash
+python -c "
+import pathlib, sys
+try:
+    import yaml
+    cfg = pathlib.Path(r'{project_dir}/docs/.sf/sf_config.yml')
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    existing = yaml.safe_load(cfg.read_text(encoding='utf-8')) or {} if cfg.exists() else {}
+    existing['project_name'] = r'{システム名称}'
+    cfg.write_text(yaml.dump(existing, allow_unicode=True, default_flow_style=False), encoding='utf-8')
+except Exception as e:
+    print('warning: 設定保存に失敗:', e, file=sys.stderr)
+"
+```
 
 ---
 
