@@ -16,6 +16,8 @@ subagent への引き渡し情報:
 5. approach-plan.md の「採用方針」のみ（「採用方針:」行の記述。「### 判断ポイント一覧」以降の実装詳細は含めない）
 6. 以下を明示する: 「implementation-plan.md の内容は一切伝えない。あなたは上記情報だけで独立に実装案を生成してください」
 
+**禁止事項**: prompt に implementation-plan.md の内容（ファイル本文・要約・参照のいずれも）を含めないこと。含めた時点で blind 性が崩壊する。
+
 subagent が返す内容:
 - 独立に生成した実装案（処理構造・データ設計・SOQL・エラーハンドリング）
 - parent の implementation-plan との相違点（blind 差異）

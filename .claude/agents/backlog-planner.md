@@ -307,7 +307,31 @@ Phase B の提示を行う**前に**、以下を実施する:
 
 （この時点では保存せず、B-4 議論モードを先に進める）
 
-> **`option-validator-blind` 使用時**: subagent 実行後に `## blind 実装案レビュー` セクションが implementation-plan.md の末尾に追記される。詳細は `option-validator-blind.md` 参照。
+> **`option-validator-blind` 使用時**: 以下の Task 起動 prompt を使って `backlog-blind-validator` subagent を呼び出すこと。subagent 実行後に `## blind 実装案レビュー` セクションが implementation-plan.md の末尾に追記される。
+> 渡し情報の詳細は `.claude/templates/backlog/options/option-validator-blind.md` L11-17 を参照。
+
+```
+Task(
+  subagent_type="backlog-blind-validator",
+  prompt="""
+課題ID: {issueID}
+
+課題本文:
+{課題本文の全文}
+
+コメント全文:
+{全コメントのテキスト}
+
+investigation.md の内容:
+{investigation.md のテキスト}
+
+approach-plan.md の採用方針（「採用方針:」行のみ。「### 判断ポイント一覧」以降は含めない）:
+{採用方針テキスト}
+
+implementation-plan.md の内容は一切伝えない。あなたは上記情報だけで独立に実装案を生成してください。
+"""
+)
+```
 
 ---
 
