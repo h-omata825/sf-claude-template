@@ -52,20 +52,31 @@ bash scripts/setup-sf-project.sh "$alias" sandbox    # Sandboxの場合（test.s
 ```
 
 > **Sandbox の `--instance-url` について**: `sandbox` 引数を渡すと `https://test.salesforce.com` が自動で使われる。
-> MyDomain（`https://xxx.sandbox.my.salesforce.com`）などカスタムURLを使う場合は、スクリプト実行後に `sf org login web --alias <alias> --instance-url <URL>` で上書きする。
 
 スクリプト内でブラウザが開く。ログイン後に自動で認証確認まで完了する。
 スクリプトの「メタデータを取得しますか？」には自動的に N が選択されます（/sf-retrieve が後続ステップで担当するため）。
+
+#### Step 3-1: MyDomain・カスタムURL の場合（任意）
+
+MyDomain（`https://xxx.sandbox.my.salesforce.com` など）を使う組織に接続する場合は、上記スクリプト実行後に以下で URL を上書きする:
+
+```bash
+sf org login web --alias "$alias" --instance-url <URL>
+```
+
+カスタムURL を使わない場合はこのステップをスキップする。
 
 ## Step 4: 完了案内
 
 ### 4-1: 接続組織の種別を確認
 
+Step 1 で選択した組織種別と実際の認証先が一致しているかを `sf org display` で二重チェックする（MyDomain 等で意図と異なる組織に接続している可能性を検知するための安全装置）:
+
 ```bash
 sf org display --target-org "$alias" --json
 ```
 
-`isSandbox` フィールドを読み取り、ルートの `CLAUDE.md` の `## Salesforce組織情報` セクションを更新する:
+`isSandbox` フィールドが Step 1 の選択（本番/Sandbox）と矛盾していた場合は、その旨をユーザーに警告してから先に進む。一致していれば、ルートの `CLAUDE.md` の `## Salesforce組織情報` セクションを更新する:
 
 1. `デフォルトorg:` の行を `デフォルトorg: \`{alias}\`` に書き換える（Edit ツールで一意マッチ可）
 2. 本番接続の場合のみ、同セクション末尾（`---` の前）に以下の行を追加または上書きする:
