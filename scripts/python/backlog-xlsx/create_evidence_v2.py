@@ -39,7 +39,11 @@ WHITE = PatternFill("solid", fgColor="FFFFFF")
 
 def read_md(path):
     if path and Path(path).exists():
-        return Path(path).read_text(encoding="utf-8")
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except UnicodeDecodeError as e:
+            print(f"[ERROR] ファイルのエンコーディングが UTF-8 ではありません: {path}\n{e}")
+            sys.exit(1)
     return ""
 
 
@@ -214,14 +218,22 @@ def main():
     after_cases  = [tc for tc in new_cases if tc.get("タイミング", "") != "実装前"]
 
     os.makedirs(args.folder, exist_ok=True)
-    wb = load_workbook(TEMPLATE)
+    try:
+        wb = load_workbook(TEMPLATE)
+    except Exception as e:
+        print(f"[ERROR] テンプレートファイルの読み込みに失敗しました: {TEMPLATE}\n{e}")
+        sys.exit(1)
 
     fill_test_spec(wb["テスト仕様"], new_cases)
     fill_evidence_sheet(wb["実装前エビデンス"], before_cases, "実装前")
     fill_evidence_sheet(wb["実装後エビデンス"], after_cases, "実装後")
 
     path = os.path.join(args.folder, f"{args.issue_id}_エビデンス_v2.xlsx")
-    wb.save(path)
+    try:
+        wb.save(path)
+    except PermissionError as e:
+        print(f"[ERROR] xlsx の保存に失敗しました（ファイルが開かれている可能性があります）: {path}\n{e}")
+        sys.exit(1)
     print(f"生成完了: {path}")
     print(f"  テスト仕様: {len(new_cases)} 件（実装前: {len(before_cases)} 件 / 実装後: {len(after_cases)} 件）")
 

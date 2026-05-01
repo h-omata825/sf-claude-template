@@ -46,7 +46,11 @@ def _stripe_fill(i):
 
 def read_md(path):
     if path and Path(path).exists():
-        return Path(path).read_text(encoding="utf-8")
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except UnicodeDecodeError as e:
+            print(f"[ERROR] ファイルのエンコーディングが UTF-8 ではありません: {path}\n{e}")
+            sys.exit(1)
     return ""
 
 
@@ -166,7 +170,7 @@ def parse_approach_options_h3(section_md):
     """
     options = []
     for m in re.finditer(
-        r"^###\s+案([A-ZA-Z])[:：]\s*(.+?)(?:\s*【.+?】)?\s*$",
+        r"^###\s+案([A-Z])[:：]\s*(.+?)(?:\s*【.+?】)?\s*$",
         section_md, re.MULTILINE
     ):
         no, name = m.group(1), m.group(2).strip()
@@ -1137,7 +1141,11 @@ def main():
         sys.exit(1)
 
     os.makedirs(args.folder, exist_ok=True)
-    wb = load_workbook(TEMPLATE)
+    try:
+        wb = load_workbook(TEMPLATE)
+    except Exception as e:
+        print(f"[ERROR] テンプレートファイルの読み込みに失敗しました: {TEMPLATE}\n{e}")
+        sys.exit(1)
 
     fill_summary(wb["サマリー・経緯"], args, inv_md, app_md, impl_md)
     fill_approach(wb["対応方針"], app_md)
@@ -1147,7 +1155,11 @@ def main():
     fill_release(wb["リリース・ロールバック"], impl_md, app_md)
 
     path = os.path.join(args.folder, f"{args.issue_id}_対応記録.xlsx")
-    wb.save(path)
+    try:
+        wb.save(path)
+    except PermissionError as e:
+        print(f"[ERROR] xlsx の保存に失敗しました（ファイルが開かれている可能性があります）: {path}\n{e}")
+        sys.exit(1)
     print(f"生成完了: {path}")
 
 

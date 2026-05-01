@@ -25,8 +25,16 @@ except ImportError:
     sys.exit(1)
 
 WRAP = Alignment(wrap_text=True, vertical="top")
-STRIPE_A = PatternFill("solid", fgColor="FFFFFF")  # 奇数行
-STRIPE_B = PatternFill("solid", fgColor="F2F7FB")  # 偶数行（薄青）
+_STRIPE_A_RGB = "FFFFFF"  # 奇数行
+_STRIPE_B_RGB = "F2F7FB"  # 偶数行（薄青）
+
+
+def _stripe_fill(no):
+    """1-indexed の行番号 no に対応する stripe PatternFill を毎回 fresh に生成して返す。
+    openpyxl の style index aliasing バグ（singleton を使うと白代入が青セルで silent no-op になる）を回避する。
+    """
+    rgb = _STRIPE_A_RGB if no % 2 == 1 else _STRIPE_B_RGB
+    return PatternFill("solid", fgColor=rgb)
 
 
 def find_next_empty_row(ws, col=1, start_row=1):
@@ -65,7 +73,7 @@ def cmd_timeline(args, wb):
     # No 列は現在の行数から算出
     no = next_row - data_start + 1
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    fill = STRIPE_A if (no % 2 == 1) else STRIPE_B
+    fill = _stripe_fill(no)
 
     for col, value in enumerate([no, now, args.source, args.phase, args.content, args.reason or ""], start=1):
         cell = ws.cell(row=next_row, column=col, value=value)
@@ -113,14 +121,22 @@ def main():
         print(f"[ERROR] ファイルが見つかりません: {xlsx_path}")
         sys.exit(1)
 
-    wb = openpyxl.load_workbook(xlsx_path)
+    try:
+        wb = openpyxl.load_workbook(xlsx_path)
+    except Exception as e:
+        print(f"[ERROR] xlsx の読み込みに失敗しました: {xlsx_path}\n{e}")
+        sys.exit(1)
 
     if args.command == "timeline":
         cmd_timeline(args, wb)
     elif args.command == "cell":
         cmd_cell(args, wb)
 
-    wb.save(xlsx_path)
+    try:
+        wb.save(xlsx_path)
+    except PermissionError as e:
+        print(f"[ERROR] xlsx の保存に失敗しました（ファイルが開かれている可能性があります）: {xlsx_path}\n{e}")
+        sys.exit(1)
     print(f"保存完了: {xlsx_path}")
 
 
