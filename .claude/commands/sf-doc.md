@@ -1,5 +1,5 @@
 ---
-description: "Salesforceプロジェクトの基本設計資料（プロジェクト概要書・オブジェクト定義書）を会話形式で作成する。機能一覧・詳細設計・プログラム設計は /sf-design を使用。"
+description: "Salesforceプロジェクトの基本設計資料（プロジェクト概要書・オブジェクト定義書）のみを会話形式で作成する。機能一覧・詳細設計・プログラム設計は /sf-design を使用。"
 ---
 
 Salesforceプロジェクトの**基本設計資料（プロジェクト概要書・オブジェクト定義書）のみ**を会話形式で作成します。機能一覧・詳細設計・プログラム設計は `/sf-design` を使用してください。
@@ -48,7 +48,15 @@ AskUserQuestion で作成する資料を選択（**上流 → 下流** の順）
 ```bash
 python -c "import os; print(os.getcwd())"
 ```
-出力されたパスを `{project_dir}` として保持する。
+出力されたパスを `{project_dir}` として保持する。続いて `force-app/` の存在を確認する（存在しない場合は Salesforce プロジェクトルートで再実行するよう案内して終了）:
+```bash
+python -c "
+import pathlib, sys
+if not pathlib.Path(r'{project_dir}/force-app').exists():
+    print('ERROR: force-app/ が見つかりません。Salesforce プロジェクトルート（force-app/ があるフォルダ）で実行してください。', file=sys.stderr)
+    sys.exit(1)
+"
+```
 
 > **テキスト入力の必須ルール**: チャットでの入力を求めたら、ユーザーが返答するまで次の処理・質問には進まない。
 
@@ -56,7 +64,7 @@ python -c "import os; print(os.getcwd())"
 
 Read tool で `{project_dir}/docs/.sf/sf_config.yml` を読み取る。
 
-- ファイルが存在しない場合（Read エラー）: 旧ファイル `{project_dir}/docs/.sf/sf_doc_config.yml` を Read tool で試みる（移行用 fallback）
+- ファイルが存在しない場合（Read エラー）: 旧ファイル `{project_dir}/docs/.sf/sf_doc_config.yml` を Read tool で試みる（移行用 fallback。全プロジェクトへの移行完了後は削除可）
 - いずれも存在しない場合: `last_author = ""`、`last_output_dir = ""` として扱う
 - ファイルが存在する場合: `author:` 行の値を `last_author`、`output_dir:` 行の値を `last_output_dir` として控える（値が空文字または未定義の場合は `""`）
 
@@ -71,6 +79,8 @@ Read tool で `{project_dir}/docs/.sf/sf_config.yml` を読み取る。
 - options:
   - label: "前回: {last_author}"、description: "前回と同じ作成者名を使用"
   - label: "スキップ"、description: "作成者名なし"
+
+> **注意**: 別の作成者名を入力したい場合は「Other」を選択すると自由入力が可能。
 
 **前回値がない場合:** チャットで直接聞く:
 ```
@@ -134,6 +144,8 @@ finally:
 "
 ```
 
+> **設定保存失敗時**: スクリプトが `sys.exit(1)` で終了した場合はコマンドを中断する。以降の Step 2 には進まない。
+
 ---
 
 ## Step 2: 各エージェントへの委譲
@@ -144,7 +156,7 @@ Step 1 完了後、`selected_steps` に応じて以下のエージェントを s
 |---|---|---|
 | プロジェクト概要書のみ | sf-doc-overview-writer | `pre_confirmed=false` で /sf-memory 最新化確認を実施 |
 | オブジェクト定義書のみ | sf-doc-objects-writer | `selected_steps=["オブジェクト定義書"]` で単独モード |
-| 両方選択 | sf-doc-objects-writer | `selected_steps=["プロジェクト概要書", "オブジェクト定義書"]`。内部で Phase 1 の一括確認後、sf-doc-overview-writer を `pre_confirmed=true` で連鎖呼び出し → objects 生成 |
+| 両方選択 | sf-doc-objects-writer | `selected_steps=["プロジェクト概要書", "オブジェクト定義書"]`。内部で Phase 1〜5 の全質問を終わらせた後、Phase 6 で sf-doc-overview-writer を `pre_confirmed=true` で連鎖呼び出し |
 
 > **両方選択時の呼び出し順序**: sf-doc-objects-writer が主役となり、Phase 1〜5 で全質問を終わらせた後、Phase 6 で sf-doc-overview-writer を `pre_confirmed=true` で呼ぶ。これにより「両方選択時は途中で確認が入らない」UX を保つ。
 
@@ -168,7 +180,7 @@ print('PATH:', str(p))
   - label: "マイナー更新（vX.Y → vX.Y+1）"、description: "変更箇所を赤字表示"
   - label: "メジャー更新（vX.Y → vX+1.0）"、description: "赤字をリセットして黒字化"
 
-選択結果を `version_increment`（`"minor"` / `"major"`）として保持。選択肢以外の値（Other 等）が入力された場合は `"minor"` にフォールバックする。`source_file = {output_dir}/01_基本設計/プロジェクト概要書.xlsx`。
+選択結果を `version_increment`（`"minor"` / `"major"`）として保持。選択肢以外の値（Other 等）が入力された場合は `"minor"` にフォールバックし、「⚠️ 入力値が無効のため minor で続行します」と表示する。`source_file = {output_dir}/01_基本設計/プロジェクト概要書.xlsx`。
 
 **既存ファイルがない場合:** `version_increment = "minor"`、`source_file = ""`（新規モード）として続行。
 
