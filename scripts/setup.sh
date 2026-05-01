@@ -90,6 +90,11 @@ fi
 info "テンプレートを配置中..."
 [ -d "$TMP_DIR/.claude" ] && cp -r "$TMP_DIR/.claude" "$PROJECT_PATH/.claude"
 [ -f "$TMP_DIR/CLAUDE.md" ] && cp "$TMP_DIR/CLAUDE.md" "$PROJECT_PATH/CLAUDE.md"
+# .gitignore: 新規モードのみ大本テンプレートで上書き
+# （参加モードは下方の git checkout -- .gitignore でプロジェクトリポジトリの版に戻すので不要）
+if [ -z "$PROJECT_REPO_URL" ]; then
+    [ -f "$TMP_DIR/.gitignore" ] && cp "$TMP_DIR/.gitignore" "$PROJECT_PATH/.gitignore"
+fi
 # README: 参加モードではプロジェクトリポジトリを介さず大本テンプレートから直接取得
 # （project repo に古い SFDX デフォルト README が入っていても正しいテンプレート内容が適用される）
 if [ -n "$PROJECT_REPO_URL" ]; then

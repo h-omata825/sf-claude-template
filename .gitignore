@@ -6,9 +6,8 @@
 deploy-options.json
 
 # ===== Salesforce プロジェクトファイル =====
-# sf project generate で自動生成されるもの（プロジェクト固有のため除外）
-# ⚠️ force-app/ はテンプレートでは除外しているが、実プロジェクトでは Git 管理する。
-#    setup.sh でプロジェクト作成後、この行を削除してから git add を行うこと。
+# 本テンプレートを使うプロジェクトでは Claude Code テンプレート部分のみを Git 管理する方針。
+# force-app/ などの SFDX プロジェクトファイルは各メンバーが Salesforce 組織から都度 retrieve するため Git 管理対象外。
 force-app/
 manifest/
 config/
