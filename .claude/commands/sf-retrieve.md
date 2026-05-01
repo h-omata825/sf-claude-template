@@ -65,6 +65,10 @@ bash scripts/sf-retrieve.sh all
 [ -f sfdx-project.json ] || { echo "sfdx-project.json が見つかりません。SFDXプロジェクトのルートで実行してください"; exit 1; }
 API_VER=$(python3 -c "import json; d=json.load(open('sfdx-project.json')); print(d.get('sourceApiVersion', '62.0'))" 2>/dev/null || echo "62.0")
 TARGET_ORG=$(sf config get target-org --json 2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['value'] if r else '')" 2>/dev/null || echo "")
+if [ -z "$TARGET_ORG" ]; then
+    echo "target-org が設定されていません。sf config set target-org <alias> で設定してから再実行してください。"
+    exit 1
+fi
 mkdir -p manifest
 cat > manifest/package.xml << XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -85,7 +89,7 @@ cat > manifest/package.xml << XMLEOF
 </Package>
 XMLEOF
 
-sf project retrieve start --manifest manifest/package.xml ${TARGET_ORG:+--target-org "$TARGET_ORG"}
+sf project retrieve start --manifest manifest/package.xml --target-org "$TARGET_ORG"
 ```
 
 メタデータタイプの対応表（主要なもの）:
