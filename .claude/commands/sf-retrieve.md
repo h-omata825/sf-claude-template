@@ -42,11 +42,27 @@ bash scripts/sf-retrieve.sh all
 ### 「select」の場合
 
 取得したいメタデータ名（クラス名・フロー名・オブジェクト名等）をチャットで確認する（カンマ区切りで複数指定可。例:「MyClass, MyFlow, Account」）。
-取得前に `git status force-app/` で未コミットの変更を確認し、変更がある場合はユーザーに通知してから進む。
-指定された名前からメタデータタイプを判定し `manifest/package.xml` を生成して取得する:
+取得前に `git status force-app/` で未コミットの変更を確認し、変更がある場合は AskUserQuestion で以下を表示する:
+
+**質問**: 「force-app/ に未コミットの変更があります。取得を続行しますか？」
+
+**選択肢**:
+- `続行する` — 変更を上書きして取得する
+- `中断する` — キャンセルする
+
+`中断する` を選択した場合は処理を終了する。
+
+指定された名前からメタデータタイプを判定し `manifest/package.xml` を生成して取得する。
+
+**package.xml 生成ルール**:
+- ユーザー指定のコンポーネント名ごとに下記の対応表でメタデータタイプ（`<name>`）を判定する
+- `<members>` には対応表の例（`MyClass` 等）を使わず、**ユーザー指定値**をそのまま入れる
+- 対応表にないタイプは Salesforce Metadata API 名をそのまま `<name>` に指定する
+- 指定されたタイプが不明な場合は AskUserQuestion でユーザーに確認する
 
 ```bash
 # 例: Apex クラス MyClass・フロー MyFlow・オブジェクト Account を指定した場合
+[ -f sfdx-project.json ] || { echo "sfdx-project.json が見つかりません。SFDXプロジェクトのルートで実行してください"; exit 1; }
 API_VER=$(python3 -c "import json; d=json.load(open('sfdx-project.json')); print(d.get('sourceApiVersion', '62.0'))" 2>/dev/null || echo "62.0")
 TARGET_ORG=$(sf config get target-org --json 2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin).get('result',[]); print(r[0]['value'] if r else '')" 2>/dev/null || echo "")
 mkdir -p manifest
@@ -100,34 +116,57 @@ sf project retrieve start --manifest manifest/package.xml ${TARGET_ORG:+--target
 | リモートサイト設定 | `RemoteSiteSetting` |
 | プロファイル | `Profile` |
 
+対応表に記載のないメタデータタイプは、Salesforce Metadata API 名（例: `WorkflowRule`、`Queue`）をそのまま `<name>` に指定する。指定されたタイプが不明な場合は AskUserQuestion でユーザーに確認する。
+
 ---
 
-## Step 3: 完了報告
+## Step 3a: 完了報告（初回）
 
-取得完了後、`docs/overview/org-profile.md` が存在するかチェックする。
+以下の bash で `docs/overview/org-profile.md` の存在を確認する:
 
-**存在しない場合（初回）**:
+```bash
+[ -f docs/overview/org-profile.md ] && echo "exists" || echo "not-found"
+```
+
+**「not-found」の場合（初回）**:
 
 AskUserQuestion で以下を表示する:
 
 **質問**: 「メタデータの取得が完了しました。次のステップを選択してください。」
 
 **選択肢**:
-- `組織情報を収集する（/sf-memory）` — 推奨。組織情報を docs/ に記録する（初回はここまでやっておく）
+- `組織情報を収集する（/sf-memory）` — 初回はこの流れを推奨。組織情報を docs/ に記録する
 - `外部ツール連携を先に設定する（/setup-mcp）` — Backlog・Notion・Slack 等と連携する場合
 
 `組織情報を収集する` を選択した場合: /sf-memory を実行する
 `外部ツール連携を先に設定する` を選択した場合: /setup-mcp を実行する（完了後に /sf-memory の実行を案内する）
 
-**存在する場合（2回目以降）**:
+---
+
+## Step 3b: 完了報告（2回目以降）
+
+**「exists」の場合（2回目以降）**:
 
 取得後に git diff で変更内容を確認し、変更の種別に応じて以下を通知する:
 
 ```bash
-git diff --name-only HEAD force-app/
+git diff --name-only force-app/
 ```
 
-変更ファイルを種別ごとに分類し、該当する項目のみ通知する:
+変更ファイルを種別ごとに分類する。以下のパスプレフィックスで判定する:
+
+| パス | 種別 |
+|---|---|
+| `force-app/main/default/classes/` | Apex |
+| `force-app/main/default/triggers/` | Trigger |
+| `force-app/main/default/flows/` | Flow |
+| `force-app/main/default/lwc/` | LWC |
+| `force-app/main/default/aura/` | Aura |
+| `force-app/main/default/pages/` | Visualforce |
+| `force-app/main/default/objects/` | オブジェクト / 項目 / レイアウト / レコードタイプ |
+| それ以外 | その他メタデータ |
+
+該当する項目のみ通知する:
 
 ```
 メタデータ取得完了。force-app/ に差分があります。
@@ -151,7 +190,8 @@ git diff --name-only HEAD force-app/
     → Apex / Trigger / Flow / LWC / Aura / Visualforce / Batch / Integration 全コンポーネント変更時
     対象: {コンポーネント名}
   □ cat5: 機能グループ（FG）再定義
-    → コンポーネント追加・削除時、または変更がFGの責務・範囲に影響する場合（cat4変更と連動して判断）
+    → コンポーネント追加・削除時、またはcat4でコンポーネントの主目的・主要呼出関係が変更された場合
+    対象: {コンポーネント名}
 
 ■ /sf-design / /sf-doc（成果物の再生成）
   □ 機能一覧.xlsx        — 新規コンポーネント追加・削除時（cat4完了後）
